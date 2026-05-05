@@ -1,0 +1,153 @@
+name: Send Meeting Notification
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *'  # Every 5 minutes, staggered (offset by 3 minutes)
+
+jobs:
+  check-and-send-meeting-notifications:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install firebase-admin nodemailer
+
+      - name: Check Firestore and send meeting notifications
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
+        run: |
+          node <<'SCRIPT'
+          const admin = require('firebase-admin');
+          const nodemailer = require('nodemailer');
+
+          const firebaseConfig = {
+            type: 'service_account',
+            project_id: process.env.FIREBASE_PROJECT_ID,
+            private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+            client_email: process.env.FIREBASE_CLIENT_EMAIL,
+          };
+
+          admin.initializeApp({
+            credential: admin.credential.cert(firebaseConfig),
+          });
+
+          const db = admin.firestore();
+          const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+              user: process.env.GMAIL_USER,
+              pass: process.env.GMAIL_PASSWORD,
+            },
+          });
+
+          const formatTime = (timeStr) => {
+            if (!timeStr || timeStr === 'TBD') return 'TBD';
+            const parts = timeStr.split(':').map(Number);
+            if (parts.length !== 2 || parts.some(isNaN)) return timeStr;
+            const date = new Date();
+            date.setHours(parts[0], parts[1], 0, 0);
+            return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+          };
+
+          const formatDate = (dateStr) => {
+            if (!dateStr || dateStr === 'TBD') return 'TBD';
+            const date = new Date(dateStr);
+            if (Number.isNaN(date.getTime())) return dateStr;
+            return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+          };
+
+          async function sendMeetingNotifications() {
+            try {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+
+              const emailMapping = {
+                'johnpaulbugayong@gmail.com': 'johnpaulbugayong14@gmail.com',
+                'kingfordnabor@gmail.com': 'kingfordnabor20@gmail.com',
+                'allancorral@gmail.com': 'allancorral084@gmail.com',
+                'phricksborebor@gmail.com': 'boreborpj16@gmail.com',
+                'moezarperez@gmail.com': 'moezarg19@gmail.com',
+                'rogelioledda@gmail.com': 'rogelioledda051506@gmail.com'
+              };
+
+              const meetingsRef = db.collection('meetings');
+              const snapshot = await meetingsRef.get();
+              const meetingsToNotify = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .filter(meeting => !meeting.emailNotificationSent);
+
+              if (meetingsToNotify.length === 0) {
+                console.log('No new meetings to notify');
+                return;
+              }
+
+              console.log(`Found ${meetingsToNotify.length} new meeting(s) to notify`);
+
+              for (const meetingDoc of meetingsToNotify) {
+                const meeting = meetingDoc;
+                const meetingId = meetingDoc.id;
+
+                let recipients = [];
+                if (meeting.assignedTo === 'everyone') {
+                  recipients = Object.values(emailMapping);
+                } else if (Array.isArray(meeting.assignedTo)) {
+                  recipients = meeting.assignedTo
+                    .map(email => emailMapping[email] || email)
+                    .filter(email => email);
+                } else if (typeof meeting.assignedTo === 'string') {
+                  const email = emailMapping[meeting.assignedTo] || meeting.assignedTo;
+                  if (email) recipients = [email];
+                }
+
+                const meetingTime = formatTime(meeting.time || 'TBD');
+                const meetingDateStr = formatDate(meeting.date || 'TBD');
+
+                for (const notifEmail of recipients) {
+                  try {
+                    await transporter.sendMail({
+                      from: `"My Collab" <${process.env.GMAIL_USER}>`,
+                      to: notifEmail,
+                      subject: `Scheduled Meeting: ${meeting.title}`,
+                      html: `<html><body style="font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;"><div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 5px; overflow: hidden;"><div style="background: linear-gradient(135deg, #1e3a8a 0%, #2d5aa8 100%); color: white; padding: 30px; text-align: center;"><h1 style="margin: 0; font-size: 28px;">My Collab</h1><p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">Meeting Management System</p></div><div style="background-color: #4ade80; color: white; padding: 15px 20px; text-align: center; font-size: 18px; font-weight: bold;">📅 Scheduled Meeting</div><div style="padding: 30px; color: #333;"><p>Hello,</p><p>A new meeting has been scheduled:</p><div style="background-color: #f0fdf4; border-left: 4px solid #4ade80; padding: 15px; margin: 20px 0;"><p style="margin: 5px 0;"><strong>Meeting Title:</strong> ${meeting.title}</p><p style="margin: 5px 0;"><strong>Date:</strong> ${meetingDateStr}</p><p style="margin: 5px 0;"><strong>Time:</strong> ${meetingTime}</p><p style="margin: 5px 0;"><strong>Duration:</strong> ${meeting.duration || 'N/A'} minutes</p><p style="margin: 5px 0;"><strong>Room:</strong> ${meeting.roomName || 'TBD'}</p></div><p>Please log in to the app to join the meeting when it starts.</p><p style="margin-top: 0.75rem;">To access the Video Conference section in Android app, please update your Android app using the link below. For web (laptop) users, there's no need to update as new features push automatically on your end.</p><div style="text-align: center; margin: 20px 0;"><a href="https://drive.google.com/drive/folders/1tUwf_vpw0RWlOWHvZEUIWA6pPlGDohAT?usp=drive_link" style="background-color: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">Update Android App</a></div></div><div style="background-color: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #666; border-top: 1px solid #eee;"><p style="margin: 5px 0;">This is an automated email notification. Please do not reply to this email.</p><p style="margin: 5px 0;">© My Collab - Meeting Management System</p></div></div></body></html>`
+                    });
+                    console.log(`✓ Meeting notification sent to ${notifEmail}`);
+                  } catch (error) {
+                    console.error('Failed to send meeting email:', error.message);
+                  }
+                }
+
+                // Mark as notified
+                try {
+                  await meetingsRef.doc(meetingId).update({
+                    emailNotificationSent: true,
+                    last_notified: new Date()
+                  });
+                  console.log(`Meeting ${meetingId} marked as notified`);
+                } catch (error) {
+                  console.error('Failed to update meeting notification status:', error.message);
+                }
+              }
+
+              console.log('Meeting notification check completed');
+            } catch (error) {
+              console.error('Error in sendMeetingNotifications:', error);
+              process.exit(1);
+            }
+          }
+
+          sendMeetingNotifications().then(() => {
+            process.exit(0);
+          });
+          SCRIPT

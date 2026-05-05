@@ -1,0 +1,104 @@
+name: Send Task Reminders
+
+on:
+  schedule:
+    - cron: '4,9,14,19,24,29,34,39,44,49,54,59 * * * *'
+  workflow_dispatch:
+
+jobs:
+  send-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm install firebase-admin nodemailer
+      - name: Check task deadlines
+        uses: actions/github-script@v7
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
+        with:
+          script: |
+            console.log('Starting send-task-reminders workflow...');
+            const admin = require('firebase-admin');
+            const nodemailer = require('nodemailer');
+            console.log('Dependencies loaded');
+            const serviceAccount = {
+              type: "service_account",
+              project_id: process.env.FIREBASE_PROJECT_ID,
+              private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+              client_email: process.env.FIREBASE_CLIENT_EMAIL
+            };
+            admin.initializeApp({
+              credential: admin.credential.cert(serviceAccount),
+              databaseURL: "https://task-edd4d.firebaseio.com"
+            });
+            const db = admin.firestore();
+            const emailMapping = {
+              'johnpaulbugayong@gmail.com': 'johnpaulbugayong14@gmail.com',
+              'kingfordnabor@gmail.com': 'kingfordnabor20@gmail.com',
+              'allancorral@gmail.com': 'allancorral084@gmail.com',
+              'phricksborebor@gmail.com': 'boreborpj16@gmail.com',
+              'moezarperez@gmail.com': 'moezarg19@gmail.com',
+              'rogelioledda@gmail.com': 'rogelioledda051506@gmail.com'
+            };
+            const transporter = nodemailer.createTransport({
+              service: 'gmail',
+              auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASSWORD }
+            });
+            const snap = await db.collection('tasks').where('status', 'in', ['pending', 'pending validation', 'Not Started', 'needs action', 'overdue']).get();
+            console.log(`Found ${snap.size} incomplete tasks to check`);
+            const now = new Date();
+            for (const doc of snap.docs) {
+              const task = doc.data();
+              if (!task.deadline) continue;
+              const deadline = new Date(task.deadline);
+              if (isNaN(deadline.getTime())) continue;
+              
+              // Check if reminder was already sent today (limit to 1 per day)
+              const lastReminderDate = task.lastReminderSentDate ? new Date(task.lastReminderSentDate) : null;
+              const todayStart = new Date(now);
+              todayStart.setHours(0, 0, 0, 0);
+              if (lastReminderDate && lastReminderDate > todayStart) {
+                console.log(`⏭ Skipping ${task.title} - already sent today`);
+                continue;
+              }
+              
+              const daysUntil = Math.ceil((deadline - now) / (1000 * 3600 * 24));
+              
+              // Determine recipients - expand "everyone" to all team members
+              let recipients = [];
+              if (task.assignedTo === 'everyone') {
+                recipients = Object.values(emailMapping);
+              } else {
+                const email = emailMapping[task.assignedTo] || task.assignedTo;
+                if (email) recipients = [email];
+              }
+              
+              // Send to each recipient
+              for (const notifEmail of recipients) {
+                    const html = `<html><body style="font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;"><div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 5px; overflow: hidden;"><div style="background: linear-gradient(135deg, #1e3a8a 0%, #2d5aa8 100%); color: white; padding: 30px; text-align: center;"><h1 style="margin: 0; font-size: 28px;">My Collab</h1><p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">Task Management System</p></div><div style="background-color: #f97316; color: white; padding: 15px 20px; text-align: center; font-size: 18px; font-weight: bold;">⏰ Task Reminder</div><div style="padding: 30px; color: #333;"><p>Hello,</p><p>You have a task due soon:</p><div style="background-color: #fff7ed; border-left: 4px solid #f97316; padding: 15px; margin: 20px 0;"><p style="margin: 5px 0;"><strong>Task:</strong> ${task.title}</p><p style="margin: 5px 0;"><strong>Status:</strong> ${task.status}</p><p style="margin: 5px 0;"><strong>Due in:</strong> ${daysUntil} days</p></div><p>Please log in to the app to view and update this task.</p><div style="text-align: center; margin: 30px 0;"><a href="http://mytaskprofessional-jpteams.vercel.app/?v=2" style="background-color: #1e3a8a; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">View Task</a></div></div><div style="background-color: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #666; border-top: 1px solid #eee;"><p style="margin: 5px 0;">This is an automated email notification. Please do not reply to this email.</p><p style="margin: 5px 0;">© My Collab - Task Management System</p></div></div></body></html>`;
+                try {
+                  await transporter.sendMail({
+                    from: `"My Collab" <${process.env.GMAIL_USER}>`,
+                    to: notifEmail,
+                    subject: `Reminder: ${task.title} due in ${daysUntil} days`,
+                    html: html
+                  });
+                  console.log(`✓ Sent reminder to ${notifEmail}`);
+                } catch (e) { console.error('Error:', e); }
+              }
+              
+              // Update lastReminderSentDate once per task
+              await db.collection('tasks').doc(doc.id).update({
+                lastReminderSentDate: new Date()
+              });
+            }

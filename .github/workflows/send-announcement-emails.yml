@@ -1,0 +1,79 @@
+name: Send Announcement Email Notifications
+
+on:
+  schedule:
+    - cron: '1,6,11,16,21,26,31,36,41,46,51,56 * * * *'
+  workflow_dispatch:
+
+jobs:
+  send-announcement-emails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm install firebase-admin nodemailer
+      - name: Send announcement emails
+        uses: actions/github-script@v7
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
+        with:
+          script: |
+            console.log('Starting send-announcement-emails workflow...');
+            const admin = require('firebase-admin');
+            const nodemailer = require('nodemailer');
+            console.log('Dependencies loaded');
+            const serviceAccount = {
+              type: "service_account",
+              project_id: process.env.FIREBASE_PROJECT_ID,
+              private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+              client_email: process.env.FIREBASE_CLIENT_EMAIL
+            };
+            admin.initializeApp({
+              credential: admin.credential.cert(serviceAccount),
+              databaseURL: "https://task-edd4d.firebaseio.com"
+            });
+            const db = admin.firestore();
+            const emailMapping = {
+              'johnpaulbugayong@gmail.com': 'johnpaulbugayong14@gmail.com',
+              'kingfordnabor@gmail.com': 'kingfordnabor20@gmail.com',
+              'allancorral@gmail.com': 'allancorral084@gmail.com',
+              'phricksborebor@gmail.com': 'boreborpj16@gmail.com',
+              'moezarperez@gmail.com': 'moezarg19@gmail.com',
+              'rogelioledda@gmail.com': 'rogelioledda051506@gmail.com'
+            };
+            const transporter = nodemailer.createTransport({
+              service: 'gmail',
+              auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASSWORD }
+            });
+            const snap = await db.collection('announcements').where('emailNotificationSent', '!=', true).get();
+            console.log(`Found ${snap.size} new announcements`);
+            for (const doc of snap.docs) {
+              const ann = doc.data();
+              let recipients = [];
+              if (ann.assignedTo === 'everyone' || (Array.isArray(ann.assignedTo) && ann.assignedTo.includes('everyone'))) {
+                recipients = Object.values(emailMapping);
+              } else if (Array.isArray(ann.assignedTo)) {
+                recipients = ann.assignedTo.map(email => emailMapping[email] || email).filter(e => e);
+              } else if (ann.assignedTo) {
+                const email = emailMapping[ann.assignedTo] || ann.assignedTo;
+                if (email) recipients = [email];
+              }
+              for (const notifEmail of recipients) {
+                try {
+                  await transporter.sendMail({
+                    from: `"My Collab" <${process.env.GMAIL_USER}>`, color: white; padding: 30px; text-align: center;"><h1 style="margin: 0; font-size: 28px;">My Collab</h1><p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">Task Management System</p></div><div style="background-color: #ff9500; color: white; padding: 15px 20px; text-align: center; font-size: 18px; font-weight: bold;">📢 New Announcement</div><div style="padding: 30px; color: #333;"><p>Hello,</p><p>A new announcement has been posted:</p><div style="background-color: #fff8f0; border-left: 4px solid #ff9500; padding: 15px; margin: 20px 0;"><p style="margin: 5px 0;"><strong>${ann.title}</strong></p></div><p>Please log in to the app to view the full announcement.</p><div style="text-align: center; margin: 30px 0;"><a href="http://mytaskprofessional-jpteams.vercel.app/?v=2" style="background-color: #1e3a8a; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">View Announcement</a></div></div><div style="background-color: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #666; border-top: 1px solid #eee;"><p style="margin: 5px 0;">This is an automated email notification. Please do not reply to this email.</p><p style="margin: 5px 0;">© My Collab - Task Management System</p></div></div></body></html>`
+                  });
+                  console.log(`✓ Email sent to ${notifEmail}`);
+                } catch (e) { console.error('Error:', e); }
+              }
+              await db.collection('announcements').doc(doc.id).update({ emailNotificationSent: true });
+            }
