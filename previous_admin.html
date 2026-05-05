@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Admin Dashboard - My Thesis Hub</title>
+  <meta name="application-name" content="My Thesis Hub">
+  <meta name="apple-mobile-web-app-title" content="My Thesis Hub">
+  <link rel="manifest" href="manifest.json?v=5">
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="style.css?v=1">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
+</head>
+<body>
+
+<!-- Mobile Navigation Toggle -->
+<button class="mobile-nav-toggle" onclick="toggleMobileSidebar()"><i class="fas fa-bars"></i></button>
+
+<!-- Mobile Overlay -->
+<div class="sidebar-overlay" onclick="closeMobileSidebar()"></div>
+
+<div class="app-container">
+  <!-- Sidebar Navigation -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h2><i class="fas fa-chart-bar"></i> Admin</h2>
+      <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+    </div>
+    <ul class="nav-list">
+      <li><button class="nav-btn active" onclick="showSection('create-task')"><i class="fas fa-plus"></i> Create Task</button></li>
+      <li><button class="nav-btn" onclick="showSection('create-poll')"><i class="fas fa-poll"></i> Create Poll</button></li>
+      <li><button class="nav-btn" onclick="showSection('create-announcement')"><i class="fas fa-bullhorn"></i> Announcement</button></li>
+      <li><button class="nav-btn" onclick="showSection('create-resource')"><i class="fas fa-book"></i> Resource</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-polls')"><i class="fas fa-poll"></i> Manage Polls</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-announcements')"><i class="fas fa-bullhorn"></i> Manage Announcements</button></li>
+      <li><button class="nav-btn" onclick="showSection('support-tickets')"><i class="fas fa-ticket-alt"></i> Support Tickets</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-resources')"><i class="fas fa-book"></i> Manage Resources</button></li>
+      <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-chart-line"></i> Progress Report</button></li>
+      <li><button class="nav-btn" onclick="showSection('task-analytics')"><i class="fas fa-chart-bar"></i> Analytics</button></li>
+      <li><button class="nav-btn" onclick="showSection('all-tasks')"><i class="fas fa-clipboard-list"></i> All Tasks</button></li>
+      <li><button class="nav-btn" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
+    </ul>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="content-header">
+      <h1 id="page-title"><i class="fas fa-chart-bar"></i> Admin Dashboard</h1>
+      <div class="header-actions">
+        <div id="welcome" class="welcome-header">welcome, boss pi!</div>
+        <button onclick="signOutUser()" class="logout-btn header-logout">Logout</button>
+      </div>
+    </div>
+    
+    <div class="content-sections">
+      <!-- Create New Task Section -->
+      <section id="create-task" class="content-section active">
+        <div class="card">
+          <h2>Create New Task</h2>
+          
+          <form onsubmit="event.preventDefault(); createTask();">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="title">Task Title</label>
+                <input id="title" type="text" placeholder="Enter task title" required>
+              </div>
+              
+              <div class="form-group">
+                <label for="deadline">Deadline</label>
+                <input id="deadline" type="date" required>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="description">Description</label>
+              <textarea id="description" placeholder="Enter task description" rows="4"></textarea>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="assignedTo">Assign To</label>
+                <select id="assignedTo" required>
+                  <option value="">Select a member</option>
+                </select>
+              </div>
+              
+              <div class="form-group">
+                <label for="linkInput">Link</label>
+                <input id="linkInput" type="url" placeholder="https://example.com/resource" autocomplete="off">
+                <p style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">Optional: add a reference link for this task.</p>
+              </div>
+            </div>
+            
+            <button type="submit" class="btn-success"><i class="fas fa-check"></i> Create Task</button>
+          </form>
+        </div>
+      </section>
+      
+      <!-- Create New Poll Section -->
+      <section id="create-poll" class="content-section">
+        <div class="card">
+          <h2>Create New Poll</h2>
+          
+          <form onsubmit="event.preventDefault(); createPoll();">
+            <div class="form-group">
+              <label for="pollQuestion">Poll Question</label>
+              <input id="pollQuestion" type="text" placeholder="Enter poll question" required>
+            </div>
+            
+            <div id="pollOptions">
+              <div class="form-group">
+                <label>Option 1</label>
+                <input type="text" class="poll-option-input" placeholder="Enter option" required>
+              </div>
+              <div class="form-group">
+                <label>Option 2</label>
+                <input type="text" class="poll-option-input" placeholder="Enter option" required>
+              </div>
+            </div>
+            
+            <button type="button" onclick="addPollOption()" style="background: #6b7280; margin-bottom: 1rem;">+ Add Option</button>
+            <button type="submit" class="btn-secondary"><i class="fas fa-poll"></i> Create Poll</button>
+          </form>
+        </div>
+      </section>
+      
+      <!-- Create Announcement Section -->
+      <section id="create-announcement" class="content-section">
+        <div class="card">
+          <h2>Create Announcement</h2>
+    
+    <form onsubmit="event.preventDefault(); createAnnouncement();">
+      <div class="form-group">
+        <label for="announcementTitle">Title</label>
+        <input id="announcementTitle" type="text" placeholder="Enter announcement title" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="announcementContent">Content</label>
+        <textarea id="announcementContent" placeholder="Enter announcement content" rows="6" required></textarea>
+      </div>
+      
+      <div class="form-group">
+        <label>Assign To</label>
+        <div id="announcementAssignTo" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+          <!-- Checkboxes will be populated by JavaScript -->
+        </div>
+      </div>
+      
+            <button type="submit" class="btn-warning"><i class="fas fa-bullhorn"></i> Create Announcement</button>
+          </form>
+        </div>
+      </section>
+      
+      <!-- Create Resource Section -->
+      <section id="create-resource" class="content-section">
+        <div class="card">
+          <h2>Create Resource</h2>
+    
+    <form onsubmit="event.preventDefault(); createResource();">
+      <div class="form-group">
+        <label for="resourceTitle">Title</label>
+        <input id="resourceTitle" type="text" placeholder="Enter resource title" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="resourceDescription">Description</label>
+        <textarea id="resourceDescription" placeholder="Enter resource description" rows="4" required></textarea>
+      </div>
+      
+      <div class="form-group">
+        <label for="resourceLink">Link</label>
+        <input id="resourceLink" type="url" placeholder="https://example.com/resource" required>
+        <p style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">URL of the resource (required).</p>
+      </div>
+      
+          <button type="submit" class="btn-success"><i class="fas fa-book"></i> Create Resource</button>
+        </form>
+      </div>
+      </section>
+      
+      <!-- Manage Polls Section -->
+      <section id="manage-polls" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-poll"></i> Manage Polls</h2>
+          <div id="pollsList">
+            <p style="color: #94a3b8; text-align: center;">Loading polls...</p>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Manage Announcements Section -->
+      <section id="manage-announcements" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-bullhorn"></i> Manage Announcements</h2>
+          <div id="announcementsList">
+            <p style="color: #94a3b8; text-align: center;">Loading announcements...</p>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Support Tickets Section -->
+      <section id="support-tickets" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-ticket-alt"></i> Support Tickets</h2>
+          <div id="ticketsList">
+            <p style="color: #94a3b8; text-align: center;">Loading tickets...</p>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Manage Resources Section -->
+      <section id="manage-resources" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-book"></i> Manage Resources</h2>
+          <div id="resourcesList">
+            <p style="color: #94a3b8; text-align: center;">Loading resources...</p>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Progress Report Section -->
+      <section id="progress-report" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-chart-line"></i> Thesis Progress Report</h2>
+          <div id="progressReportPanel">
+            <p style="color: #94a3b8; text-align: center;">Loading thesis progress report...</p>
+          </div>
+          <button type="button" onclick="saveProgressReport()" class="btn-success" style="margin-top: 1rem;"><i class="fas fa-save"></i> Save Progress</button>
+        </div>
+      </section>
+      
+      <!-- Task Analytics Section -->
+      <section id="task-analytics" class="content-section">
+        <div class="card analytics-card">
+          <h2><i class="fas fa-chart-bar"></i> Task Analytics</h2>
+          <div class="chart-container">
+            <canvas id="taskChart"></canvas>
+          </div>
+        </div>
+      </section>
+      
+      <!-- All Tasks Section -->
+      <section id="all-tasks" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-clipboard-list"></i> All Tasks</h2>
+          <div id="tasks"></div>
+        </div>
+      </section>
+
+      <!-- Video Conference Section -->
+      <section id="video-conference" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-video"></i> Video Conference</h2>
+
+          <!-- Admin schedule form -->
+          <div id="admin-schedule-panel" style="margin-bottom: 2rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #1e293b;">
+            <h3 style="margin-bottom: 1rem; color: #f8fafc;">Schedule a Meeting</h3>
+            <form id="adminMeetingForm" style="display: flex; flex-direction: column; gap: 1rem;">
+              <input type="text" id="adminMeetingTitle" placeholder="Meeting Title" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc;">
+              <div style="display: flex; gap: 1rem;">
+                <input type="date" id="adminMeetingDate" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc; flex: 1;">
+                <input type="time" id="adminMeetingTime" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc; flex: 1;">
+              </div>
+              <button type="submit" style="padding: 0.5rem 1rem; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer;">Schedule Meeting</button>
+            </form>
+          </div>
+
+                  <div style="margin-bottom: 2rem; text-align: center;">
+            <button id="startInstantMeetingBtn" disabled style="padding: 0.75rem 1.5rem; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem;">
+              <i class="fas fa-bolt"></i> Start Instant Meeting
+            </button>
+          </div>
+
+          <!-- Scheduled Meetings List -->
+          <div id="adminMeetingsList" style="margin-bottom: 2rem;">
+            <h3 style="margin-bottom: 1rem; color: #f8fafc;">Scheduled Meetings</h3>
+            <div id="adminMeetingsContainer"></div>
+          </div>
+
+          <div id="jaas-container" style="height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151;"></div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<footer style="text-align: center; padding: 1rem; color: #94a3b8; font-size: 0.8rem; margin-top: 2rem;">
+  My Collab
+  <br>
+  Created by: John Paul Bugayong
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Navigation functions
+function showSection(sectionId) {
+  // Hide all sections
+  const sections = document.querySelectorAll('.content-section');
+  sections.forEach(section => section.classList.remove('active'));
+  
+  // Show selected section
+  const targetSection = document.getElementById(sectionId);
+  if (targetSection) {
+    targetSection.classList.add('active');
+  }
+  
+  // Update active nav button
+  const navButtons = document.querySelectorAll('.nav-btn');
+  navButtons.forEach(btn => btn.classList.remove('active'));
+  
+  // Find and activate the corresponding nav button
+  const activeBtn = document.querySelector(`[onclick="showSection('${sectionId}')"]`);
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+  }
+  
+  // Update page title
+  const titles = {
+    'create-task': '<i class="fas fa-plus"></i> Create Task',
+    'create-poll': '<i class="fas fa-poll"></i> Create Poll',
+    'create-announcement': '<i class="fas fa-bullhorn"></i> Create Announcement',
+    'create-resource': '<i class="fas fa-book"></i> Create Resource',
+    'manage-polls': '<i class="fas fa-poll"></i> Manage Polls',
+    'manage-announcements': '<i class="fas fa-bullhorn"></i> Manage Announcements',
+    'support-tickets': '<i class="fas fa-ticket-alt"></i> Support Tickets',
+    'manage-resources': '<i class="fas fa-book"></i> Manage Resources',
+    'progress-report': '<i class="fas fa-chart-line"></i> Progress Report',
+    'task-analytics': '<i class="fas fa-chart-bar"></i> Task Analytics',
+    'all-tasks': '<i class="fas fa-clipboard-list"></i> All Tasks',
+    'video-conference': '<i class="fas fa-video"></i> Video Conference'
+  };
+  
+  const pageTitle = document.getElementById('page-title');
+  if (pageTitle && titles[sectionId]) {
+    pageTitle.innerHTML = titles[sectionId];
+  }
+  
+  // Trigger chart update when analytics is shown
+  if (sectionId === 'task-analytics') {
+    setTimeout(() => {
+      if (window.updateChart && window.lastMemberProgress !== undefined) {
+        window.updateChart(window.lastMemberProgress);
+      }
+    }, 50); // Faster response when switching tabs
+  }
+  
+  // Close mobile sidebar after selection
+  closeMobileSidebar();
+}
+
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  sidebar.classList.toggle('collapsed');
+  
+  const appContainer = document.querySelector('.app-container');
+  appContainer.classList.toggle('has-collapsed-sidebar');
+}
+
+function toggleMobileSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.querySelector('.sidebar-overlay');
+  
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('show');
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.querySelector('.sidebar-overlay');
+  
+  sidebar.classList.remove('open');
+  overlay.classList.remove('show');
+}
+</script>
+<script type="module">
+  import { requireAuth } from "./auth.js?v=3";
+  await requireAuth(['admin']);
+</script>
+<script type="module" src="admin.js?v=3"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+
+<script type="module">
+import { collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { db } from "./firebase.js";
+
+const members = [
+  { uid: "everyone", name: "Everyone" },
+  { uid: "kingfordnabor@gmail.com", name: "Kingford Nabor" },
+  { uid: "allancorral@gmail.com", name: "Allan Corral" },
+  { uid: "phricksborebor@gmail.com", name: "Phricks Borebor" },
+  { uid: "moezarperez@gmail.com", name: "Moezar Perez" },
+  { uid: "rogelioledda@gmail.com", name: "Rogelio Ledda" }
+];
+
+const JAASTOKEN_ROOM_PREFIX = 'vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/';
+const PROJECT_DISCUSSION_ROOM = 'ProjectDiscussion';
+let jaasApi = null;
+let currentMeetingId = null;
+
+function buildJaasRoomName(roomName) {
+  if (!roomName) return roomName;
+  return roomName.startsWith(JAASTOKEN_ROOM_PREFIX) ? roomName : `${JAASTOKEN_ROOM_PREFIX}${roomName}`;
+}
+
+function initializeJitsiConference(roomName = null) {
+  if (jaasApi) {
+    jaasApi.dispose();
+  }
+
+  const container = document.querySelector('#jaas-container');
+  if (!container) return;
+
+  const room = buildJaasRoomName(roomName || PROJECT_DISCUSSION_ROOM);
+
+  const apiOptions = {
+    roomName: room,
+    parentNode: container,
+    width: '100%',
+    height: '100%',
+    configOverwrite: {
+      prejoinPageEnabled: false,
+      disableDeepLinking: true,
+      startWithAudioMuted: true,
+      startWithVideoMuted: true,
+      disableInitialGUM: true, // Prevent automatic media access to avoid autoplay errors
+      enableClosePage: false,
+      disableThirdPartyRequests: false,
+      analytics: {
+        disabled: true
+      }
+    },
+    interfaceConfigOverwrite: {
+      TOOLBAR_BUTTONS: [
+        'microphone', 'camera', 'desktop', 'fullscreen',
+        'hangup', 'profile', 'chat', 'settings',
+        'raisehand', 'videoquality', 'filmstrip',
+        'tileview', 'help'
+      ],
+      DISABLE_VIDEO_BACKGROUND: true,
+      HIDE_INVITE_MORE_HEADER: true
+    }
+  };
+
+  jaasApi = new JitsiMeetExternalAPI("8x8.vc", apiOptions);
+
+  // Add error handling for Jitsi
+  jaasApi.addEventListener('errorOccurred', (error) => {
+    console.error('Jitsi conference error:', error);
+  });
+
+  jaasApi.addEventListener('readyToClose', async () => {
+    if (jaasApi) {
+      jaasApi.dispose();
+      jaasApi = null;
+    }
+
+    if (currentMeetingId) {
+      try {
+        await endAdminMeeting(currentMeetingId);
+      } catch (error) {
+        console.error('Failed to end meeting on close:', error);
+      }
+      currentMeetingId = null;
+    }
+
+    // Reload the page to ensure fresh state when conference ends
+    window.location.reload();
+  });
+}
+
+function startMeeting(meetingId, roomName) {
+  currentMeetingId = meetingId || null;
+  const schedulePanel = document.getElementById('admin-schedule-panel');
+  const meetingsList = document.getElementById('adminMeetingsList');
+  const container = document.getElementById('jaas-container');
+
+  if (schedulePanel) schedulePanel.style.display = 'none';
+  if (meetingsList) meetingsList.style.display = 'none';
+  if (container) container.style.display = 'block';
+
+  initializeJitsiConference(roomName);
+}
+
+let adminMeetingsUnsubscribe = null;
+
+async function saveAdminMeeting(meeting) {
+  const docRef = await addDoc(collection(db, 'meetings'), meeting);
+  return docRef;
+}
+
+function loadAdminMeetings() {
+  if (adminMeetingsUnsubscribe) {
+    adminMeetingsUnsubscribe();
+  }
+
+  adminMeetingsUnsubscribe = onSnapshot(collection(db, 'meetings'), (snapshot) => {
+    const meetings = [];
+    snapshot.forEach(docSnap => {
+      meetings.push({ id: docSnap.id, ...docSnap.data() });
+    });
+
+    meetings.sort((a, b) => {
+      const aDate = new Date(`${a.date}T${a.time}`);
+      const bDate = new Date(`${b.date}T${b.time}`);
+      return aDate - bDate;
+    });
+
+    renderAdminMeetings(meetings);
+  }, (error) => {
+    console.error('Admin meetings listener error:', error);
+  });
+}
+
+function renderAdminMeetings(meetings) {
+  const container = document.getElementById('adminMeetingsContainer');
+  if (!container) return;
+
+  if (meetings.length === 0) {
+    container.innerHTML = '<p style="color: #94a3b8; text-align: center;">No meetings scheduled yet.</p>';
+    return;
+  }
+
+  container.innerHTML = '';
+
+  meetings.forEach((meeting) => {
+    const meetingDiv = document.createElement('div');
+    meetingDiv.style.cssText = `
+      border: 1px solid #374151;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      background: #1e293b;
+    `;
+
+    const meetingDateTime = new Date(`${meeting.date}T${meeting.time}`);
+    const now = new Date();
+    const isUpcoming = meetingDateTime > now;
+    const isToday = meetingDateTime.toDateString() === now.toDateString();
+    const isOngoing = isToday && meetingDateTime <= now && (now - meetingDateTime) < (2 * 60 * 60 * 1000);
+    const isFinished = !isUpcoming && !isOngoing;
+
+    const currentStatus = meeting.status || 'Active';
+    let statusColor = '#4f46e5';
+    let canJoin = false;
+
+    if (currentStatus === 'Completed') {
+      statusColor = '#6b7280';
+      canJoin = true;
+    } else if (currentStatus === 'Cancelled') {
+      statusColor = '#ef4444';
+    } else if (isOngoing) {
+      statusColor = '#10b981';
+      canJoin = true;
+    } else if (isFinished) {
+      statusColor = '#6b7280';
+      canJoin = true;
+    }
+
+    const showEndButton = currentStatus === 'Active';
+
+    meetingDiv.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem; gap: 1rem; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 220px;">
+          <h4 style="margin: 0; color: #f8fafc;">${meeting.title}</h4>
+          <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
+            <label for="status-${meeting.id}" style="color: #cbd5e1; font-size: 0.85rem; white-space: nowrap;">Status:</label>
+            <select id="status-${meeting.id}" style="background: #0f172a; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.25rem; padding: 0.35rem 0.5rem; font-size: 0.85rem;">
+              <option value="Scheduled" ${currentStatus === 'Scheduled' ? 'selected' : ''}>Scheduled</option>
+              <option value="Active" ${currentStatus === 'Active' ? 'selected' : ''}>Active</option>
+              <option value="Completed" ${currentStatus === 'Completed' ? 'selected' : ''}>Completed</option>
+              <option value="Cancelled" ${currentStatus === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
+            </select>
+            <button onclick="updateMeetingStatus('${meeting.id}')" style="background: #4f46e5; color: white; border: none; padding: 0.4rem 0.75rem; border-radius: 0.375rem; cursor: pointer; font-size: 0.85rem;">Update</button>
+          </div>
+        </div>
+        <span style="background: ${statusColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; min-width: 92px; text-align: center;">
+          ${currentStatus}
+        </span>
+      </div>
+      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.5rem;">
+        <i class="fas fa-calendar"></i> ${meetingDateTime.toLocaleDateString()} at ${meetingDateTime.toLocaleTimeString()}
+      </div>
+      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.5rem;">
+        <i class="fas fa-user"></i> Assigned to: ${members.find(m => m.uid === meeting.assignedTo)?.name || 'Unassigned'}
+      </div>
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button ${canJoin ? '' : 'disabled'} onclick="startMeeting('${meeting.id}', '${meeting.roomName}')" style="background: ${canJoin ? '#10b981' : '#6b7280'}; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: ${canJoin ? 'pointer' : 'not-allowed'}; font-size: 0.85rem;">
+          <i class="fas fa-sign-in-alt"></i> ${canJoin ? 'Join Meeting' : 'Not Started'}
+        </button>
+        ${showEndButton ? `<button onclick="endAdminMeeting('${meeting.id}')" style="background: #f59e0b; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; font-size: 0.85rem;"><i class="fas fa-stop-circle"></i> End Meeting</button>` : ''}
+        <button onclick="deleteAdminMeeting('${meeting.id}')" style="background: #dc2626; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; font-size: 0.85rem;">
+          <i class="fas fa-trash"></i> Delete
+        </button>
+      </div>
+    `;
+
+    container.appendChild(meetingDiv);
+  });
+}
+
+async function deleteAdminMeeting(meetingId) {
+  await deleteDoc(doc(db, 'meetings', meetingId));
+  loadAdminMeetings();
+}
+
+async function endAdminMeeting(meetingId) {
+  await updateDoc(doc(db, 'meetings', meetingId), {
+    status: 'Completed'
+  });
+}
+
+function initializeAdminMeetingForm() {
+  const meetingForm = document.getElementById('adminMeetingForm');
+  if (!meetingForm || meetingForm.dataset.isBound) return;
+
+  meetingForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const title = document.getElementById('adminMeetingTitle').value;
+    const date = document.getElementById('adminMeetingDate').value;
+    const time = document.getElementById('adminMeetingTime').value;
+    const assignedTo = 'everyone';
+    const roomName = buildJaasRoomName(PROJECT_DISCUSSION_ROOM);
+
+    const meeting = {
+      title,
+      date,
+      time,
+      assignedTo,
+      roomName,
+      type: 'scheduled',
+      status: 'Active',
+      createdAt: Date.now()
+    };
+
+    const docRef = await saveAdminMeeting(meeting);
+    loadAdminMeetings();
+    meetingForm.reset();
+
+    // Send notification emails to all members
+    try {
+      const memberEmails = [
+        'kingfordnabor@gmail.com',
+        'allancorral@gmail.com',
+        'phricksborebor@gmail.com',
+        'moezarperez@gmail.com',
+        'rogelioledda@gmail.com'
+      ];
+
+      for (const email of memberEmails) {
+        const member = members.find(m => m.uid === email);
+        const name = member ? member.name : email;
+
+        // Trigger email via server
+        await fetch('https://mytaskprofessional-jpteams.vercel.app/api/trigger-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email,
+            name,
+            type: 'meeting',
+            title,
+            meetingDate: date,
+            meetingTime: time
+          })
+        });
+      }
+    } catch (error) {
+      console.error('Failed to send meeting notifications:', error);
+    }
+  });
+
+  meetingForm.dataset.isBound = 'true';
+}
+
+async function startInstantMeeting() {
+  const now = new Date();
+  const roomName = buildJaasRoomName(PROJECT_DISCUSSION_ROOM);
+  const meeting = {
+    title: 'Instant Meeting',
+    date: now.toISOString().slice(0, 10),
+    time: now.toTimeString().slice(0, 5),
+    assignedTo: 'everyone',
+    roomName,
+    type: 'instant',
+    status: 'Active',
+    createdAt: Date.now()
+  };
+
+  const docRef = await saveAdminMeeting(meeting);
+  currentMeetingId = docRef.id;
+
+  // Send notification emails to all members
+  try {
+    const memberEmails = [
+      'kingfordnabor@gmail.com',
+      'allancorral@gmail.com',
+      'phricksborebor@gmail.com',
+      'moezarperez@gmail.com',
+      'rogelioledda@gmail.com'
+    ];
+
+    for (const email of memberEmails) {
+      const member = members.find(m => m.uid === email);
+      const name = member ? member.name : email;
+
+      // Trigger email via server
+      await fetch('https://mytaskprofessional-jpteams.vercel.app/api/trigger-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email,
+          name,
+          type: 'meeting',
+          title: meeting.title,
+          meetingDate: meeting.date,
+          meetingTime: meeting.time
+        })
+      });
+    }
+  } catch (error) {
+    console.error('Failed to send instant meeting notifications:', error);
+  }
+
+  startMeeting(docRef.id, roomName);
+}
+
+window.loadMeetings = loadMeetings;
+window.initializeAdminMeetingForm = initializeAdminMeetingForm;
+window.startMeeting = startMeeting;
+window.startInstantMeeting = startInstantMeeting;
+window.deleteAdminMeeting = deleteAdminMeeting;
+window.loadMeetingHistory = loadMeetingHistory;
+window.updateMeetingStatus = updateMeetingStatus;
+window.deleteMeeting = deleteMeeting;
+window.joinMeeting = joinMeeting;
+
+const startInstantMeetingBtn = document.getElementById('startInstantMeetingBtn');
+if (startInstantMeetingBtn) {
+  startInstantMeetingBtn.disabled = false;
+  startInstantMeetingBtn.addEventListener('click', () => {
+    if (typeof window.startInstantMeeting === 'function') {
+      window.startInstantMeeting();
+    } else {
+      alert('Meeting system is still loading. Please try again in a moment.');
+    }
+  });
+}
+
+// Ensure scheduled meeting form is initialized on page load
+if (document.readyState !== 'loading') {
+  initializeAdminMeetingForm();
+} else {
+  document.addEventListener('DOMContentLoaded', initializeAdminMeetingForm);
+}
+
+function loadMeetingHistory() {
+  const q = query(collection(db, 'meetings'), orderBy('createdAt', 'desc'));
+  onSnapshot(q, (querySnapshot) => {
+    const meetings = [];
+    querySnapshot.forEach((doc) => {
+      meetings.push({ id: doc.id, ...doc.data() });
+    });
+    renderMeetingHistory(meetings);
+  }, (error) => {
+    console.error('Meeting history listener error:', error);
+  });
+}
+
+function renderMeetingHistory(meetings) {
+  const container = document.getElementById('meetingHistoryContainer');
+  if (!container) return;
+
+  if (meetings.length === 0) {
+    container.innerHTML = '<p style="color: #94a3b8; text-align: center;">No meetings found.</p>';
+    return;
+  }
+
+  container.innerHTML = '';
+
+  meetings.forEach((meeting) => {
+    const meetingDiv = document.createElement('div');
+    meetingDiv.style.cssText = `
+      border: 1px solid #374151;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      background: #1e293b;
+    `;
+
+    const createdAt = new Date(meeting.createdAt);
+    const meetingDateTime = new Date(`${meeting.date}T${meeting.time}`);
+    const now = new Date();
+    const isUpcoming = meetingDateTime > now;
+    const isToday = meetingDateTime.toDateString() === now.toDateString();
+    const isOngoing = isToday && meetingDateTime <= now && (now - meetingDateTime) < (2 * 60 * 60 * 1000);
+    const isFinished = !isUpcoming && !isOngoing;
+
+    let status = meeting.status || 'scheduled';
+    let statusColor = '#4f46e5'; // blue for scheduled
+
+    if (status === 'active') statusColor = '#10b981'; // green
+    else if (status === 'completed') statusColor = '#6b7280'; // gray
+    else if (status === 'cancelled') statusColor = '#ef4444'; // red
+
+    meetingDiv.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+        <h4 style="margin: 0; color: #f8fafc;">${meeting.title}</h4>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <select id="status-${meeting.id}" style="background: #374151; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.25rem; padding: 0.25rem;">
+            <option value="scheduled" ${status === 'scheduled' ? 'selected' : ''}>Scheduled</option>
+            <option value="active" ${status === 'active' ? 'selected' : ''}>Active</option>
+            <option value="completed" ${status === 'completed' ? 'selected' : ''}>Completed</option>
+            <option value="cancelled" ${status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+          </select>
+          <button onclick="updateMeetingStatus('${meeting.id}')" style="background: #4f46e5; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer;">Update</button>
+          <button onclick="deleteMeeting('${meeting.id}')" style="background: #ef4444; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer;">Delete</button>
+        </div>
+      </div>
+      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.5rem;">
+        <div><strong>Date:</strong> ${meeting.date} at ${meeting.time}</div>
+        <div><strong>Type:</strong> ${meeting.type || 'Scheduled'}</div>
+        <div><strong>Created:</strong> ${createdAt.toLocaleString()}</div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="background: ${statusColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem;">
+          ${status}
+        </span>
+        ${meeting.roomName ? `<button onclick="joinMeeting('${meeting.roomName}')" style="background: #10b981; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer;">Join</button>` : ''}
+      </div>
+    `;
+
+    container.appendChild(meetingDiv);
+  });
+}
+
+async function updateMeetingStatus(meetingId) {
+  const statusSelect = document.getElementById(`status-${meetingId}`);
+  const newStatus = statusSelect.value;
+  
+  await updateDoc(doc(db, 'meetings', meetingId), {
+    status: newStatus
+  });
+  
+  // Status will be updated via onSnapshot listener
+}
+
+async function deleteMeeting(meetingId) {
+  // Get meeting details for better confirmation message
+  try {
+    const meetingDoc = await getDoc(doc(db, 'meetings', meetingId));
+    if (meetingDoc.exists()) {
+      const meeting = meetingDoc.data();
+      const confirmMessage = `Are you sure you want to delete the meeting "${meeting.title}"?\n\nThis action cannot be undone.`;
+      
+      if (confirm(confirmMessage)) {
+        await deleteDoc(doc(db, 'meetings', meetingId));
+        // Meeting will be removed via onSnapshot listener
+      }
+    } else {
+      alert('Meeting not found.');
+    }
+  } catch (error) {
+    console.error('Error deleting meeting:', error);
+    alert('Failed to delete meeting.');
+  }
+}
+
+function joinMeeting(roomName) {
+  startMeeting(roomName);
+}
+
+function loadMeetings() {
+  loadAdminMeetings();
+}
+
+function renderMeetings(meetings) {
+  renderAdminMeetings(meetings);
+}
+
+// Initialize Jitsi when video conference section becomes active
+function showSection(sectionId) {
+  // Hide all sections
+  const sections = document.querySelectorAll('.content-section');
+  sections.forEach(section => section.classList.remove('active'));
+  
+  // Show selected section
+  const targetSection = document.getElementById(sectionId);
+  if (targetSection) {
+    targetSection.classList.add('active');
+    
+    // Initialize Jitsi conference when video conference section is shown
+    if (sectionId === 'video-conference') {
+      loadMeetings();
+      initializeAdminMeetingForm();
+      setTimeout(initializeJitsiConference, 100);
+    }
+  }
+  
+  // Update active nav button
+  const navButtons = document.querySelectorAll('.nav-btn');
+  navButtons.forEach(btn => btn.classList.remove('active'));
+  
+  // Find and activate the corresponding nav button
+  const activeBtn = document.querySelector(`[onclick="showSection('${sectionId}')"]`);
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+  }
+  
+  // Update page title
+  const titles = {
+    'create-task': '<i class="fas fa-plus"></i> Create Task',
+    'create-poll': '<i class="fas fa-poll"></i> Create Poll',
+    'create-announcement': '<i class="fas fa-bullhorn"></i> Create Announcement',
+    'create-resource': '<i class="fas fa-book"></i> Create Resource',
+    'manage-polls': '<i class="fas fa-poll"></i> Manage Polls',
+    'manage-announcements': '<i class="fas fa-bullhorn"></i> Manage Announcements',
+    'support-tickets': '<i class="fas fa-ticket-alt"></i> Support Tickets',
+    'manage-resources': '<i class="fas fa-book"></i> Manage Resources',
+    'progress-report': '<i class="fas fa-chart-line"></i> Progress Report',
+    'task-analytics': '<i class="fas fa-chart-bar"></i> Task Analytics',
+    'all-tasks': '<i class="fas fa-clipboard-list"></i> All Tasks',
+    'video-conference': '<i class="fas fa-video"></i> Video Conference'
+

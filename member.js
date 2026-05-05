@@ -26,80 +26,80 @@ const members = [
   { uid: "rogelioledda@gmail.com", name: "Rogelio Ledda" }
 ];
 
-const progressReportCollection = "progressReports";
-const progressReportDocId = "thesisProgress";
-
 function getUserName(email) {
   const member = members.find(m => m.uid === email);
   return member ? member.name : email;
 }
 
-function getDefaultProgressStructure() {
-  return [
-    {
-      title: "Front Matter",
-      items: [
-        { name: "Title Page", status: "Not Started" },
-        { name: "Approval Sheet", status: "Not Started" },
-        { name: "Abstract", status: "Not Started" },
-        { name: "Acknowledgement", status: "Not Started" },
-        { name: "Table of Contents", status: "Not Started" },
-        { name: "List of Tables (if applicable)", status: "Not Started" },
-        { name: "List of Figures (if applicable)", status: "Not Started" }
-      ]
-    },
-    {
-      title: "Chapter 1 – Introduction",
-      items: [
-        { name: "Background of the Study", status: "Not Started" },
-        { name: "Statement of the Problem", status: "Not Started" },
-        { name: "Objectives of the Study", status: "Not Started" },
-        { name: "Scope and Delimitation", status: "Not Started" },
-        { name: "Significance of the Study", status: "Not Started" },
-        { name: "Definition of Terms", status: "Not Started" }
-      ]
-    },
-    {
-      title: "Chapter 2 – Review of Related Literature (RRL)",
-      items: [
-        { name: "Related studies and literature", status: "Not Started" },
-        { name: "Theoretical framework (if required)", status: "Not Started" },
-        { name: "Conceptual framework", status: "Not Started" }
-      ]
-    },
-    {
-      title: "Chapter 3 – Methodology",
-      items: [
-        { name: "Research design", status: "Not Started" },
-        { name: "Materials / instruments", status: "Not Started" },
-        { name: "Procedure / implementation", status: "Not Started" },
-        { name: "Data gathering method", status: "Not Started" },
-        { name: "Statistical treatment (if applicable)", status: "Not Started" }
-      ]
-    },
-    {
-      title: "Chapter 4 – Results and Discussion",
-      items: [
-        { name: "Presentation of data", status: "Not Started" },
-        { name: "Analysis and interpretation", status: "Not Started" }
-      ]
-    },
-    {
-      title: "Chapter 5 – Conclusion and Recommendations",
-      items: [
-        { name: "Summary of findings", status: "Not Started" },
-        { name: "Conclusion", status: "Not Started" },
-        { name: "Recommendations", status: "Not Started" }
-      ]
-    },
-    {
-      title: "Back Matter",
-      items: [
-        { name: "References / Bibliography", status: "Not Started" },
-        { name: "Appendices (survey forms, codes, drawings, etc.)", status: "Not Started" }
-      ]
+async function getMemberDisplayName(email) {
+  const hardcodedMember = members.find(m => m.uid === email);
+  if (hardcodedMember) {
+    return hardcodedMember.name;
+  }
+
+  try {
+    const memberRef = doc(db, "members", email);
+    const docSnap = await getDoc(memberRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      if (data && data.name) {
+        return data.name;
+      }
     }
-  ];
+  } catch (error) {
+    console.warn('Could not fetch member name from Firestore:', error);
+  }
+
+  return email;
+}
+
+function renderMemberProgressReports(reports) {
+  const details = document.getElementById("memberProgressReportDetails");
+  if (!details) return;
+
+  if (!Array.isArray(reports) || reports.length === 0) {
+    details.innerHTML = `<p style="color: #94a3b8;">No progress reports have been created by the admin yet.</p>`;
+    return;
+  }
+
+  details.innerHTML = reports.map(report => {
+    const statusColor = report.status === "Completed" ? "#22c55e" : report.status === "Pending" ? "#f59e0b" : "#94a3b8";
+    const createdDate = report.createdAt ? new Date(report.createdAt.seconds ? report.createdAt.seconds * 1000 : report.createdAt).toLocaleDateString() : "N/A";
+    const updatedDate = report.updatedAt ? new Date(report.updatedAt.seconds ? report.updatedAt.seconds * 1000 : report.updatedAt).toLocaleDateString() : "N/A";
+    return `
+      <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.75rem; background: #111827;">
+        <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 220px;">
+            <h3 style="margin: 0 0 0.5rem 0; color: #f8fafc;">${report.title || "Unnamed Report"}</h3>
+            <p style="margin: 0 0 0.5rem 0; color: #cbd5e1;">${report.description || "No description provided."}</p>
+            <p style="margin: 0.35rem 0; color: #94a3b8; font-size: 0.9rem;"><strong>Assigned to:</strong> ${report.assignedName || report.assignedTo || "Everyone"}</p>
+            <p style="margin: 0.35rem 0; color: #94a3b8; font-size: 0.9rem;"><strong>Created:</strong> ${createdDate}</p>
+            <p style="margin: 0.35rem 0; color: #94a3b8; font-size: 0.9rem;"><strong>Last updated:</strong> ${updatedDate}</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem; white-space: nowrap;">
+            <span style="font-weight: 700; color: ${statusColor};">${report.status || "Not Started"}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function loadMemberProgressReports() {
+  const details = document.getElementById("memberProgressReportDetails");
+  if (!details) return;
+
+  try {
+    const snapshot = await getDocs(collection(db, "progressReports"));
+    const reports = [];
+    snapshot.forEach(docSnap => reports.push({ id: docSnap.id, ...docSnap.data() }));
+    renderMemberProgressReports(reports);
+  } catch (error) {
+    console.error("Error loading member progress reports:", error);
+    if (details) {
+      details.innerHTML = `<p style="color: #ef4444;">Unable to load progress report status. Please refresh the page.</p>`;
+    }
+  }
 }
 
 function getDeadlineWarning(deadlineStr, status) {
@@ -128,60 +128,6 @@ function getSafePollOptions(poll) {
 function getSafePollVotes(poll) {
   const votes = poll.votes || {};
   return typeof votes === 'object' && votes !== null ? votes : {};
-}
-
-function renderMemberProgressReport(sections) {
-  const container = document.getElementById("progressReport");
-  const emptyState = document.getElementById("progressEmptyState");
-
-  if (!container) return;
-  if (!Array.isArray(sections) || sections.length === 0) {
-    container.innerHTML = "";
-    if (emptyState) emptyState.style.display = "block";
-    return;
-  }
-
-  if (emptyState) emptyState.style.display = "none";
-  container.innerHTML = sections.map(section => `
-    <div style="margin-bottom: 1.25rem;">
-      <h3 style="margin: 0 0 0.75rem 0; color: #3b82f6;">${section.title}</h3>
-      ${Array.isArray(section.items) ? section.items.map(item => {
-        const assignedToName = Array.isArray(item.assignedToName) ? item.assignedToName.join(', ') : (item.assignedToName || (item.assignedTo ? getUserName(item.assignedTo) : 'Unassigned'));
-        return `
-          <div style="padding: 0.75rem; background: #111827; border: 1px solid #374151; border-radius: 0.5rem; margin-bottom: 0.5rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
-              <span style="color: #d1d5db;">${item.name}</span>
-              <span style="color: ${item.status === 'Completed' ? '#22c55e' : item.status === 'Pending' ? '#f59e0b' : '#94a3b8'}; font-weight: 600;">${item.status || 'Not Started'}</span>
-            </div>
-            <p style="margin: 0.5rem 0 0 0; color: #60a5fa; font-size: 0.85rem;">Assigned to: ${assignedToName}</p>
-          </div>
-        `;
-      }).join('') : ''}
-    </div>
-  `).join('');
-}
-
-function loadProgressReport() {
-  const progressRef = doc(db, progressReportCollection, progressReportDocId);
-  onSnapshot(progressRef, (snap) => {
-    let sections = getDefaultProgressStructure();
-    if (snap.exists()) {
-      const data = snap.data();
-      if (Array.isArray(data.sections)) {
-        sections = data.sections.map(section => ({
-          ...section,
-          items: Array.isArray(section.items) ? section.items.map(item => ({
-            assignedTo: Array.isArray(item.assignedTo) ? item.assignedTo : (item.assignedTo ? [item.assignedTo] : []),
-            assignedToName: Array.isArray(item.assignedToName) ? item.assignedToName : (item.assignedToName ? [item.assignedToName] : []),
-            ...item
-          })) : []
-        }));
-      }
-    }
-    renderMemberProgressReport(sections);
-  }, (error) => {
-    console.error('Progress report onSnapshot error:', error);
-  });
 }
 
 window.markDone = async function (id) {
@@ -343,11 +289,11 @@ function loadPolls() {
               <span>${option}</span>
               <div style="display: flex; align-items: center; gap: 0.5rem;">
                 <span>${optionVotes} votes (${percentage}%)</span>
-                ${!userVoted ? `<button onclick="votePoll('${doc.id}', ${index})" style="background: #3b82f6; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer;">Vote</button>` : ''}
+                ${!userVoted ? `<button onclick="votePoll('${doc.id}', ${index})" style="background: #4f46e5; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer;">Vote</button>` : ''}
               </div>
             </div>
             <div style="width: 100%; height: 8px; background: #374151; border-radius: 4px; margin-top: 0.25rem;">
-              <div style="width: ${percentage}%; height: 100%; background: ${isUserVote ? '#10b981' : '#3b82f6'}; border-radius: 4px;"></div>
+              <div style="width: ${percentage}%; height: 100%; background: ${isUserVote ? '#10b981' : '#4f46e5'}; border-radius: 4px;"></div>
             </div>
           </div>
         `;
@@ -485,7 +431,7 @@ function loadAnnouncements() {
             ${commentHtml}
             ${commentsEnabled ? `
               <textarea id="commentInput-${doc.id}" rows="3" placeholder="Write a comment..." style="width: 100%; padding: 0.75rem; border-radius: 0.375rem; border: 1px solid #4b5563; background: #111827; color: #f3f4f6; margin-bottom: 0.75rem;"></textarea>
-              <button onclick="addAnnouncementComment('${doc.id}')" style="background: #3b82f6; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer;">Post Comment</button>
+              <button onclick="addAnnouncementComment('${doc.id}')" style="background: #4f46e5; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer;">Post Comment</button>
             ` : `<p style="color: #f59e0b; margin-top: 0.5rem;">Comments are disabled for this announcement.</p>`}
           </div>
         </div>
@@ -619,7 +565,7 @@ function renderMeetings(meetings) {
     const canJoin = !isUpcoming;
 
     let status = 'Upcoming';
-    let statusColor = '#3b82f6';
+    let statusColor = '#4f46e5';
 
     if (isOngoing) {
       status = 'Ongoing';
@@ -703,8 +649,9 @@ window.joinScheduledMeeting = function(roomName) {
       await signInAnonymously(auth);
       console.log('Auth ready');
     }
-    if (welcomeEl) welcomeEl.textContent = `Welcome, ${getUserName(userEmail)}`;
-    console.log('User logged in as:', userEmail);
+    const displayName = await getMemberDisplayName(userEmail);
+    if (welcomeEl) welcomeEl.textContent = `Welcome, ${displayName}`;
+    console.log('User logged in as:', userEmail, 'displayName:', displayName);
     console.log('Starting to load data from Firestore...');
     
     // Initialize notifications
@@ -767,7 +714,7 @@ window.joinScheduledMeeting = function(roomName) {
     // Load polls and announcements
     loadPolls();
     loadAnnouncements();
-    loadProgressReport();
+    loadMemberProgressReports();
     loadResources();
   }
   
@@ -794,7 +741,7 @@ function ensureTicketHistorySection() {
   ticketCard.innerHTML = `
     <h2 style="margin-bottom: 1rem;">🎟️ Ticket History</h2>
     <div style="margin-bottom: 1rem;">
-      <button onclick="loadTicketHistory()" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">Refresh Tickets</button>
+      <button onclick="loadTicketHistory()" style="background: #4f46e5; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">Refresh Tickets</button>
     </div>
     <div id="ticketHistory"></div>
     <p id="ticketHistoryEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
@@ -911,5 +858,6 @@ function loadTicketHistory() {
 
 // Make loadTicketHistory available globally
 window.loadTicketHistory = loadTicketHistory;
+
 
 

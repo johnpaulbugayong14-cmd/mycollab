@@ -19,19 +19,21 @@ jobs:
       - name: Install dependencies
         run: npm install nodemailer
 
-      - name: Send email notification
+      - name: Send Email via Gmail
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
+          PAYLOAD: ${{ toJson(github.event.client_payload) }}
         run: |
-          node -e "
+          node << 'EOF'
           const nodemailer = require('nodemailer');
           
-          const payload = ${{ toJson(github.event.client_payload) }};
+          const payload = JSON.parse(process.env.PAYLOAD);
           const { email, name, type, title } = payload;
           
           if (!email || !name || !type || !title) {
             console.error('Missing required fields in payload');
+            console.log('Payload received:', JSON.stringify(payload, null, 2));
             process.exit(1);
           }
           
@@ -46,14 +48,15 @@ jobs:
           const mailOptions = {
             from: process.env.GMAIL_USER,
             to: email,
-            subject: \`New \${type} assigned to you\`,
-            text: \`Hello \${name},
-
-You have a new \${type}: \${title}
-
-Please log in to your account to review the details.
-
-— My Collab Automated System Notification`,
+            subject: `New ${type} assigned to you`,
+            text: `Hello ${name},
+          
+          You have a new ${type}: ${title}
+          
+          Please log in to your account to review the details.
+          
+          Best regards,
+          MyTask Professional System`,
           };
           
           transporter.sendMail(mailOptions, (error, info) => {
@@ -63,4 +66,4 @@ Please log in to your account to review the details.
             }
             console.log('Email sent successfully:', info.response);
           });
-          "
+          EOF

@@ -5,16 +5,16 @@
 }
 
 :root {
-  --bg-start: #0b1120;
-  --bg-end: #151a2a;
+  --bg-start: #0f172a;
+  --bg-end: #111827;
   --surface: rgba(15, 23, 42, 0.95);
   --surface-soft: rgba(15, 23, 42, 0.8);
   --border: rgba(148, 163, 184, 0.2);
   --text: #e2e8f0;
   --muted: #94a3b8;
-  --accent: #FFB16E;
-  --accent-dark: #d97706;
-  --accent-soft: rgba(255, 177, 110, 0.18);
+  --accent: #4f46e5;
+  --accent-dark: #3730a3;
+  --accent-soft: rgba(79, 70, 229, 0.16);
 }
 
 body {
@@ -34,7 +34,7 @@ h1, h2, h3 {
 
 h1 {
   font-size: 2.5rem;
-  background: linear-gradient(135deg, var(--accent), #f7c58b);
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -108,7 +108,7 @@ h2 {
   align-items: center;
   justify-content: center;
   border-radius: 0.75rem;
-  background: rgba(255, 177, 110, 0.16);
+  background: rgba(79, 70, 229, 0.14);
   color: var(--accent);
   font-weight: 700;
   font-size: 1rem;
@@ -160,7 +160,7 @@ h2 {
 }
 
 .sidebar-toggle:hover {
-  background: rgba(59, 130, 246, 0.15);
+  background: rgba(79, 70, 229, 0.14);
 }
 
 .app-footer {
@@ -203,7 +203,7 @@ h2 {
 
 
 .sidebar-toggle:hover {
-  background: rgba(59, 130, 246, 0.1);
+  background: rgba(79, 70, 229, 0.12);
 }
 
 .nav-list {
@@ -238,12 +238,12 @@ h2 {
 }
 
 .nav-btn:hover {
-  background: rgba(255, 177, 110, 0.12);
+  background: rgba(79, 70, 229, 0.12);
   color: var(--accent);
 }
 
 .nav-btn.active {
-  background: rgba(255, 177, 110, 0.16);
+  background: rgba(79, 70, 229, 0.16);
   color: var(--accent);
   border-right: 3px solid var(--accent);
 }
@@ -352,7 +352,7 @@ h2 {
 
 .datetime-center {
   font-size: 1rem;
-  color: #3b82f6;
+  color: var(--accent);
   margin-top: 0.5rem;
   padding: 0 1rem;
   max-width: 100%;
@@ -460,7 +460,7 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(255, 177, 110, 0.16);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16);
   background: rgba(15, 23, 42, 0.95);
 }
 
@@ -479,14 +479,14 @@ button {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 18px rgba(255, 177, 110, 0.26);
+  box-shadow: 0 4px 18px rgba(79, 70, 229, 0.24);
   margin-top: 0.5rem;
 }
 
 button:hover {
-  background: linear-gradient(135deg, var(--accent-dark), #b45309);
+  background: linear-gradient(135deg, var(--accent-dark), #312e81);
   transform: translateY(-2px);
-  box-shadow: 0 6px 22px rgba(255, 177, 110, 0.32);
+  box-shadow: 0 6px 22px rgba(79, 70, 229, 0.28);
 }
 
 button:active {
@@ -494,13 +494,13 @@ button:active {
 }
 
 .btn-secondary {
-  background: linear-gradient(135deg, rgba(255, 177, 110, 0.16), var(--accent));
-  box-shadow: 0 4px 15px rgba(255, 177, 110, 0.24);
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.14), var(--accent));
+  box-shadow: 0 4px 15px rgba(79, 70, 229, 0.2);
 }
 
 .btn-secondary:hover {
   background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-  box-shadow: 0 6px 20px rgba(255, 177, 110, 0.3);
+  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.26);
 }
 
 .btn-danger {
@@ -519,7 +519,7 @@ button:active {
 }
 
 .btn-warning:hover {
-  background: linear-gradient(135deg, #d97706, #b45309);
+  background: linear-gradient(135deg, #d97706, #312e81);
   box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
 }
 
@@ -750,7 +750,7 @@ canvas {
 }
 
 .ticket-card {
-  border-left: 4px solid #3b82f6;
+  border-left: 4px solid #4f46e5;
 }
 
 .ticket-card-open {
@@ -835,7 +835,7 @@ canvas {
     top: 0.75rem;
     left: 0.75rem;
     z-index: 2200; /* Above the sidebar (z-index 2100) */
-    background: rgba(59, 130, 246, 0.9);
+    background: rgba(79, 70, 229, 0.9);
     color: white;
     border: none;
     width: 2.5rem;
@@ -888,3 +888,4 @@ canvas {
     text-align: left;
     font-size: 1.5rem;
   }
+

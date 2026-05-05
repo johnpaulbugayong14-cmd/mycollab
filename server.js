@@ -124,7 +124,7 @@ app.post('/api/trigger-email', async (req, res) => {
           'Authorization': `token ${GITHUB_CONFIG.token}`,
           'Accept': 'application/vnd.github.v3+json',
           'Content-Type': 'application/json',
-          'User-Agent': 'MyThesisHub-Email-Backend'
+          'User-Agent': 'My Collab Email Backend'
         },
         body: JSON.stringify({
           event_type: eventType,
@@ -171,7 +171,7 @@ app.post('/api/trigger-email', async (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    service: 'MyThesisHub Email Backend',
+    service: 'My Collab Email Backend',
     timestamp: new Date().toISOString()
   });
 });
@@ -182,7 +182,7 @@ app.get('/api/health', (req, res) => {
  */
 app.get('/', (req, res) => {
   res.json({
-    service: 'MyThesisHub Email Notification Backend',
+    service: 'My Collab Email Notification Backend',
     version: '1.0.0',
     endpoints: {
       health: 'GET /api/health',
@@ -211,6 +211,7 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 MyThesisHub Email Backend running on http://localhost:${PORT}`);
+  console.log(`🚀 My Collab Email Backend running on http://localhost:${PORT}`);
   console.log(`📧 Email endpoint: POST http://localhost:${PORT}/api/trigger-email`);
 });
+

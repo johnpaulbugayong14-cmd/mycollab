@@ -10,7 +10,7 @@
   <meta name="application-name" content="My Collab">
   <meta name="apple-mobile-web-app-title" content="My Collab">
   <link rel="manifest" href="manifest.json?v=5">
-  <meta name="theme-color" content="#3b82f6">
+  <meta name="theme-color" content="#4f46e5">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="style.css?v=1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -231,7 +231,7 @@
           <h2><i class="fas fa-users"></i> Manage Members</h2>
           
           <div style="margin-bottom: 2rem;">
-            <h3 style="color: #0ea5e9; margin-bottom: 1rem;">Create New Member Account</h3>
+            <h3 style="color: #2563eb; margin-bottom: 1rem;">Create New Member Account</h3>
             <form onsubmit="event.preventDefault(); window.createMemberAccount();" style="display: flex; flex-direction: column; gap: 1rem;">
               <div class="form-row">
                 <div class="form-group">
@@ -261,7 +261,7 @@
           </div>
           
           <div>
-            <h3 style="color: #0ea5e9; margin-bottom: 1rem;">Existing Members</h3>
+            <h3 style="color: #2563eb; margin-bottom: 1rem;">Existing Members</h3>
             <div id="membersList">
               <p style="color: #94a3b8; text-align: center;">Loading members...</p>
             </div>
@@ -276,7 +276,7 @@
           
           <!-- Add New Report Form -->
           <div style="margin-bottom: 2rem; padding: 1.5rem; background: #1e293b; border-radius: 0.5rem; border: 1px solid #374151;">
-            <h3 style="color: #0ea5e9; margin-bottom: 1rem;">Add New Report</h3>
+            <h3 style="color: #2563eb; margin-bottom: 1rem;">Add New Report</h3>
             <form onsubmit="event.preventDefault(); window.addProgressReport();" style="display: flex; flex-direction: column; gap: 1rem;">
               <div class="form-row">
                 <div class="form-group">
@@ -310,11 +310,12 @@
           
           <!-- Reports List -->
           <div>
-            <h3 style="color: #0ea5e9; margin-bottom: 1rem;">Reports</h3>
+            <h3 style="color: #2563eb; margin-bottom: 1rem;">Reports</h3>
             <div id="reportsListContainer">
               <p style="color: #94a3b8; text-align: center;">Loading reports...</p>
             </div>
           </div>
+          
         </div>
       </section>
       
@@ -350,7 +351,7 @@
                 <input type="date" id="adminMeetingDate" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc; flex: 1;">
                 <input type="time" id="adminMeetingTime" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc; flex: 1;">
               </div>
-              <button type="submit" style="padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">Schedule Meeting</button>
+              <button type="submit" style="padding: 0.5rem 1rem; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer;">Schedule Meeting</button>
             </form>
           </div>
 
@@ -661,7 +662,7 @@ function renderAdminMeetings(meetings) {
     const isFinished = !isUpcoming && !isOngoing;
 
     const currentStatus = meeting.status || 'Active';
-    let statusColor = '#3b82f6';
+    let statusColor = '#4f46e5';
     let canJoin = false;
 
     if (currentStatus === 'Completed') {
@@ -973,3 +974,4 @@ function showSection(sectionId) {
 
 </body>
 </html>
+

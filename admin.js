@@ -219,7 +219,7 @@ function renderAdminProgressReport(sections) {
   console.log('Rendering', sections.length, 'sections');
   container.innerHTML = sections.map((section, sectionIndex) => `
     <div style="margin-bottom: 1.25rem;">
-      <h3 style="margin: 0 0 0.75rem 0; color: #0ea5e9;">${section.title}</h3>
+      <h3 style="margin: 0 0 0.75rem 0; color: #2563eb;">${section.title}</h3>
       ${Array.isArray(section.items) ? section.items.map((item, itemIndex) => {
         const assignedToValue = Array.isArray(item.assignedTo) ? item.assignedTo : (item.assignedTo ? [item.assignedTo] : []);
         return `
@@ -271,10 +271,10 @@ window.saveProgressReport = async function() {
   try {
     const sections = getProgressFormValues();
     await setDoc(doc(db, progressReportCollection, progressReportDocId), { sections }, { merge: true });
-    alert("Thesis progress saved successfully!");
+    alert("Progress report saved successfully!");
   } catch (error) {
     console.error("Error saving progress report:", error);
-    alert("Failed to save thesis progress. Please try again.");
+    alert("Failed to save progress report. Please try again.");
   }
 };
 
@@ -442,6 +442,7 @@ function initializeMembersSync() {
       loadMembers();
       loadAnnouncementAssignTo();
       loadMembersList();
+      loadProgressReportAssignTo();
     }, (error) => {
       console.warn('Error syncing members from Firestore:', error);
       // Continue with local members if Firestore fails
@@ -476,11 +477,24 @@ function loadAnnouncementAssignTo() {
   });
 }
 
+function loadProgressReportAssignTo() {
+  const select = document.getElementById("reportAssignedTo");
+  if (!select) return;
+
+  select.innerHTML = '<option value="">Select a member</option>';
+  members
+    .filter(m => m.uid !== "everyone")
+    .forEach(m => {
+      select.innerHTML += `<option value="${m.uid}">${m.name}</option>`;
+    });
+}
+
 // Initialize real-time sync
 initializeMembersSync();
 loadMembers();
 loadAnnouncementAssignTo();
 loadMembersList();
+loadProgressReportAssignTo();
 loadProgressReports();
 
   // Initialize notifications
@@ -594,7 +608,7 @@ loadProgressReports();
           <div style="padding: 1rem; background: #0f172a; border-radius: 0.5rem; border: 1px solid #374151;">
             <textarea id="responseInput-${docSnap.id}" rows="3" placeholder="Type your response..." style="width: 100%; padding: 0.75rem; border-radius: 0.375rem; border: 1px solid #4b5563; background: #111827; color: #f3f4f6; margin-bottom: 0.75rem;"></textarea>
             <div style="display: flex; gap: 0.5rem;">
-              <button onclick="window.respondToTicket('${docSnap.id}')" style="background: #3b82f6; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer; flex: 1;">Send Response</button>
+              <button onclick="window.respondToTicket('${docSnap.id}')" style="background: #4f46e5; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer; flex: 1;">Send Response</button>
               ${statusButtons}
               <button onclick="window.deleteTicket('${docSnap.id}')" class="btn-danger" style="padding: 0.75rem 1rem;">Delete Ticket</button>
             </div>
@@ -649,6 +663,11 @@ function loadProgressReport() {
   console.log('=== LOAD PROGRESS REPORT CALLED ===');
   const container = document.getElementById("progressReportPanel");
   console.log('Progress report container element:', container);
+
+  if (!container) {
+    console.log('No progress report panel found, skipping loadProgressReport');
+    return;
+  }
 
   const progressRef = doc(db, progressReportCollection, progressReportDocId);
   console.log('Progress report reference:', progressRef);
@@ -1469,7 +1488,7 @@ onSnapshot(collection(db, "announcements"), (snap) => {
           ${commentHtml}
           <div style="margin-top: 1rem;">
             <textarea id="adminCommentInput-${docSnap.id}" rows="3" placeholder="Add a comment as Admin..." style="width: 100%; padding: 0.75rem; border-radius: 0.375rem; border: 1px solid #4b5563; background: #0f172a; color: #f3f4f6; margin-bottom: 0.75rem;"></textarea>
-            <button onclick="addAnnouncementComment('${docSnap.id}')" style="background: #3b82f6; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer;">Post Comment as Admin</button>
+            <button onclick="addAnnouncementComment('${docSnap.id}')" style="background: #4f46e5; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer;">Post Comment as Admin</button>
           </div>
         </div>
         <button onclick="deleteAnnouncement('${docSnap.id}')" class="btn-danger" style="margin-top: 0.75rem;">🗑️ Delete Announcement</button>
@@ -1690,69 +1709,90 @@ window.createMemberAccount = async function() {
   }
   
   try {
-    // Create user in Firebase Authentication
-    console.log('Creating user in Firebase Authentication...');
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    console.log('User created successfully:', user.uid);
+    console.log('Creating member account for:', email);
     
-    // Store member in Firestore
-    await addDoc(collection(db, "members"), {
-      uid: email,
-      email: email,
-      name: name,
-      gmail: gmail,
-      role: "member",
-      createdAt: new Date(),
-      createdBy: adminEmail
-    });
+    // Import credential management functions from auth.js
+    const { addPreRegisteredCredential } = await import('./auth.js');
     
-    // Store email mapping for notifications
-    await setDoc(doc(db, "emailMappings", email), {
-      loginEmail: email,
-      notificationEmail: gmail,
-      memberName: name,
-      createdAt: new Date(),
-      createdBy: adminEmail
-    });
+    // Add to pre-registered credentials (in memory)
+    const credentialAdded = addPreRegisteredCredential(email, password, "member");
+    if (!credentialAdded) {
+      alert("This email is already registered. Please use a different email.");
+      return;
+    }
     
-    // Store user info
-    await setDoc(doc(db, "userInfo", email), {
-      name: name,
-      role: "member",
-      email: email,
-      createdAt: new Date()
-    });
+    let firestoreSuccess = true;
+    // Try to store in Firestore, but don't fail if permissions denied
+    try {
+      // Store member in Firestore members collection using email as document ID
+      await setDoc(doc(db, "members", email), {
+        uid: email,
+        email: email,
+        name: name,
+        gmail: gmail,
+        role: "member",
+        password: password,
+        createdAt: new Date(),
+        createdBy: adminEmail
+      });
+      console.log('Member document created in Firestore at members/' + email);
+      
+      // Store email mapping for notifications
+      await setDoc(doc(db, "emailMappings", email), {
+        loginEmail: email,
+        notificationEmail: gmail,
+        memberName: name,
+        createdAt: new Date(),
+        createdBy: adminEmail
+      });
+      console.log('Email mapping created');
+      
+      // Store user info
+      await setDoc(doc(db, "userInfo", email), {
+        name: name,
+        role: "member",
+        email: email,
+        createdAt: new Date()
+      });
+      console.log('User info created');
+      
+      // Initialize FCM token document (will be populated when user logs in)
+      await setDoc(doc(db, "fcmTokens", email), {
+        email: email,
+        token: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: false
+      });
+      console.log('FCM token document initialized');
+    } catch (firestoreError) {
+      firestoreSuccess = false;
+      console.warn('Could not write to Firestore (permission denied):', firestoreError);
+      console.log('Account created in memory - Firestore sync skipped');
+    }
     
-    // Add to members array for UI updates
+    // Ensure the local member list includes the new member immediately
+    members = members.filter(m => m.uid !== email);
     members.push({ uid: email, name: name });
-    
-    // Reload member lists
     loadMembers();
     loadAnnouncementAssignTo();
     loadMembersList();
-    loadProgressReports();
+    loadProgressReportAssignTo();
     
     // Clear form
     document.getElementById("memberEmail").value = "";
     document.getElementById("memberName").value = "";
     document.getElementById("memberGmail").value = "";
     document.getElementById("memberPassword").value = "";
-    
-    alert(`Member account created successfully!\n\nLogin Email: ${email}\nGmail for Notifications: ${gmail}\nTemporary Password: ${password}\n\nThe member should change their password on first login.`);
+
+    if (firestoreSuccess) {
+      alert(`Member account created successfully!\n\nLogin Email: ${email}\nGmail for Notifications: ${gmail}\nTemporary Password: ${password}\n\nThe member should change their password on first login.`);
+    } else {
+      alert(`Member account created locally, but Firestore syncing failed. The account may not be available in other browsers until Firestore permissions are corrected.`);
+    }
   } catch (error) {
     console.error("Error creating member account:", error);
-    
-    // Provide specific error messages
-    if (error.code === "auth/email-already-in-use") {
-      alert("This email is already registered. Please use a different email.");
-    } else if (error.code === "auth/weak-password") {
-      alert("Password is too weak. Please use a stronger password (at least 6 characters).");
-    } else if (error.code === "auth/invalid-email") {
-      alert("Invalid email address.");
-    } else {
-      alert(`Failed to create member account: ${error.message}`);
-    }
+    alert(`Failed to create member account: ${error.message}`);
   }
 };
 
@@ -1760,14 +1800,18 @@ window.createMemberAccount = async function() {
 window.deleteMember = async function(memberEmail) {
   if (confirm(`Are you sure you want to delete the member account for ${memberEmail}? This action cannot be undone.`)) {
     try {
-      // Remove from members array
-      const index = members.findIndex(m => m.uid === memberEmail);
-      if (index > -1) {
-        members.splice(index, 1);
-      }
+      console.log('Deleting member account:', memberEmail);
       
-      // Try to delete from Firestore members collection
+      // Import credential management functions from auth.js
+      const { removePreRegisteredCredential } = await import('./auth.js');
+      
+      // Remove from pre-registered credentials (in memory)
+      removePreRegisteredCredential(memberEmail);
+      console.log('Removed from pre-registered credentials');
+      
+      // Try to delete from Firestore, but don't fail if permissions denied
       try {
+        // Delete from Firestore members collection
         const memberSnapshot = await new Promise((resolve) => {
           const unsubscribe = onSnapshot(
             collection(db, "members"),
@@ -1791,33 +1835,58 @@ window.deleteMember = async function(memberEmail) {
             }
           });
         }
-      } catch (err) {
-        console.warn('Error querying members collection:', err);
-      }
-      
-      // Delete email mapping
-      try {
+        
+        // Delete email mapping
         await deleteDoc(doc(db, "emailMappings", memberEmail));
         console.log('Email mapping deleted');
-      } catch (err) {
-        console.warn('Could not delete email mapping:', err);
-      }
-      
-      // Delete user info
-      try {
+        
+        // Delete user info
         await deleteDoc(doc(db, "userInfo", memberEmail));
         console.log('User info deleted');
-      } catch (err) {
-        console.warn('Could not delete user info:', err);
+        
+        // Delete FCM token
+        await deleteDoc(doc(db, "fcmTokens", memberEmail));
+        console.log('FCM token deleted');
+        
+        // Delete any tasks assigned to this member
+        const tasksSnapshot = await new Promise((resolve) => {
+          const unsubscribe = onSnapshot(
+            collection(db, "tasks"),
+            (snapshot) => {
+              resolve(snapshot);
+              unsubscribe();
+            },
+            (error) => {
+              console.warn('Could not query tasks collection:', error);
+              resolve(null);
+            }
+          );
+        });
+        
+        if (tasksSnapshot) {
+          tasksSnapshot.forEach(docSnap => {
+            const task = docSnap.data();
+            if (task.assignedTo === memberEmail) {
+              deleteDoc(doc(db, "tasks", docSnap.id)).catch(err => 
+                console.warn('Could not delete task:', err)
+              );
+            }
+          });
+        }
+      } catch (firestoreError) {
+        console.warn('Could not delete from Firestore (permission denied):', firestoreError);
+        console.log('Account removed from memory - Firestore cleanup skipped');
       }
       
-      // Reload lists
+      // Remove member from local memory and refresh UI immediately
+      members = members.filter(m => m.uid !== memberEmail);
       loadMembers();
       loadAnnouncementAssignTo();
       loadMembersList();
+      loadProgressReportAssignTo();
       loadProgressReports();
       
-      alert("Member account and all associated data deleted successfully!");
+      alert("Member account deleted successfully!");
     } catch (error) {
       console.error("Error deleting member:", error);
       alert(`Failed to delete member account: ${error.message}`);
@@ -1830,3 +1899,4 @@ console.log('window.createMemberAccount:', typeof window.createMemberAccount);
 console.log('window.deleteMember:', typeof window.deleteMember);
 
 })();
+
