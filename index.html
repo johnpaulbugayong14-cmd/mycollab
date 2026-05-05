@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Login - Task Management System</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#3b82f6">
+  <link rel="stylesheet" href="style.css?v=1">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✓</text></svg>">
+</head>
+<body>
+
+<div class="container">
+  <div class="card" style="max-width: 460px; margin: 0 auto;">
+    <h1>Sign In</h1>
+    <p style="text-align:center; color:#94a3b8; margin-bottom:1.5rem;">Enter your registered email and password to continue.</p>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="you@example.com" required>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="Password" required>
+      </div>
+
+      <div id="loginMessage" class="alert" style="display:none;"></div>
+      <button type="submit">Continue</button>
+    </form>
+  </div>
+</div>
+
+<footer style="text-align: center; padding: 1rem; color: #94a3b8; font-size: 0.8rem; margin-top: 2rem;">
+  My Collab
+  <br>
+  Created by: John Paul Bugayong
+</footer>
+
+<script type="module" src="auth.js?v=3"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+
+// Wait for the auth module to load, then attach form handler
+function attachLoginHandler() {
+  const loginForm = document.getElementById('loginForm');
+  if (loginForm && window.login) {
+    loginForm.addEventListener('submit', function(event) {
+      event.preventDefault();
+      window.login();
+    });
+  } else {
+    setTimeout(attachLoginHandler, 100);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', attachLoginHandler);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Login - My Collab</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#3b82f6">
+  <link rel="stylesheet" href="style.css?v=1">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    
+    .login-container {
+      width: 100%;
+      max-width: 420px;
+      padding: 1rem;
+    }
+    
+    .login-card {
+      background: rgba(30, 41, 59, 0.9);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      padding: 2.5rem 2rem;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+    
+    .login-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    
+    .login-header h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .login-header p {
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+    
+    .forgot-password {
+      text-align: right;
+      margin-top: 0.75rem;
+    }
+    
+    .forgot-password a {
+      color: #3b82f6;
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.3s ease;
+    }
+    
+    .forgot-password a:hover {
+      color: #60a5fa;
+    }
+  </style>
+</head>
+<body>
+
+<div class="login-container">
+  <div class="login-card">
+    <div class="login-header">
+      <h1>Welcome Back</h1>
+      <p>Sign in to your task management account</p>
+    </div>
+    
+    <form onsubmit="event.preventDefault(); login();">
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input id="email" type="email" placeholder="your@email.com" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="Enter your password" required>
+      </div>
+      
+      <div id="loginMessage" class="alert" style="display:none; margin-bottom: 1rem;"></div>
+      
+      <button type="submit">Sign In</button>
+    </form>
+  </div>
+</div>
+
+<footer style="text-align: center; padding: 1rem; color: #94a3b8; font-size: 0.8rem; margin-top: 2rem;">
+  My Collab
+  <br>
+  Created by: John Paul Bugayong
+</footer>
+
+<script type="module" src="auth.js?v=3"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+
+</body>
+</html>

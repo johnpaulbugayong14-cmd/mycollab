@@ -1,0 +1,26 @@
+{
+  "name": "mytaskForThesisHub",
+  "short_name": "MyTask",
+  "description": "Task management system for thesis",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "scope": "./",
+  "permissions": ["notifications", "background-sync"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%233b82f6'/><text x='256' y='280' font-family='Arial, sans-serif' font-size='200' font-weight='bold' text-anchor='middle' fill='white'>✓</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%233b82f6'/><text x='256' y='280' font-family='Arial, sans-serif' font-size='200' font-weight='bold' text-anchor='middle' fill='white'>✓</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

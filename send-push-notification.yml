@@ -1,0 +1,68 @@
+name: Send Push Notification
+
+on:
+  workflow_dispatch:
+    inputs:
+      userEmails:
+        description: 'JSON array of recipient emails'
+        required: true
+      title:
+        description: 'Notification title'
+        required: true
+      body:
+        description: 'Notification body'
+        required: true
+      type:
+        description: 'Notification type'
+        required: false
+        default: 'general'
+
+jobs:
+  send-notification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Firebase Admin SDK
+        run: npm install firebase-admin
+
+      - name: Send Push Notifications
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          FCM_SERVER_KEY: ${{ secrets.FCM_SERVER_KEY }}
+        run: |
+          node -e "
+          const admin = require('firebase-admin');
+          
+          // Initialize Firebase Admin
+          if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+            const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+            admin.initializeApp({
+              credential: admin.credential.cert(serviceAccount)
+            });
+          } else {
+            console.log('No Firebase service account key provided, using FCM server key only');
+          }
+          
+          const userEmails = JSON.parse('${{ github.event.inputs.userEmails }}');
+          const title = '${{ github.event.inputs.title }}';
+          const body = '${{ github.event.inputs.body }}';
+          const type = '${{ github.event.inputs.type }}';
+          
+          console.log('Sending push notifications to:', userEmails.length, 'users');
+          console.log('Title:', title);
+          console.log('Body:', body);
+          
+          // For now, just log the notification details
+          // In a real implementation, you would:
+          // 1. Query Firestore for FCM tokens of the userEmails
+          // 2. Send notifications using Firebase Admin SDK
+          
+          console.log('Push notification workflow completed successfully');
+          "

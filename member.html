@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>My Collab</title>
+  <meta name="application-name" content="My Collab">
+  <meta name="apple-mobile-web-app-title" content="My Collab">
+  <link rel="manifest" href="manifest.json?v=6">
+  <meta name="theme-color" content="#3b82f6">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css?v=1">
+  <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
+</head>
+<body>
+<script>
+const savedMemberSection = localStorage.getItem('memberSelectedSection');
+if (savedMemberSection) {
+  setTimeout(() => showSection(savedMemberSection), 100);
+}
+</script>
+
+<!-- Mobile Navigation Toggle -->
+<button class="mobile-nav-toggle" onclick="toggleMobileSidebar()"><i class="fas fa-bars"></i></button>
+
+<!-- Mobile Overlay -->
+<div class="sidebar-overlay" onclick="closeMobileSidebar()"></div>
+
+<div class="app-container">
+  <!-- Sidebar Navigation -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+    </div>
+    <ul class="nav-list">
+      <li><button class="nav-btn" onclick="showSection('my-tasks')"><i class="fas fa-clipboard-list"></i> My Tasks</button></li>
+      <li><button class="nav-btn" onclick="showSection('ticket-history')"><i class="fas fa-ticket-alt"></i> Ticket History</button></li>
+      <li><button class="nav-btn" onclick="showSection('active-polls')"><i class="fas fa-chart-bar"></i> Active Polls</button></li>
+      <li><button class="nav-btn" onclick="showSection('announcements')"><i class="fas fa-bullhorn"></i> Announcements</button></li>
+      <li><button class="nav-btn" onclick="showSection('submit-ticket')"><i class="fas fa-headset"></i> Submit Ticket</button></li>
+      <li><button class="nav-btn active" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
+      <li><button class="nav-btn" onclick="showSection('resources')"><i class="fas fa-book"></i> Resources</button></li>
+      <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-file-alt"></i> Progress Report</button></li>
+    </ul>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="content-header">
+      <h1 id="page-title"><i class="fas fa-video"></i> Video Conference</h1>
+      <div id="datetime" class="datetime-center">Loading date...</div>
+      <div class="header-actions">
+        <div id="welcome" class="welcome-header">Welcome, User</div>
+        <button onclick="signOutUser()" class="logout-btn header-logout">Logout</button>
+      </div>
+    </div>
+    
+    <div class="content-sections">
+      <!-- My Tasks Section -->
+      <section id="my-tasks" class="content-section">
+        <div class="card">
+          <div id="tasks"></div>
+          <p id="emptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
+            No tasks assigned yet. Check back soon!
+          </p>
+        </div>
+      </section>
+
+      <!-- Ticket History Section -->
+      <section id="ticket-history" class="content-section">
+        <div class="card">
+          <h2 style="margin-bottom: 1rem;"><i class="fas fa-ticket-alt"></i> Ticket History</h2>
+          <div style="margin-bottom: 1rem;">
+            <button onclick="loadTicketHistory()" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;"><i class="fas fa-sync-alt"></i> Refresh Tickets</button>
+          </div>
+          <div id="ticketHistory"></div>
+          <p id="ticketHistoryEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
+            No ticket history yet. Submit a ticket above and check back for updates.
+          </p>
+        </div>
+      </section>
+
+      <!-- Active Polls Section -->
+      <section id="active-polls" class="content-section">
+        <div class="card">
+          <h2 style="margin-bottom: 1rem;"><i class="fas fa-chart-bar"></i> Active Polls</h2>
+          <div id="polls"></div>
+          <p id="pollsEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
+            No active polls at the moment.
+          </p>
+        </div>
+      </section>
+
+      <!-- Announcements Section -->
+      <section id="announcements" class="content-section">
+        <div class="card">
+          <h2 style="margin-bottom: 1rem;"><i class="fas fa-bullhorn"></i> Announcements</h2>
+          <div id="announcements"></div>
+          <p id="announcementsEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
+            No announcements at the moment.
+          </p>
+        </div>
+      </section>
+
+      <!-- Submit Support Ticket Section -->
+      <section id="submit-ticket" class="content-section">
+        <div class="card">
+          <h2 style="margin-bottom: 1rem;"><i class="fas fa-headset"></i> Submit Support Ticket</h2>
+          <form onsubmit="event.preventDefault(); submitTicket();">
+            <div class="form-group">
+              <label for="ticketTitle">Ticket Title</label>
+              <input id="ticketTitle" type="text" placeholder="Brief description of your issue" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="ticketDescription">Description</label>
+              <textarea id="ticketDescription" placeholder="Provide detailed information about your issue or request" rows="5" required></textarea>
+            </div>
+            
+            <button type="submit" class="btn-submit"><i class="fas fa-paper-plane"></i> Submit Ticket</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Video Conference Section -->
+      <section id="video-conference" class="content-section active">
+        <div class="card">
+          <h2 style="margin-bottom: 1rem;"><i class="fas fa-video"></i> Video Conference</h2>
+
+          <!-- Scheduled Meetings List -->
+          <div id="meetings-list" style="margin-bottom: 2rem;">
+            <h3 style="margin-bottom: 0.5rem; color: #f8fafc;">Scheduled Meetings</h3>
+            <p style="margin: 0 0 1rem 0; color: #94a3b8; font-size: 0.9rem;">Showing active scheduled meetings only; completed/ended meetings are hidden.</p>
+            <div id="meetingsContainer"></div>
+          </div>
+
+          <div id="jaas-container" style="height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151; display: none;"></div>
+        </div>
+      </section>
+
+      <!-- Resources Section -->
+      <section id="resources" class="content-section">
+        <div class="card">
+          <h2 style="margin-bottom: 1rem;"><i class="fas fa-book"></i> Resources</h2>
+          <div id="resources"></div>
+          <p id="resourcesEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
+            No resources available yet.
+          </p>
+        </div>
+      </section>
+
+      <!-- Thesis Progress Report Section -->
+      <section id="progress-report" class="content-section">
+        <div class="card">
+          <h2 style="margin-bottom: 1rem;"><i class="fas fa-file-alt"></i> Thesis Progress Report</h2>
+          <div id="progressReport"></div>
+          <p id="progressEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem; display: none;">
+            Thesis progress report is not available yet.
+          </p>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<footer class="app-footer">
+  <div class="footer-right">
+    <div class="footer-appname">My Collab</div>
+    <div class="footer-credit">Created by John Paul Bugayong</div>
+  </div>
+</footer>
+
+<script>
+// Navigation functions
+function showSection(sectionId) {
+  // Hide all sections
+  const sections = document.querySelectorAll('.content-section');
+  sections.forEach(section => section.classList.remove('active'));
+  
+  // Show selected section
+  const targetSection = document.getElementById(sectionId);
+  if (targetSection) {
+    targetSection.classList.add('active');
+    
+    // Handle video conference section
+    if (sectionId === 'video-conference') {
+      loadMeetings();
+    }
+  }
+  
+  // Update active nav button
+  const navButtons = document.querySelectorAll('.nav-btn');
+  navButtons.forEach(btn => btn.classList.remove('active'));
+  
+  // Find and activate the corresponding nav button
+  const activeBtn = document.querySelector(`[onclick="showSection('${sectionId}')"]`);
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+  }
+  
+  // Update page title
+  const titles = {
+    'my-tasks': '<i class="fas fa-clipboard-list"></i> My Tasks',
+    'ticket-history': '<i class="fas fa-ticket-alt"></i> Ticket History',
+    'active-polls': '<i class="fas fa-chart-bar"></i> Active Polls',
+    'announcements': '<i class="fas fa-bullhorn"></i> Announcements',
+    'submit-ticket': '<i class="fas fa-paper-plane"></i> Submit Ticket',
+    'video-conference': '<i class="fas fa-video"></i> Video Conference',
+    'resources': '<i class="fas fa-book"></i> Resources',
+    'progress-report': '<i class="fas fa-file-alt"></i> Progress Report'
+  };
+  
+  const pageTitle = document.getElementById('page-title');
+  if (pageTitle && titles[sectionId]) {
+    pageTitle.innerHTML = titles[sectionId];
+  }
+  
+  // Close mobile sidebar after selection
+  closeMobileSidebar();
+}
+
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  sidebar.classList.toggle('collapsed');
+  
+  const appContainer = document.querySelector('.app-container');
+  appContainer.classList.toggle('has-collapsed-sidebar');
+}
+
+function toggleMobileSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.querySelector('.sidebar-overlay');
+  
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('show');
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.querySelector('.sidebar-overlay');
+  
+  sidebar.classList.remove('open');
+  overlay.classList.remove('show');
+}
+</script>
+<script type="module">
+  import { requireAuth } from "./auth.js?v=5";
+  import { initializeNotifications } from "./notifications.js?v=5";
+  await requireAuth(['member', 'admin']);
+</script>
+<script type="module" src="member.js?v=6"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+
+<script>
+const JAASTOKEN_ROOM_PREFIX = 'vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/';
+const PROJECT_DISCUSSION_ROOM = 'ProjectDiscussion';
+let jaasApi = null;
+let currentMeetingRoom = buildJaasRoomName(PROJECT_DISCUSSION_ROOM);
+
+function buildJaasRoomName(roomName) {
+  if (!roomName) return roomName;
+  return roomName.startsWith(JAASTOKEN_ROOM_PREFIX) ? roomName : `${JAASTOKEN_ROOM_PREFIX}${roomName}`;
+}
+
+function initializeJitsiConference(roomName = null) {
+  if (jaasApi) {
+    jaasApi.dispose();
+  }
+
+  const container = document.querySelector('#jaas-container');
+  if (!container) return;
+
+  const room = buildJaasRoomName(roomName || currentMeetingRoom);
+
+  const apiOptions = {
+    roomName: room,
+    parentNode: container,
+    width: '100%',
+    height: '100%',
+    configOverwrite: {
+      prejoinPageEnabled: false,
+      disableDeepLinking: true,
+      startWithAudioMuted: true,
+      startWithVideoMuted: true,
+      disableInitialGUM: true, // Prevent automatic media access to avoid autoplay errors
+      enableClosePage: false,
+      disableThirdPartyRequests: false,
+      analytics: {
+        disabled: true
+      }
+    },
+    interfaceConfigOverwrite: {
+      TOOLBAR_BUTTONS: [
+        'microphone', 'camera', 'desktop', 'fullscreen',
+        'hangup', 'profile', 'chat', 'settings',
+        'raisehand', 'videoquality', 'filmstrip',
+        'tileview', 'help'
+      ],
+      DISABLE_VIDEO_BACKGROUND: true,
+      HIDE_INVITE_MORE_HEADER: true
+    }
+  };
+
+  jaasApi = new JitsiMeetExternalAPI("8x8.vc", apiOptions);
+
+  // Add error handling for Jitsi
+  jaasApi.addEventListener('errorOccurred', (error) => {
+    console.error('Jitsi conference error:', error);
+  });
+
+  jaasApi.addEventListener('readyToClose', () => {
+    if (jaasApi) {
+      jaasApi.dispose();
+      jaasApi = null;
+    }
+    // Hide conference container and show scheduling interface
+    const container = document.getElementById('jaas-container');
+    const scheduleForm = document.getElementById('schedule-form');
+    const meetingsList = document.getElementById('meetings-list');
+
+    if (container) container.style.display = 'none';
+    if (scheduleForm) scheduleForm.style.display = 'block';
+    if (meetingsList) meetingsList.style.display = 'block';
+
+    // Reload meetings to update status
+    loadMeetings();
+  });
+}
+
+// Initialize Jitsi when video conference section becomes active
+function showSection(sectionId) {
+  // Hide all sections
+  const sections = document.querySelectorAll('.content-section');
+  sections.forEach(section => section.classList.remove('active'));
+  
+  // Show selected section
+  const targetSection = document.getElementById(sectionId);
+  if (targetSection) {
+    targetSection.classList.add('active');
+    
+    // Initialize Jitsi conference when video conference section is shown
+    if (sectionId === 'video-conference') {
+      loadMeetings();
+      setTimeout(initializeJitsiConference, 100);
+    }
+  }
+  
+  // Update active nav button
+  const navButtons = document.querySelectorAll('.nav-btn');
+  navButtons.forEach(btn => btn.classList.remove('active'));
+  
+  // Find and activate the corresponding nav button
+  const activeBtn = document.querySelector(`[onclick="showSection('${sectionId}')"]`);
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+  }
+
+  localStorage.setItem('memberSelectedSection', sectionId);
+  
+  // Update page title
+  const titles = {
+    'my-tasks': '<i class="fas fa-check-circle"></i> My Tasks',
+    'ticket-history': '<i class="fas fa-ticket-alt"></i> Ticket History',
+    'active-polls': '<i class="fas fa-chart-bar"></i> Active Polls',
+    'announcements': '<i class="fas fa-bullhorn"></i> Announcements',
+    'submit-ticket': '<i class="fas fa-headset"></i> Submit Ticket',
+    'video-conference': '<i class="fas fa-video"></i> Video Conference',
+    'resources': '<i class="fas fa-book"></i> Resources',
+    'progress-report': '<i class="fas fa-file-alt"></i> Progress Report'
+  };
+  
+  const pageTitle = document.getElementById('page-title');
+  if (pageTitle && titles[sectionId]) {
+    pageTitle.innerHTML = titles[sectionId];
+  }
+  
+  // Close mobile sidebar after selection
+  closeMobileSidebar();
+}
+</script>
+
+</body>
+</html>
