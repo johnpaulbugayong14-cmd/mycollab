@@ -14,6 +14,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="style.css?v=1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <script src="https://www.youtube.com/iframe_api"></script>
   <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
 </head>
 <body>
@@ -44,6 +45,7 @@
       <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-chart-line"></i> Progress Report</button></li>
       <li><button class="nav-btn" onclick="showSection('task-analytics')"><i class="fas fa-chart-bar"></i> Analytics</button></li>
       <li><button class="nav-btn" onclick="showSection('all-tasks')"><i class="fas fa-clipboard-list"></i> All Tasks</button></li>
+      <li><button class="nav-btn" onclick="showSection('watch-together')"><i class="fas fa-tv"></i> Watch Together</button></li>
       <li><button class="nav-btn" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
     </ul>
   </nav>
@@ -371,6 +373,58 @@
         </div>
       </section>
 
+      <!-- Watch Together Section -->
+      <section id="watch-together" class="content-section">
+        <div class="card watch-together-card">
+          <div class="watch-together-header">
+            <div>
+              <h2><i class="fas fa-tv"></i> Watch Together</h2>
+              <p id="watchTogetherControlNote" class="watch-together-note">Join the lobby to watch synced video with the host and use open mic audio chat.</p>
+            </div>
+            <div class="watch-together-meta">
+              <div>
+                <span>Status</span>
+                <strong id="watchTogetherStatus">...</strong>
+              </div>
+              <div>
+                <span>Host</span>
+                <strong id="watchTogetherHost">...</strong>
+              </div>
+              <div>
+                <span>Time</span>
+                <strong id="watchTogetherCurrentTime">0:00</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="watch-together-player-wrapper">
+            <div id="youtube-player" class="watch-video-frame"></div>
+          </div>
+
+          <div class="watch-together-actions">
+            <div class="watch-together-input">
+              <input id="youtubeUrlInput" type="text" placeholder="YouTube URL or Video ID">
+              <button id="loadYoutubeButton" class="btn-success">Load</button>
+            </div>
+            <div class="watch-together-action-buttons">
+              <button id="youtubePlayButton" class="btn-success">Play</button>
+              <button id="youtubePauseButton" class="btn-warning">Pause</button>
+              <div class="watch-seek-group">
+                <input id="youtubeSeekTime" type="number" min="0" placeholder="Seek sec">
+                <button id="seekButton" class="btn-secondary">Seek</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="watch-participants-grid">
+            <div class="watch-participant watch-participant-host">
+              <div class="watch-participant-avatar">HP</div>
+              <span>Host</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
     </div>
   </main>
 </div>
@@ -419,6 +473,7 @@ function showSection(sectionId) {
     'progress-report': '<i class="fas fa-chart-line"></i> Progress Report',
     'task-analytics': '<i class="fas fa-chart-bar"></i> Task Analytics',
     'all-tasks': '<i class="fas fa-clipboard-list"></i> All Tasks',
+    'watch-together': '<i class="fas fa-tv"></i> Watch Together',
     'video-conference': '<i class="fas fa-video"></i> Video Conference'
   };
   
@@ -494,6 +549,7 @@ function closeMobileSidebar() {
   await requireAuth(['admin']);
 </script>
 <script type="module" src="admin.js?v=3"></script>
+<script type="module" src="watchtogether.js"></script>
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js");
