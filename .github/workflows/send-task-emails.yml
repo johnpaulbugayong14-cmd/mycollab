@@ -42,14 +42,19 @@ jobs:
               databaseURL: "https://task-edd4d.firebaseio.com"
             });
             const db = admin.firestore();
-            const emailMapping = {
-              'johnpaulbugayong@gmail.com': 'johnpaulbugayong14@gmail.com',
-              'kingfordnabor@gmail.com': 'kingfordnabor20@gmail.com',
-              'allancorral@gmail.com': 'allancorral084@gmail.com',
-              'phricksborebor@gmail.com': 'boreborpj16@gmail.com',
-              'moezarperez@gmail.com': 'moezarg19@gmail.com',
-              'rogelioledda@gmail.com': 'rogelioledda051506@gmail.com'
-            };
+            let emailMapping = {};
+            try {
+              const emailDocs = await db.collection('emailMappings').get();
+              emailDocs.forEach(doc => {
+                const data = doc.data();
+                if (data && data.loginEmail) {
+                  emailMapping[data.loginEmail] = data.notificationEmail || data.loginEmail;
+                }
+              });
+              console.log('Loaded email mappings from Firestore:', emailMapping);
+            } catch (error) {
+              console.warn('Could not load email mappings from Firestore:', error);
+            }
             const transporter = nodemailer.createTransport({
               service: 'gmail',
               auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASSWORD }
