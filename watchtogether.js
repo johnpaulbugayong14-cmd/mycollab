@@ -16,12 +16,13 @@ let hostSyncInterval = null;
 let lastHostSyncTime = 0;
 
 async function loadYouTubeSDK() {
-  if (window.YT && window.YT.Player) {
-    return;
-  }
+  if (window.YT && window.YT.Player) return;
 
   return new Promise((resolve, reject) => {
-    const existingScript = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+    const existingScript = document.querySelector(
+      'script[src="https://www.youtube.com/iframe_api"]'
+    );
+
     if (existingScript) {
       const waitForApi = () => {
         if (window.YT && window.YT.Player) {
@@ -30,13 +31,15 @@ async function loadYouTubeSDK() {
           setTimeout(waitForApi, 100);
         }
       };
+
       waitForApi();
       return;
     }
 
-    const script = document.createElement('script');
-    script.src = 'https://www.youtube.com/iframe_api';
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
     script.async = true;
+
     script.onload = () => {
       const waitForApi = () => {
         if (window.YT && window.YT.Player) {
@@ -45,9 +48,13 @@ async function loadYouTubeSDK() {
           setTimeout(waitForApi, 100);
         }
       };
+
       waitForApi();
     };
-    script.onerror = () => reject(new Error('Failed to load YouTube IFrame API'));
+
+    script.onerror = () =>
+      reject(new Error("Failed to load YouTube API"));
+
     document.head.appendChild(script);
   });
 }
@@ -59,22 +66,37 @@ function getEl(id) {
 function formatTime(seconds) {
   const minutes = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
-  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+
+  return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }
 
 function extractYouTubeId(urlOrId) {
   if (!urlOrId) return null;
+
   const trimmed = urlOrId.trim();
-  const idMatch = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([\w-]{11})/);
+
+  const idMatch = trimmed.match(
+    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([\w-]{11})/
+  );
+
   if (idMatch && idMatch[1]) return idMatch[1];
+
   if (/^[\w-]{11}$/.test(trimmed)) return trimmed;
+
   return null;
 }
 
 function userHasControl(hostEmail) {
   if (!currentUserEmail) return false;
-  if (!hostEmail) return currentUserRole === 'admin';
-  return hostEmail === currentUserEmail || currentUserRole === 'admin';
+
+  if (!hostEmail) {
+    return currentUserRole === "admin";
+  }
+
+  return (
+    hostEmail === currentUserEmail ||
+    currentUserRole === "admin"
+  );
 }
 
 async function updateWatchState(changes) {
@@ -84,7 +106,7 @@ async function updateWatchState(changes) {
       updatedAt: serverTimestamp()
     });
   } catch (error) {
-    console.warn('watchtogether: failed to update state', error);
+    console.warn("watchtogether update failed", error);
   }
 }
 
@@ -93,100 +115,166 @@ function stopHostSyncTimer() {
     clearInterval(hostSyncInterval);
     hostSyncInterval = null;
   }
+
   lastHostSyncTime = 0;
 }
 
 function startHostSyncTimer() {
   stopHostSyncTimer();
+
   hostSyncInterval = setInterval(async () => {
     if (!player || !playerReady || !currentUserEmail) return;
-    const hostEmail = getEl('watchTogetherHost')?.textContent || '';
+
+    const hostEmail =
+      getEl("watchTogetherHost")?.textContent || "";
+
     if (!userHasControl(hostEmail)) return;
 
     const currentTime = player.getCurrentTime();
-    if (Math.abs(currentTime - lastHostSyncTime) < 1.0) return;
+
+    if (
+      Math.abs(currentTime - lastHostSyncTime) < 1
+    ) {
+      return;
+    }
 
     lastHostSyncTime = currentTime;
+
     await updateWatchState({
-      status: 'playing',
+      status: "playing",
       currentTime
     });
+
   }, 1200);
 }
 
 async function ensureWatchDocExists() {
   const snapshot = await getDoc(watchDocRef);
+
   if (!snapshot.exists()) {
     await setDoc(watchDocRef, {
-      videoId: 'dQw4w9WgXcQ',
-      status: 'paused',
+      videoId: "",
+      status: "paused",
       currentTime: 0,
-      hostEmail: '',
+      hostEmail: "",
       updatedAt: serverTimestamp()
     });
   }
 }
 
 function updateUI(state) {
-  const statusText = getEl('watchTogetherStatus');
-  const hostText = getEl('watchTogetherHost');
-  const controlNote = getEl('watchTogetherControlNote');
-  const loadButton = getEl('loadYoutubeButton');
-  const pauseButton = getEl('youtubePauseButton');
-  const seekInput = getEl('youtubeSeekTime');
-  const seekButton = getEl('seekButton');
-  const currentTimeText = getEl('watchTogetherCurrentTime');
+  const statusText = getEl("watchTogetherStatus");
+  const hostText = getEl("watchTogetherHost");
+  const controlNote = getEl("watchTogetherControlNote");
+  const currentTimeText = getEl("watchTogetherCurrentTime");
 
   if (statusText) {
-    statusText.textContent = state.status === 'playing' ? 'Playing' : 'Paused';
-  }
-  if (hostText) {
-    hostText.textContent = state.hostEmail ? state.hostEmail : 'No host yet';
-  }
-  if (currentTimeText) {
-    currentTimeText.textContent = formatTime(state.currentTime || 0);
+    statusText.textContent =
+      state.status === "playing"
+        ? "Playing"
+        : "Paused";
   }
 
-  const hasControl = userHasControl(state.hostEmail);
+  if (hostText) {
+    hostText.textContent =
+      state.hostEmail || "No host yet";
+  }
+
+  if (currentTimeText) {
+    currentTimeText.textContent =
+      formatTime(state.currentTime || 0);
+  }
+
+  const hasControl =
+    userHasControl(state.hostEmail);
+
   if (controlNote) {
     if (hasControl) {
-      controlNote.textContent = 'You control this lobby. Use the buttons below to sync video playback.';
+      controlNote.textContent =
+        "You control this lobby.";
     } else {
-      controlNote.textContent = `Watching in sync. Host: ${state.hostEmail || 'waiting for host'}`;
+      controlNote.textContent =
+        `Watching host: ${
+          state.hostEmail || "none"
+        }`;
     }
   }
 
-  if (loadButton) loadButton.disabled = false;
-  if (playButton) playButton.disabled = !hasControl;
-  if (pauseButton) pauseButton.disabled = !hasControl;
-  if (syncButton) syncButton.disabled = !hasControl;
-  if (seekInput) seekInput.disabled = !hasControl;
-  if (seekButton) seekButton.disabled = !hasControl;
-  if (claimButton) claimButton.disabled = state.hostEmail === currentUserEmail;
+  [
+    "youtubePlayButton",
+    "youtubePauseButton",
+    "youtubeStopButton",
+    "syncButton",
+    "seekButton"
+  ].forEach(id => {
+    const el = getEl(id);
+
+    if (el) {
+      el.disabled = !hasControl;
+    }
+  });
+
+  const seekInput =
+    getEl("youtubeSeekTime");
+
+  if (seekInput) {
+    seekInput.disabled = !hasControl;
+  }
 }
 
 async function applyRemoteState(state) {
   if (!playerReady || !player) return;
+
   isApplyingRemoteState = true;
 
-  const currentTime = state.currentTime || 0;
-  const videoId = state.videoId;
+  const currentTime =
+    state.currentTime || 0;
 
-  if (videoId && videoId !== player.getVideoData().video_id) {
+  const videoId =
+    state.videoId || "";
+
+  if (!videoId) {
+
+    try {
+      player.stopVideo();
+      player.clearVideo();
+    } catch {}
+
+    updateUI(state);
+    stopHostSyncTimer();
+
+    isApplyingRemoteState = false;
+
+    return;
+  }
+
+  const currentVideo =
+    player.getVideoData()?.video_id || "";
+
+  if (videoId !== currentVideo) {
+
     player.loadVideoById({
       videoId,
-      startSeconds: currentTime,
-      suggestedQuality: 'large'
+      startSeconds: currentTime
     });
+
   }
 
-  const localTime = player.getCurrentTime();
-  const timeDifference = Math.abs(localTime - currentTime);
-  if (timeDifference > 1.5) {
-    player.seekTo(currentTime, true);
+  const localTime =
+    player.getCurrentTime();
+
+  if (
+    Math.abs(localTime - currentTime) > 1.5
+  ) {
+    player.seekTo(
+      currentTime,
+      true
+    );
   }
 
-  if (state.status === 'playing') {
+  if (
+    state.status === "playing"
+  ) {
     player.playVideo();
   } else {
     player.pauseVideo();
@@ -194,8 +282,12 @@ async function applyRemoteState(state) {
 
   updateUI(state);
 
-  const hostEmail = state.hostEmail || '';
-  if (state.status === 'playing' && userHasControl(hostEmail)) {
+  if (
+    state.status === "playing" &&
+    userHasControl(
+      state.hostEmail
+    )
+  ) {
     startHostSyncTimer();
   } else {
     stopHostSyncTimer();
@@ -204,135 +296,322 @@ async function applyRemoteState(state) {
   isApplyingRemoteState = false;
 }
 
-function onPlayerStateChange(event) {
-  if (isApplyingRemoteState) return;
-  const state = event.data;
-  if (!player || !currentUserEmail) return;
-  const hostEmail = getEl('watchTogetherHost')?.textContent || '';
-  const hasControl = userHasControl(hostEmail);
-  if (!hasControl) return;
+function onPlayerStateChange(
+  event
+) {
+  if (
+    isApplyingRemoteState
+  ) {
+    return;
+  }
 
-  if (state === window.YT.PlayerState.PLAYING) {
-    updateWatchState({ status: 'playing', currentTime: player.getCurrentTime() });
+  if (
+    !player ||
+    !currentUserEmail
+  ) {
+    return;
+  }
+
+  const hostEmail =
+    getEl(
+      "watchTogetherHost"
+    )?.textContent || "";
+
+  if (
+    !userHasControl(
+      hostEmail
+    )
+  ) {
+    return;
+  }
+
+  if (
+    event.data ===
+    window.YT.PlayerState.PLAYING
+  ) {
+
+    updateWatchState({
+      status: "playing",
+      currentTime:
+        player.getCurrentTime()
+    });
+
     startHostSyncTimer();
-  } else if (state === window.YT.PlayerState.PAUSED || state === window.YT.PlayerState.ENDED) {
+
+  } else if (
+    event.data ===
+      window.YT.PlayerState.PAUSED ||
+    event.data ===
+      window.YT.PlayerState.ENDED
+  ) {
+
     stopHostSyncTimer();
-    updateWatchState({ status: 'paused', currentTime: player.getCurrentTime() });
+
+    updateWatchState({
+      status: "paused",
+      currentTime:
+        player.getCurrentTime()
+    });
+
   }
 }
 
 function createPlayer() {
-  const playerContainer = getEl('youtube-player');
-  if (!playerContainer) return;
+  const container =
+    getEl(
+      "youtube-player"
+    );
 
-  player = new window.YT.Player('youtube-player', {
-    height: '360',
-    width: '100%',
-    playerVars: {
-      autoplay: 1,
-      controls: 0,
-      modestbranding: 1,
-      rel: 0
-    },
-    events: {
-      onReady: () => {
-        playerReady = true;
-        if (pendingRemoteState) {
-          applyRemoteState(pendingRemoteState);
+  if (!container) return;
+
+  player =
+    new window.YT.Player(
+      "youtube-player",
+      {
+        height: "360",
+        width: "100%",
+
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          rel: 0
+        },
+
+        events: {
+          onReady: () => {
+
+            playerReady = true;
+
+            if (
+              pendingRemoteState
+            ) {
+              applyRemoteState(
+                pendingRemoteState
+              );
+            }
+
+          },
+
+          onStateChange:
+            onPlayerStateChange
         }
-      },
-      onStateChange: onPlayerStateChange
-    }
-  });
+      }
+    );
 }
 
 async function initWatchTogether() {
-  currentUserEmail = await getStoredUserEmail();
-  currentUserRole = await getStoredUserRole();
-  if (!currentUserEmail) {
-    currentUserEmail = 'guest';
+
+  currentUserEmail =
+    await getStoredUserEmail();
+
+  currentUserRole =
+    await getStoredUserRole();
+
+  if (
+    !currentUserEmail
+  ) {
+    currentUserEmail =
+      "guest";
   }
 
-  const section = getEl('watch-together');
-  if (!section) return;
-
-  const loadButton = getEl('loadYoutubeButton');
-  const claimButton = getEl('claimHostButton');
-  const playButton = getEl('youtubePlayButton');
-  const pauseButton = getEl('youtubePauseButton');
-  const syncButton = getEl('syncButton');
-  const seekButton = getEl('seekButton');
-  const seekInput = getEl('youtubeSeekTime');
+  if (
+    !getEl(
+      "watch-together"
+    )
+  ) {
+    return;
+  }
 
   await loadYouTubeSDK();
+
   createPlayer();
+
   await ensureWatchDocExists();
 
-  onSnapshot(watchDocRef, (snapshot) => {
-    if (!snapshot.exists()) return;
-    pendingRemoteState = snapshot.data();
-    if (playerReady) {
-      applyRemoteState(pendingRemoteState);
+  onSnapshot(
+    watchDocRef,
+    snapshot => {
+
+      if (
+        !snapshot.exists()
+      ) {
+        return;
+      }
+
+      pendingRemoteState =
+        snapshot.data();
+
+      if (
+        playerReady
+      ) {
+        applyRemoteState(
+          pendingRemoteState
+        );
+      }
+
     }
-  });
+  );
 
-  if (loadButton) {
-    loadButton.addEventListener('click', async () => {
-      const url = getEl('youtubeUrlInput')?.value;
-      const videoId = extractYouTubeId(url);
-      if (!videoId) {
-        alert('Please enter a valid YouTube link or video ID.');
+  getEl(
+    "loadYoutubeButton"
+  )?.addEventListener(
+    "click",
+    async () => {
+
+      const url =
+        getEl(
+          "youtubeUrlInput"
+        )?.value;
+
+      const videoId =
+        extractYouTubeId(
+          url
+        );
+
+      if (
+        !videoId
+      ) {
+
+        alert(
+          "Enter a valid YouTube link."
+        );
+
         return;
       }
-      await updateWatchState({
-        videoId,
-        status: 'paused',
-        currentTime: 0,
-        hostEmail: currentUserEmail
-      });
-      getEl('youtubeUrlInput').value = '';
-    });
-  }
 
-  if (claimButton) {
-    claimButton.addEventListener('click', async () => {
-      await updateWatchState({ hostEmail: currentUserEmail });
-    });
-  }
+      await updateWatchState(
+        {
+          videoId,
+          status:
+            "paused",
+          currentTime: 0,
+          hostEmail:
+            currentUserEmail
+        }
+      );
 
-  if (playButton) {
-    playButton.addEventListener('click', async () => {
-      if (!playerReady) return;
-      await updateWatchState({ status: 'playing', currentTime: player.getCurrentTime() });
-    });
-  }
+      getEl(
+        "youtubeUrlInput"
+      ).value = "";
 
-  if (pauseButton) {
-    pauseButton.addEventListener('click', async () => {
-      if (!playerReady) return;
-      await updateWatchState({ status: 'paused', currentTime: player.getCurrentTime() });
-    });
-  }
+    }
+  );
 
-  if (syncButton) {
-    syncButton.addEventListener('click', async () => {
-      if (!playerReady) return;
-      await updateWatchState({ currentTime: player.getCurrentTime() });
-    });
-  }
+  getEl(
+    "youtubePlayButton"
+  )?.addEventListener(
+    "click",
+    async () => {
 
-  if (seekButton) {
-    seekButton.addEventListener('click', async () => {
-      const value = Number(seekInput?.value);
-      if (Number.isNaN(value) || value < 0) {
-        alert('Please enter a valid time in seconds to seek.');
+      await updateWatchState(
+        {
+          status:
+            "playing",
+          currentTime:
+            player.getCurrentTime()
+        }
+      );
+
+    }
+  );
+
+  getEl(
+    "youtubePauseButton"
+  )?.addEventListener(
+    "click",
+    async () => {
+
+      await updateWatchState(
+        {
+          status:
+            "paused",
+          currentTime:
+            player.getCurrentTime()
+        }
+      );
+
+    }
+  );
+
+  getEl(
+    "youtubeStopButton"
+  )?.addEventListener(
+    "click",
+    async () => {
+
+      await updateWatchState(
+        {
+          videoId: "",
+          status:
+            "paused",
+          currentTime: 0
+        }
+      );
+
+    }
+  );
+
+  getEl(
+    "syncButton"
+  )?.addEventListener(
+    "click",
+    async () => {
+
+      await updateWatchState(
+        {
+          currentTime:
+            player.getCurrentTime()
+        }
+      );
+
+    }
+  );
+
+  getEl(
+    "seekButton"
+  )?.addEventListener(
+    "click",
+    async () => {
+
+      const value =
+        Number(
+          getEl(
+            "youtubeSeekTime"
+          )?.value
+        );
+
+      if (
+        Number.isNaN(
+          value
+        ) ||
+        value < 0
+      ) {
+
+        alert(
+          "Invalid seek time."
+        );
+
         return;
       }
-      await updateWatchState({ currentTime: value, status: 'paused' });
-    });
-  }
+
+      await updateWatchState(
+        {
+          currentTime:
+            value,
+          status:
+            "paused"
+        }
+      );
+
+    }
+  );
 }
 
-initWatchTogether().catch(error => {
-  console.error('watchtogether: initialization failed', error);
-});
+initWatchTogether().catch(
+  error => {
+    console.error(
+      "watchtogether init failed",
+      error
+    );
+  }
+);
