@@ -10,11 +10,10 @@
   <meta name="application-name" content="My Collab">
   <meta name="apple-mobile-web-app-title" content="My Collab">
   <link rel="manifest" href="manifest.json?v=5">
-  <meta name="theme-color" content="#4f46e5">
+  <meta name="theme-color" content="#3b82f6">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="style.css?v=1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <script src="https://www.youtube.com/iframe_api"></script>
   <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
 </head>
 <body>
@@ -34,6 +33,7 @@
     </div>
     <ul class="nav-list">
       <li><button class="nav-btn active" onclick="showSection('create-task')"><i class="fas fa-plus"></i> Create Task</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-members')"><i class="fas fa-users-plus"></i> Manage Members</button></li>
       <li><button class="nav-btn" onclick="showSection('create-poll')"><i class="fas fa-poll"></i> Create Poll</button></li>
       <li><button class="nav-btn" onclick="showSection('create-announcement')"><i class="fas fa-bullhorn"></i> Announcement</button></li>
       <li><button class="nav-btn" onclick="showSection('create-resource')"><i class="fas fa-book"></i> Resource</button></li>
@@ -41,12 +41,11 @@
       <li><button class="nav-btn" onclick="showSection('manage-announcements')"><i class="fas fa-bullhorn"></i> Manage Announcements</button></li>
       <li><button class="nav-btn" onclick="showSection('support-tickets')"><i class="fas fa-ticket-alt"></i> Support Tickets</button></li>
       <li><button class="nav-btn" onclick="showSection('manage-resources')"><i class="fas fa-book"></i> Manage Resources</button></li>
-      <li><button class="nav-btn" onclick="showSection('manage-members')"><i class="fas fa-users"></i> Manage Members</button></li>
-      <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-chart-line"></i> Progress Report</button></li>
       <li><button class="nav-btn" onclick="showSection('task-analytics')"><i class="fas fa-chart-bar"></i> Analytics</button></li>
+      <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-clipboard-check"></i> Progress Report</button></li>
       <li><button class="nav-btn" onclick="showSection('all-tasks')"><i class="fas fa-clipboard-list"></i> All Tasks</button></li>
-      <li><button class="nav-btn" onclick="showSection('watch-together')"><i class="fas fa-tv"></i> Watch Together</button></li>
       <li><button class="nav-btn" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
+      <li><button class="nav-btn" onclick="showSection('live-chat')"><i class="fas fa-comments"></i> Live Chat</button></li>
     </ul>
   </nav>
 
@@ -230,94 +229,41 @@
       <!-- Manage Members Section -->
       <section id="manage-members" class="content-section">
         <div class="card">
-          <h2><i class="fas fa-users"></i> Manage Members</h2>
+          <h2><i class="fas fa-users-plus"></i> Manage Members</h2>
           
-          <div style="margin-bottom: 2rem;">
-            <h3 style="color: #2563eb; margin-bottom: 1rem;">Create New Member Account</h3>
-            <form onsubmit="event.preventDefault(); window.createMemberAccount();" style="display: flex; flex-direction: column; gap: 1rem;">
-              <div class="form-row">
+          <div style="margin-bottom: 2rem; padding: 1rem; background: #1e293b; border: 1px solid #374151; border-radius: 8px;">
+            <h3 style="margin-bottom: 1rem; color: #f8fafc;">Create New Member Account</h3>
+            <form onsubmit="event.preventDefault(); createMemberAccount();" style="display: flex; flex-direction: column; gap: 1rem;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                 <div class="form-group">
-                  <label for="memberEmail">Login Email Address</label>
-                  <input id="memberEmail" type="email" placeholder="member@example.com" required>
-                  <p style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">Email used to login to the system</p>
+                  <label for="memberName">Member Name</label>
+                  <input id="memberName" type="text" placeholder="Full Name" required style="background: #0f172a; border: 1px solid #374151; color: #f8fafc; padding: 0.5rem;">
                 </div>
                 <div class="form-group">
-                  <label for="memberName">Full Name</label>
-                  <input id="memberName" type="text" placeholder="Enter member name" required>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="memberGmail">Gmail Address (for notifications)</label>
-                  <input id="memberGmail" type="email" placeholder="member.notifications@gmail.com" required>
-                  <p style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">Gmail address for receiving task notifications and emails</p>
-                </div>
-                <div class="form-group">
-                  <label for="memberPassword">Temporary Password</label>
-                  <input id="memberPassword" type="password" placeholder="Enter a temporary password" required>
-                  <p style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">Member should change on first login</p>
+                  <label for="memberEmail">Login Email (Credentials)</label>
+                  <input id="memberEmail" type="email" placeholder="login@example.com" required style="background: #0f172a; border: 1px solid #374151; color: #f8fafc; padding: 0.5rem;">
                 </div>
               </div>
-              <button type="submit" class="btn-success"><i class="fas fa-user-plus"></i> Create Member Account</button>
+              
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                  <label for="memberPassword">Password</label>
+                  <input id="memberPassword" type="password" placeholder="Password" required style="background: #0f172a; border: 1px solid #374151; color: #f8fafc; padding: 0.5rem; width: 100%;">
+                </div>
+                <div class="form-group">
+                  <label for="memberGmail">Gmail Address (Notifications)</label>
+                  <input id="memberGmail" type="email" placeholder="user@gmail.com" style="background: #0f172a; border: 1px solid #374151; color: #f8fafc; padding: 0.5rem;">
+                </div>
+              </div>
+              
+              <button type="submit" class="btn-success"><i class="fas fa-user-plus"></i> Create Member</button>
             </form>
           </div>
           
-          <div>
-            <h3 style="color: #2563eb; margin-bottom: 1rem;">Existing Members</h3>
-            <div id="membersList">
-              <p style="color: #94a3b8; text-align: center;">Loading members...</p>
-            </div>
+          <h3 style="margin-bottom: 1rem; color: #f8fafc;">Current Members</h3>
+          <div id="membersList" style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <p style="color: #94a3b8; text-align: center;">Loading members...</p>
           </div>
-        </div>
-      </section>
-      
-      <!-- Progress Report Section -->
-      <section id="progress-report" class="content-section">
-        <div class="card">
-          <h2><i class="fas fa-chart-line"></i> Progress Report</h2>
-          
-          <!-- Add New Report Form -->
-          <div style="margin-bottom: 2rem; padding: 1.5rem; background: #1e293b; border-radius: 0.5rem; border: 1px solid #374151;">
-            <h3 style="color: #2563eb; margin-bottom: 1rem;">Add New Report</h3>
-            <form onsubmit="event.preventDefault(); window.addProgressReport();" style="display: flex; flex-direction: column; gap: 1rem;">
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="reportTitle">Report Title</label>
-                  <input id="reportTitle" type="text" placeholder="e.g., Chapter 1 Draft Complete" required>
-                </div>
-                <div class="form-group">
-                  <label for="reportAssignedTo">Assign To</label>
-                  <select id="reportAssignedTo" required>
-                    <option value="">Select a member</option>
-                  </select>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="reportDescription">Description</label>
-                  <textarea id="reportDescription" placeholder="Add details about this report..." rows="3"></textarea>
-                </div>
-                <div class="form-group">
-                  <label for="reportStatus">Status</label>
-                  <select id="reportStatus" required>
-                    <option value="Not Started">Not Started</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Completed">Completed</option>
-                  </select>
-                </div>
-              </div>
-              <button type="submit" class="btn-success"><i class="fas fa-plus"></i> Add Report</button>
-            </form>
-          </div>
-          
-          <!-- Reports List -->
-          <div>
-            <h3 style="color: #2563eb; margin-bottom: 1rem;">Reports</h3>
-            <div id="reportsListContainer">
-              <p style="color: #94a3b8; text-align: center;">Loading reports...</p>
-            </div>
-          </div>
-          
         </div>
       </section>
       
@@ -325,8 +271,49 @@
       <section id="task-analytics" class="content-section">
         <div class="card analytics-card">
           <h2><i class="fas fa-chart-bar"></i> Task Analytics</h2>
-          <div class="chart-container">
-            <canvas id="taskChart"></canvas>
+          <div class="analytics-list-container" style="display: flex; flex-direction: column; gap: 1rem; padding-top: 1rem;">
+            <div id="taskAnalyticsList" class="analytics-list" style="display: grid; gap: 1rem;"></div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Progress Report Section -->
+      <section id="progress-report" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-clipboard-check"></i> Task Report</h2>
+          
+          <!-- Create New Progress Report Item Form -->
+          <div style="margin-bottom: 1.5rem; padding: 1.5rem; background: #0f172a; border: 1px solid #374151; border-radius: 0.5rem;">
+            <h3 style="margin-bottom: 1rem; color: #0ea5e9;">Create New Item</h3>
+            <form onsubmit="event.preventDefault(); createProgressReportItem();" style="display: flex; flex-direction: column; gap: 1rem;">
+              <div class="form-group">
+                <label for="reportItemName">Task Name</label>
+                <input id="reportItemName" type="text" placeholder="e.g., Complete literature review" required style="width: 100%;">
+              </div>
+              <div class="form-group">
+                <label for="reportItemStatus">Status</label>
+                <select id="reportItemStatus" required style="width: 100%;">
+                  <option value="Not Started">Not Started</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="reportItemAssignedTo">Assign To (Select multiple)</label>
+                <select id="reportItemAssignedTo" multiple style="width: 100%; min-height: 100px;">
+                  <option value="">-- Select Members --</option>
+                </select>
+              </div>
+              <button type="submit" class="btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Create Item</button>
+            </form>
+          </div>
+          
+          <div id="progressReportPanel" style="display: flex; flex-direction: column; gap: 1.5rem;"></div>
+          
+          <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #374151;">
+            <div style="display: flex; gap: 1rem;">
+              <button onclick="saveProgressReport()" class="btn-success" style="flex: 1;"><i class="fas fa-save"></i> Save Progress Report</button>
+            </div>
           </div>
         </div>
       </section>
@@ -345,20 +332,20 @@
           <h2><i class="fas fa-video"></i> Video Conference</h2>
 
           <!-- Admin schedule form -->
-          <div id="admin-schedule-panel" style="margin-bottom: 2rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #1e293b;">
-            <h3 style="margin-bottom: 1rem; color: #f8fafc;">Schedule a Meeting</h3>
+          <div class="meeting-schedule-panel" style="margin-bottom: 2rem;">
+            <h3 style="color: #f8fafc;">Schedule a Meeting</h3>
             <form id="adminMeetingForm" style="display: flex; flex-direction: column; gap: 1rem;">
-              <input type="text" id="adminMeetingTitle" placeholder="Meeting Title" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc;">
-              <div style="display: flex; gap: 1rem;">
-                <input type="date" id="adminMeetingDate" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc; flex: 1;">
-                <input type="time" id="adminMeetingTime" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc; flex: 1;">
+              <input type="text" id="adminMeetingTitle" placeholder="Meeting Title" required style="padding: 0.75rem; border: 1px solid #374151; border-radius: 6px; background: #0f172a; color: #f8fafc; font-size: 16px;">
+              <div class="meeting-form-row">
+                <input type="date" id="adminMeetingDate" required style="padding: 0.75rem; border: 1px solid #374151; border-radius: 6px; background: #0f172a; color: #f8fafc; font-size: 16px;">
+                <input type="time" id="adminMeetingTime" required style="padding: 0.75rem; border: 1px solid #374151; border-radius: 6px; background: #0f172a; color: #f8fafc; font-size: 16px;">
               </div>
-              <button type="submit" style="padding: 0.5rem 1rem; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer;">Schedule Meeting</button>
+              <button type="submit" style="padding: 0.75rem 1.5rem; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem; min-height: 44px;">Schedule Meeting</button>
             </form>
           </div>
 
-                  <div style="margin-bottom: 2rem; text-align: center;">
-            <button onclick="startInstantMeeting()" style="padding: 0.75rem 1.5rem; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem;">
+          <div style="margin-bottom: 2rem; text-align: center;">
+            <button onclick="startInstantMeeting()" style="padding: 0.85rem 1.5rem; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem; min-height: 44px;">
               <i class="fas fa-bolt"></i> Start Instant Meeting
             </button>
           </div>
@@ -366,61 +353,50 @@
           <!-- Scheduled Meetings List -->
           <div id="adminMeetingsList" style="margin-bottom: 2rem;">
             <h3 style="margin-bottom: 1rem; color: #f8fafc;">Scheduled Meetings</h3>
-            <div id="adminMeetingsContainer"></div>
+            <div id="adminMeetingsContainer" class="chat-room-list"></div>
           </div>
 
-          <div id="jaas-container" style="height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151;"></div>
+          <div id="jaas-container" style="width: 100%; min-height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151; display: flex; align-items: stretch;"></div>
         </div>
       </section>
 
-      <!-- Watch Together Section -->
-      <section id="watch-together" class="content-section">
-        <div class="card watch-together-card">
-          <div class="watch-together-header">
-            <div>
-              <h2><i class="fas fa-tv"></i> Watch Together</h2>
-              <p id="watchTogetherControlNote" class="watch-together-note">Join the lobby to watch synced video with the host and use open mic audio chat.</p>
-            </div>
-            <div class="watch-together-meta">
-              <div>
-                <span>Status</span>
-                <strong id="watchTogetherStatus">...</strong>
-              </div>
-              <div>
-                <span>Host</span>
-                <strong id="watchTogetherHost">...</strong>
-              </div>
-              <div>
-                <span>Time</span>
-                <strong id="watchTogetherCurrentTime">0:00</strong>
-              </div>
-            </div>
+      <!-- Live Chat Section -->
+      <section id="live-chat" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-comments"></i> Live Chat</h2>
+          <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #0f172a;">
+            <form id="adminCreateChatForm" style="display: flex; gap: 0.75rem; align-items: center; justify-content: flex-start;">
+              <button type="submit" style="padding: 0.75rem 1.25rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; min-height: 44px; font-size: 0.95rem;">Create Chat Room</button>
+            </form>
           </div>
 
-          <div class="watch-together-player-wrapper">
-            <div id="youtube-player" class="watch-video-frame"></div>
+          <div id="adminChatRoomsList" style="margin-bottom: 2rem;">
+            <h3 style="margin-bottom: 0.75rem; color: #f8fafc;">Chat Rooms</h3>
+            <div id="adminChatRoomsContainer" class="chat-room-list"></div>
           </div>
 
-          <div class="watch-together-actions">
-            <div class="watch-together-input">
-              <input id="youtubeUrlInput" type="text" placeholder="YouTube URL or Video ID">
-              <button id="loadYoutubeButton" class="btn-success">Load</button>
-            </div>
-            <div class="watch-together-action-buttons">
-              <button id="youtubePlayButton" class="btn-success">Play</button>
-              <button id="youtubePauseButton" class="btn-warning">Pause</button>
-              <button id="youtubeStopButton">Stop</button>
-              <div class="watch-seek-group">
-                <input id="youtubeSeekTime" type="number" min="0" placeholder="Seek sec">
-                <button id="seekButton" class="btn-secondary">Seek</button>
+          <div id="adminChatRoomPanel" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 9999; padding: 0.75rem; box-sizing: border-box; overflow: hidden;">
+            <div style="height: 100%; display: flex; flex-direction: column; max-height: 100vh;">
+              <div style="display: flex; justify-content: flex-start; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                <button onclick="closeAdminChatPanel()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.5rem 0.75rem; font-size: 0.85rem; line-height: 1; white-space: nowrap; min-height: 40px;">
+                  ← Back
+                </button>
+                <div style="min-width: 0; flex: 1;">
+                  <h3 id="adminActiveChatTitle" style="margin: 0; color: #f8fafc; font-size: 1.1rem;"></h3>
+                  <p id="adminActiveChatMeta" style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.85rem;"></p>
+                </div>
               </div>
-            </div>
-          </div>
-
-          <div class="watch-participants-grid">
-            <div class="watch-participant watch-participant-host">
-              <div class="watch-participant-avatar">HP</div>
-              <span>Host</span>
+              <div id="adminChatMessages" style="flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 1rem; border: 1px solid #374151; border-radius: 12px; padding: 0.75rem; background: #020617;"></div>
+              <div id="adminChatReplyPreview" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border-radius: 14px; border: 1px solid #374151; background: #111827; color: #e5e7eb; font-size: 0.9rem;"></div>
+              <form id="adminChatMessageForm" style="display: flex; gap: 0.5rem; align-items: stretch; flex-wrap: nowrap; width: 100%;">
+                <div style="flex: 1 1 auto; min-width: 0; position: relative; display: flex; gap: 0.25rem;">
+                  <input id="adminChatMessageInput" type="text" placeholder="Message..." style="flex: 1; min-width: 0; padding: 0.75rem; border-radius: 9999px; border: 1px solid #374151; background: #020617; color: #f8fafc; font-size: 16px;">
+                  <button type="button" onclick="triggerAdminChatImageInput()" style="flex: 0 0 40px; width: 40px; padding: 0; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; min-height: 40px;">📷</button>
+                </div>
+                <input id="adminChatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleAdminChatImageInputChange(event)">
+                <button type="submit" style="flex: 0 0 auto; width: auto; padding: 0.65rem 1rem; background: #10b981; color: white; border: none; border-radius: 9999px; cursor: pointer; font-size: 0.85rem; min-width: 60px; min-height: 40px;">Send</button>
+              </form>
+              <div id="adminChatImagePreview" style="display:none; margin-top: 0.75rem;"></div>
             </div>
           </div>
         </div>
@@ -430,13 +406,22 @@
   </main>
 </div>
 
-<footer style="text-align: center; padding: 1rem; color: #94a3b8; font-size: 0.8rem; margin-top: 2rem;">
-  My Collab
-  <br>
-  Created by: John Paul Bugayong
+<div id="taskAnalyticsModalOverlay" class="analytics-modal-overlay" onclick="hideMemberTaskDetails()">
+  <div class="analytics-modal" onclick="event.stopPropagation()">
+    <div class="analytics-modal-header">
+      <h3 style="margin: 0; color: #f8fafc;">Task Details</h3>
+      <button type="button" class="analytics-modal-close" onclick="hideMemberTaskDetails()">×</button>
+    </div>
+    <p id="taskAnalyticsDetailsMessage" style="color: #94a3b8; margin-top: 0.75rem;">Select a member to view pending, needs action, or overdue tasks.</p>
+    <div id="taskAnalyticsDetailsList" style="display: grid; gap: 0.75rem; margin-top: 0.75rem;"></div>
+  </div>
+</div>
+
+<footer style="text-align: right; padding: 1rem 2rem; color: #94a3b8; font-size: 0.8rem; margin-top: 2rem;">
+  My Collab - Collaboration Platform<br>
+  Created by John Paul Bugayong
 </footer>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // Navigation functions
 function showSection(sectionId) {
@@ -466,46 +451,27 @@ function showSection(sectionId) {
     'create-poll': '<i class="fas fa-poll"></i> Create Poll',
     'create-announcement': '<i class="fas fa-bullhorn"></i> Create Announcement',
     'create-resource': '<i class="fas fa-book"></i> Create Resource',
+    'manage-members': '<i class="fas fa-users-plus"></i> Manage Members',
     'manage-polls': '<i class="fas fa-poll"></i> Manage Polls',
     'manage-announcements': '<i class="fas fa-bullhorn"></i> Manage Announcements',
     'support-tickets': '<i class="fas fa-ticket-alt"></i> Support Tickets',
     'manage-resources': '<i class="fas fa-book"></i> Manage Resources',
-    'manage-members': '<i class="fas fa-users"></i> Manage Members',
-    'progress-report': '<i class="fas fa-chart-line"></i> Progress Report',
     'task-analytics': '<i class="fas fa-chart-bar"></i> Task Analytics',
+    'progress-report': '<i class="fas fa-clipboard-check"></i> Progress Report',
     'all-tasks': '<i class="fas fa-clipboard-list"></i> All Tasks',
-    'watch-together': '<i class="fas fa-tv"></i> Watch Together',
-    'video-conference': '<i class="fas fa-video"></i> Video Conference'
+    'video-conference': '<i class="fas fa-video"></i> Video Conference',
+    'live-chat': '<i class="fas fa-comments"></i> Live Chat'
   };
   
   const pageTitle = document.getElementById('page-title');
   if (pageTitle && titles[sectionId]) {
     pageTitle.innerHTML = titles[sectionId];
   }
-  
-  // Reload members list when manage-members section is shown
-  if (sectionId === 'manage-members' && typeof loadMembersList === 'function') {
-    setTimeout(() => loadMembersList(), 50);
-  }
-  
-  // Load reports and populate dropdown when progress-report section is shown
-  if (sectionId === 'progress-report') {
-    setTimeout(() => {
-      // Populate report assigned-to dropdown
-      const reportAssignedTo = document.getElementById("reportAssignedTo");
-      if (reportAssignedTo && typeof members !== 'undefined') {
-        reportAssignedTo.innerHTML = '<option value="">Select a member</option>';
-        members.forEach(m => {
-          if (m.uid !== "everyone") {
-            reportAssignedTo.innerHTML += `<option value="${m.uid}">${m.name}</option>`;
-          }
-        });
-      }
-      // Load reports list
-      if (typeof loadProgressReports === 'function') {
-        loadProgressReports();
-      }
-    }, 50);
+
+  if (sectionId === 'live-chat') {
+    if (typeof loadLiveChatRooms === 'function') {
+      loadLiveChatRooms();
+    }
   }
   
   // Trigger chart update when analytics is shown
@@ -515,6 +481,30 @@ function showSection(sectionId) {
         window.updateChart(window.lastMemberProgress);
       }
     }, 50); // Faster response when switching tabs
+  }
+  
+  // Load progress report when section is shown
+  if (sectionId === 'progress-report') {
+    setTimeout(() => {
+      if (typeof populateProgressReportAssignedTo === 'function') {
+        populateProgressReportAssignedTo();
+      }
+      if (typeof initializeProgressReportListener === 'function') {
+        initializeProgressReportListener();
+      }
+      if (typeof loadProgressReport === 'function') {
+        loadProgressReport();
+      }
+    }, 50);
+  }
+  
+  // Render members list when manage-members section is shown
+  if (sectionId === 'manage-members') {
+    setTimeout(() => {
+      if (window.renderMembersList && typeof window.renderMembersList === 'function') {
+        window.renderMembersList();
+      }
+    }, 50);
   }
   
   // Close mobile sidebar after selection
@@ -550,7 +540,6 @@ function closeMobileSidebar() {
   await requireAuth(['admin']);
 </script>
 <script type="module" src="admin.js?v=3"></script>
-<script type="module" src="watchtogether.js"></script>
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js");
@@ -558,9 +547,8 @@ if ("serviceWorker" in navigator) {
 </script>
 
 <script type="module">
-import { collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { db, auth } from "./firebase.js";
-import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { db } from "./firebase.js";
 
 const members = [
   { uid: "everyone", name: "Everyone" },
@@ -719,7 +707,7 @@ function renderAdminMeetings(meetings) {
     const isFinished = !isUpcoming && !isOngoing;
 
     const currentStatus = meeting.status || 'Active';
-    let statusColor = '#4f46e5';
+    let statusColor = '#3b82f6';
     let canJoin = false;
 
     if (currentStatus === 'Completed') {
@@ -1000,14 +988,15 @@ function showSection(sectionId) {
     'create-poll': '<i class="fas fa-poll"></i> Create Poll',
     'create-announcement': '<i class="fas fa-bullhorn"></i> Create Announcement',
     'create-resource': '<i class="fas fa-book"></i> Create Resource',
+    'manage-members': '<i class="fas fa-users-plus"></i> Manage Members',
     'manage-polls': '<i class="fas fa-poll"></i> Manage Polls',
     'manage-announcements': '<i class="fas fa-bullhorn"></i> Manage Announcements',
     'support-tickets': '<i class="fas fa-ticket-alt"></i> Support Tickets',
     'manage-resources': '<i class="fas fa-book"></i> Manage Resources',
-    'progress-report': '<i class="fas fa-chart-line"></i> Progress Report',
     'task-analytics': '<i class="fas fa-chart-bar"></i> Task Analytics',
     'all-tasks': '<i class="fas fa-clipboard-list"></i> All Tasks',
-    'video-conference': '<i class="fas fa-video"></i> Video Conference'
+    'video-conference': '<i class="fas fa-video"></i> Video Conference',
+    'live-chat': '<i class="fas fa-comments"></i> Live Chat'
   };
   
   const pageTitle = document.getElementById('page-title');
@@ -1023,6 +1012,11 @@ function showSection(sectionId) {
       }
     }, 50); // Faster response when switching tabs
   }
+  if (sectionId === 'live-chat') {
+    if (typeof loadLiveChatRooms === 'function') {
+      loadLiveChatRooms();
+    }
+  }
   
   // Close mobile sidebar after selection
   closeMobileSidebar();
@@ -1031,4 +1025,3 @@ function showSection(sectionId) {
 
 </body>
 </html>
-

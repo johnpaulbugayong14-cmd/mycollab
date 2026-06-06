@@ -17,13 +17,12 @@ const urlsToCache = [
 ];
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDwaMDGG7ke7fwM0wYsywSfPPZ2qZGPZLc",
-  authDomain: "mycollab-89c11.firebaseapp.com",
-  projectId: "mycollab-89c11",
-  storageBucket: "mycollab-89c11.firebasestorage.app",
-  messagingSenderId: "1089766419760",
-  appId: "1:1089766419760:web:26b4307d2fd78fd067acf5",
-  measurementId: "G-N0JF8FKPHP"
+  apiKey: "AIzaSyBJt3bCDYaqzLe_vGiFqvCMehJedZFvSJs",
+  authDomain: "task-edd4d.firebaseapp.com",
+  projectId: "task-edd4d",
+  storageBucket: "task-edd4d.firebasestorage.app",
+  messagingSenderId: "372695845973",
+  appId: "1:372695845973:web:23b25b0de8ca2b72dfd8dc"
 };
 
 firebase.initializeApp(firebaseConfig);

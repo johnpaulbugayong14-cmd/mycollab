@@ -124,7 +124,7 @@ You have a new {type}: {title}
 
 Please log in to your account to review the details.
 
-— My Collab Automated System Notification
+— MyThesisHub Automated System Notification
 ```
 
 ## Troubleshooting

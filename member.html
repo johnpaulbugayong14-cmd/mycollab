@@ -10,11 +10,10 @@
   <meta name="application-name" content="My Collab">
   <meta name="apple-mobile-web-app-title" content="My Collab">
   <link rel="manifest" href="manifest.json?v=6">
-  <meta name="theme-color" content="#4f46e5">
+  <meta name="theme-color" content="#3b82f6">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <link rel="stylesheet" href="style.css?v=1">
-  <script src="https://www.youtube.com/iframe_api"></script>
   <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
 </head>
 <body>
@@ -44,9 +43,9 @@ if (savedMemberSection) {
       <li><button class="nav-btn" onclick="showSection('announcements')"><i class="fas fa-bullhorn"></i> Announcements</button></li>
       <li><button class="nav-btn" onclick="showSection('submit-ticket')"><i class="fas fa-headset"></i> Submit Ticket</button></li>
       <li><button class="nav-btn active" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
-      <li><button class="nav-btn" onclick="showSection('watch-together')"><i class="fas fa-tv"></i> Watch Together</button></li>
+      <li><button class="nav-btn" onclick="showSection('live-chat')"><i class="fas fa-comments"></i> Live Chat</button></li>
       <li><button class="nav-btn" onclick="showSection('resources')"><i class="fas fa-book"></i> Resources</button></li>
-      <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-file-alt"></i> Progress Report</button></li>
+      <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-clipboard-check"></i> Progress Report</button></li>
     </ul>
   </nav>
 
@@ -77,7 +76,7 @@ if (savedMemberSection) {
         <div class="card">
           <h2 style="margin-bottom: 1rem;"><i class="fas fa-ticket-alt"></i> Ticket History</h2>
           <div style="margin-bottom: 1rem;">
-            <button onclick="loadTicketHistory()" style="background: #4f46e5; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;"><i class="fas fa-sync-alt"></i> Refresh Tickets</button>
+            <button onclick="loadTicketHistory()" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;"><i class="fas fa-sync-alt"></i> Refresh Tickets</button>
           </div>
           <div id="ticketHistory"></div>
           <p id="ticketHistoryEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
@@ -136,62 +135,51 @@ if (savedMemberSection) {
           <!-- Scheduled Meetings List -->
           <div id="meetings-list" style="margin-bottom: 2rem;">
             <h3 style="margin-bottom: 0.5rem; color: #f8fafc;">Scheduled Meetings</h3>
-            <p style="margin: 0 0 1rem 0; color: #94a3b8; font-size: 0.9rem;">Showing active scheduled meetings only; completed/ended meetings are hidden.</p>
-            <div id="meetingsContainer"></div>
+            <p style="margin: 0 0 1rem 0; color: #94a3b8; font-size: 0.9rem;">Active scheduled meetings only; completed meetings are hidden.</p>
+            <div id="meetingsContainer" class="chat-room-list"></div>
           </div>
 
-          <div id="jaas-container" style="height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151; display: none;"></div>
+          <div id="jaas-container" style="width: 100%; min-height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151; display: flex; align-items: stretch; display: none;"></div>
         </div>
       </section>
 
-      <!-- Watch Together Section -->
-      <section id="watch-together" class="content-section">
-        <div class="card watch-together-card">
-          <div class="watch-together-header">
-            <div>
-              <h2 style="margin-bottom: 0.25rem;"><i class="fas fa-tv"></i> Watch Together</h2>
-              <p id="watchTogetherControlNote" class="watch-together-note">Join the lobby to watch synced video with the host and use open mic audio chat.</p>
-            </div>
-            <div class="watch-together-meta">
-              <div>
-                <span>Status</span>
-                <strong id="watchTogetherStatus">...</strong>
-              </div>
-              <div>
-                <span>Host</span>
-                <strong id="watchTogetherHost">...</strong>
-              </div>
-              <div>
-                <span>Time</span>
-                <strong id="watchTogetherCurrentTime">0:00</strong>
-              </div>
-            </div>
+      <!-- Live Chat Section -->
+      <section id="live-chat" class="content-section">
+        <div class="card">
+          <h2 style="margin-bottom: 1rem;"><i class="fas fa-comments"></i> Live Chat</h2>
+          <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #0f172a;">
+            <form id="createChatForm" style="display: flex; gap: 0.75rem; align-items: center; justify-content: flex-start;">
+              <button type="submit" style="padding: 0.75rem 1.25rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; min-height: 44px; font-size: 0.95rem;">Create Chat Room</button>
+            </form>
           </div>
 
-          <div class="watch-together-player-wrapper">
-            <div id="youtube-player" class="watch-video-frame"></div>
+          <div id="chatRoomsList" style="margin-bottom: 2rem;">
+            <h3 style="margin-bottom: 0.75rem; color: #f8fafc;">Available Chat Rooms</h3>
+            <div id="chatRoomsContainer" class="chat-room-list"></div>
           </div>
 
-          <div class="watch-together-actions">
-            <div class="watch-together-input">
-              <input id="youtubeUrlInput" type="text" placeholder="YouTube URL or Video ID">
-              <button id="loadYoutubeButton" class="btn-success">Load</button>
-            </div>
-            <div class="watch-together-action-buttons">
-              <button id="youtubePlayButton" class="btn-success">Play</button>
-              <button id="youtubePauseButton" class="btn-warning">Pause</button>
-              <button id="youtubeStopButton">Stop</button>
-              <div class="watch-seek-group">
-                <input id="youtubeSeekTime" type="number" min="0" placeholder="Seek sec">
-                <button id="seekButton" class="btn-secondary">Seek</button>
+          <div id="chatRoomPanel" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 9999; padding: 0.75rem; box-sizing: border-box; overflow: hidden;">
+            <div style="height: 100%; display: flex; flex-direction: column; max-height: 100vh;">
+              <div style="display: flex; justify-content: flex-start; align-items: center; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap;">
+                <button onclick="closeChatRoomPanel()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.5rem 0.75rem; font-size: 0.85rem; line-height: 1; white-space: nowrap; min-height: 40px;">
+                  ← Back
+                </button>
+                <div style="min-width: 0; flex: 1;">
+                  <h3 id="activeChatTitle" style="margin: 0; color: #f8fafc; font-size: 1.1rem;"></h3>
+                  <p id="activeChatMeta" style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.85rem;"></p>
+                </div>
               </div>
-            </div>
-          </div>
-
-          <div class="watch-participants-grid">
-            <div class="watch-participant watch-participant-host">
-              <div class="watch-participant-avatar">U</div>
-              <span>Host</span>
+              <div id="chatMessages" style="flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 1rem; border: 1px solid #374151; border-radius: 12px; padding: 0.75rem; background: #020617;"></div>
+              <div id="chatReplyPreview" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border-radius: 14px; border: 1px solid #374151; background: #111827; color: #e5e7eb; font-size: 0.9rem;"></div>
+              <form id="chatMessageForm" style="display: flex; gap: 0.5rem; align-items: stretch; flex-wrap: nowrap; width: 100%;">
+                <div style="flex: 1 1 auto; min-width: 0; position: relative; display: flex; gap: 0.25rem;">
+                  <input id="chatMessageInput" type="text" placeholder="Message..." style="flex: 1; min-width: 0; padding: 0.75rem; border-radius: 9999px; border: 1px solid #374151; background: #020617; color: #f8fafc; font-size: 16px;">
+                  <button type="button" onclick="triggerChatImageInput()" style="flex: 0 0 40px; width: 40px; padding: 0; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; min-height: 40px;">📷</button>
+                </div>
+                <input id="chatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleChatImageInputChange(event)">
+                <button type="submit" style="flex: 0 0 auto; width: auto; padding: 0.65rem 1rem; background: #10b981; color: white; border: none; border-radius: 9999px; cursor: pointer; font-size: 0.85rem; min-width: 60px; min-height: 40px;">Send</button>
+              </form>
+              <div id="chatImagePreview" style="display:none; margin-top: 0.75rem;"></div>
             </div>
           </div>
         </div>
@@ -201,24 +189,23 @@ if (savedMemberSection) {
       <section id="resources" class="content-section">
         <div class="card">
           <h2 style="margin-bottom: 1rem;"><i class="fas fa-book"></i> Resources</h2>
-          <div id="resources"></div>
-          <p id="resourcesEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
-            No resources available yet.
+          <p id="resourcesEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem; font-size: 1rem;">
+            <i class="fas fa-inbox"></i> No resources created yet. Your advisor will upload resources here.
           </p>
+          <div id="resources"></div>
         </div>
       </section>
 
       <!-- Progress Report Section -->
       <section id="progress-report" class="content-section">
         <div class="card">
-          <h2 style="margin-bottom: 1rem;"><i class="fas fa-file-alt"></i> Progress Report</h2>
-          <p style="color: #d1d5db; margin-bottom: 1rem;">
-            View progress reports assigned to you. Only admin can manage the report details and status.
-          </p>
-          <div id="memberProgressReportDetails" style="margin-top: 1.5rem; color: #d1d5db;"></div>
+          <h2 style="margin-bottom: 1rem;"><i class="fas fa-clipboard-check"></i> Progress Report</h2>
+          
+          <div id="progressReportPanel" style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <p style="color: #94a3b8; text-align: center;">Loading progress report...</p>
+          </div>
         </div>
       </section>
-
     </div>
   </main>
 </div>
@@ -226,59 +213,12 @@ if (savedMemberSection) {
 <footer class="app-footer">
   <div class="footer-right">
     <div class="footer-appname">My Collab</div>
-    <div class="footer-credit">Created by John Paul Bugayong</div>
+    <div class="footer-credit">Collaboration Platform<br>Created by John Paul Bugayong</div>
   </div>
 </footer>
 
 <script>
-// Navigation functions
-function showSection(sectionId) {
-  // Hide all sections
-  const sections = document.querySelectorAll('.content-section');
-  sections.forEach(section => section.classList.remove('active'));
-  
-  // Show selected section
-  const targetSection = document.getElementById(sectionId);
-  if (targetSection) {
-    targetSection.classList.add('active');
-    
-    // Handle video conference section
-    if (sectionId === 'video-conference') {
-      loadMeetings();
-    }
-  }
-  
-  // Update active nav button
-  const navButtons = document.querySelectorAll('.nav-btn');
-  navButtons.forEach(btn => btn.classList.remove('active'));
-  
-  // Find and activate the corresponding nav button
-  const activeBtn = document.querySelector(`[onclick="showSection('${sectionId}')"]`);
-  if (activeBtn) {
-    activeBtn.classList.add('active');
-  }
-  
-  // Update page title
-  const titles = {
-    'my-tasks': '<i class="fas fa-clipboard-list"></i> My Tasks',
-    'ticket-history': '<i class="fas fa-ticket-alt"></i> Ticket History',
-    'active-polls': '<i class="fas fa-chart-bar"></i> Active Polls',
-    'announcements': '<i class="fas fa-bullhorn"></i> Announcements',
-    'submit-ticket': '<i class="fas fa-paper-plane"></i> Submit Ticket',
-    'video-conference': '<i class="fas fa-video"></i> Video Conference',
-    'watch-together': '<i class="fas fa-tv"></i> Watch Together',
-    'resources': '<i class="fas fa-book"></i> Resources',
-    'progress-report': '<i class="fas fa-file-alt"></i> Progress Report'
-  };
-  
-  const pageTitle = document.getElementById('page-title');
-  if (pageTitle && titles[sectionId]) {
-    pageTitle.innerHTML = titles[sectionId];
-  }
-  
-  // Close mobile sidebar after selection
-  closeMobileSidebar();
-}
+// Navigation functions (using updated version below)
 
 function toggleSidebar() {
   const sidebar = document.querySelector('.sidebar');
@@ -310,7 +250,6 @@ function closeMobileSidebar() {
   await requireAuth(['member', 'admin']);
 </script>
 <script type="module" src="member.js?v=6"></script>
-<script type="module" src="watchtogether.js"></script>
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js");
@@ -431,13 +370,27 @@ function showSection(sectionId) {
     'announcements': '<i class="fas fa-bullhorn"></i> Announcements',
     'submit-ticket': '<i class="fas fa-headset"></i> Submit Ticket',
     'video-conference': '<i class="fas fa-video"></i> Video Conference',
+    'live-chat': '<i class="fas fa-comments"></i> Live Chat',
     'resources': '<i class="fas fa-book"></i> Resources',
-    'progress-report': '<i class="fas fa-file-alt"></i> Progress Report'
+    'my-progress': '<i class="fas fa-chart-line"></i> My Progress',
+    'progress-report': '<i class="fas fa-clipboard-check"></i> Progress Report'
   };
   
   const pageTitle = document.getElementById('page-title');
   if (pageTitle && titles[sectionId]) {
     pageTitle.innerHTML = titles[sectionId];
+  }
+
+  if (sectionId === 'live-chat') {
+    if (typeof loadChatRooms === 'function') {
+      loadChatRooms();
+    }
+  }
+
+  if (sectionId === 'progress-report') {
+    if (typeof loadProgressReport === 'function') {
+      loadProgressReport();
+    }
   }
   
   // Close mobile sidebar after selection
@@ -447,4 +400,3 @@ function showSection(sectionId) {
 
 </body>
 </html>
-

@@ -8,6 +8,14 @@ window.signOutUser = signOutUser;
 
 let userEmail = null;
 let meetingsUnsubscribe = null;
+let chatRoomsUnsubscribe = null;
+let chatMessagesUnsubscribe = null;
+let selectedChatId = null;
+let chatRoomsById = {};
+let chatMessagesById = {};
+let replyToMessage = null;
+let selectedChatImageData = null;
+let selectedChatImageName = null;
 const container = document.getElementById("tasks");
 const emptyState = document.getElementById("emptyState");
 const welcomeEl = document.getElementById("welcome");
@@ -17,90 +25,338 @@ const pollsEmptyState = document.getElementById("pollsEmptyState");
 const announcementsContainer = document.getElementById("announcements");
 const announcementsEmptyState = document.getElementById("announcementsEmptyState");
 
-const members = [
-  { uid: "everyone", name: "Everyone" },
-  { uid: "kingfordnabor@gmail.com", name: "Kingford Nabor" },
-  { uid: "allancorral@gmail.com", name: "Allan Corral" },
-  { uid: "phricksborebor@gmail.com", name: "Phricks Borebor" },
-  { uid: "moezarperez@gmail.com", name: "Moezar Perez" },
-  { uid: "rogelioledda@gmail.com", name: "Rogelio Ledda" }
+let members = [
+  { uid: "everyone", name: "Everyone" }
 ];
 
+let mentionUsers = [];
+
+const membersCollection = "members";
+const progressCollection = "memberProgress";
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
 function getUserName(email) {
-  const member = members.find(m => m.uid === email);
+  const normalized = normalizeEmail(email);
+  const member = members.find(m => normalizeEmail(m.uid) === normalized);
   return member ? member.name : email;
 }
 
-async function getMemberDisplayName(email) {
-  const hardcodedMember = members.find(m => m.uid === email);
-  if (hardcodedMember) {
-    return hardcodedMember.name;
-  }
-
+// Load members from Firestore
+async function loadMembersFromFirestore() {
   try {
-    const memberRef = doc(db, "members", email);
-    const docSnap = await getDoc(memberRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      if (data && data.name) {
-        return data.name;
-      }
-    }
+    const querySnapshot = await getDocs(collection(db, membersCollection));
+    const firestoreMembers = [];
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      firestoreMembers.push({
+        uid: data.email,
+        name: data.name,
+        email: data.email,
+        role: data.role
+      });
+    });
+    
+    // Update members array
+    members = [
+      { uid: "everyone", name: "Everyone" },
+      ...firestoreMembers
+    ];
+    
+    // Update mention users
+    mentionUsers = members.filter(m => m.uid !== 'everyone').map(m => ({ uid: m.uid, name: m.name }));
+    
+    // Update the assign to dropdown if it exists
+    populateAssignToDropdown();
+    
+    console.log('Members loaded from Firestore:', members);
   } catch (error) {
-    console.warn('Could not fetch member name from Firestore:', error);
+    console.error('Error loading members from Firestore:', error);
   }
-
-  return email;
 }
 
-function renderMemberProgressReports(reports) {
-  const details = document.getElementById("memberProgressReportDetails");
-  if (!details) return;
-
-  if (!Array.isArray(reports) || reports.length === 0) {
-    details.innerHTML = `<p style="color: #94a3b8;">No progress reports have been created by the admin yet.</p>`;
-    return;
+// Populate assign to dropdown with member names
+function populateAssignToDropdown() {
+  const assignToSelect = document.getElementById("progressAssignedTo");
+  if (!assignToSelect) return;
+  
+  // Get current value to restore after updating
+  const currentValue = assignToSelect.value;
+  
+  // Clear existing options except the first one
+  while (assignToSelect.options.length > 1) {
+    assignToSelect.remove(1);
   }
+  
+  // Add member names to dropdown
+  members.forEach(member => {
+    if (member.uid !== 'everyone') {
+      const option = document.createElement('option');
+      option.value = member.name;
+      option.textContent = member.name;
+      assignToSelect.appendChild(option);
+    }
+  });
+  
+  // Restore previous value if it still exists
+  if (currentValue && Array.from(assignToSelect.options).some(opt => opt.value === currentValue)) {
+    assignToSelect.value = currentValue;
+  }
+}
 
-  details.innerHTML = reports.map(report => {
-    const statusColor = report.status === "Completed" ? "#22c55e" : report.status === "Pending" ? "#f59e0b" : "#94a3b8";
-    const createdDate = report.createdAt ? new Date(report.createdAt.seconds ? report.createdAt.seconds * 1000 : report.createdAt).toLocaleDateString() : "N/A";
-    const updatedDate = report.updatedAt ? new Date(report.updatedAt.seconds ? report.updatedAt.seconds * 1000 : report.updatedAt).toLocaleDateString() : "N/A";
-    return `
-      <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.75rem; background: #111827;">
-        <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; flex-wrap: wrap;">
-          <div style="flex: 1; min-width: 220px;">
-            <h3 style="margin: 0 0 0.5rem 0; color: #f8fafc;">${report.title || "Unnamed Report"}</h3>
-            <p style="margin: 0 0 0.5rem 0; color: #cbd5e1;">${report.description || "No description provided."}</p>
-            <p style="margin: 0.35rem 0; color: #94a3b8; font-size: 0.9rem;"><strong>Assigned to:</strong> ${report.assignedName || report.assignedTo || "Everyone"}</p>
-            <p style="margin: 0.35rem 0; color: #94a3b8; font-size: 0.9rem;"><strong>Created:</strong> ${createdDate}</p>
-            <p style="margin: 0.35rem 0; color: #94a3b8; font-size: 0.9rem;"><strong>Last updated:</strong> ${updatedDate}</p>
-          </div>
-          <div style="display: flex; align-items: center; gap: 0.5rem; white-space: nowrap;">
-            <span style="font-weight: 700; color: ${statusColor};">${report.status || "Not Started"}</span>
-          </div>
-        </div>
+// Real-time listener for members - updates UI automatically when members change
+let membersUnsubscribe = null;
+function initializeMembersListener() {
+  if (membersUnsubscribe) {
+    membersUnsubscribe(); // Unsubscribe from previous listener if exists
+  }
+  
+  membersUnsubscribe = onSnapshot(collection(db, membersCollection), (snapshot) => {
+    const firestoreMembers = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      firestoreMembers.push({
+        uid: data.email,
+        name: data.name,
+        email: data.email,
+        role: data.role
+      });
+    });
+    
+    // Update members array
+    members = [
+      { uid: "everyone", name: "Everyone" },
+      ...firestoreMembers
+    ];
+    
+    // Update mention users
+    mentionUsers = members.filter(m => m.uid !== 'everyone').map(m => ({ uid: m.uid, name: m.name }));
+    
+    // Update the assign to dropdown if it exists
+    populateAssignToDropdown();
+    
+    // Update welcome message with member name
+    const welcomeEl = document.getElementById("welcome");
+    if (welcomeEl && userEmail) {
+      welcomeEl.textContent = `Welcome, ${getUserName(userEmail)}`;
+    }
+    
+    console.log('Members updated from Firestore (real-time):', members);
+  }, (error) => {
+    console.error('Error listening to members:', error);
+  });
+}
+
+// Real-time listener for progress reports - updates automatically when admin makes changes
+let progressReportUnsubscribe = null;
+function initializeProgressReportListener() {
+  console.log('=== INITIALIZE PROGRESS REPORT LISTENER (MEMBER) ===');
+  
+  if (progressReportUnsubscribe) {
+    console.log('Unsubscribing from previous listener');
+    progressReportUnsubscribe();
+  }
+  
+  const progressReportCollection = "progressReports";
+  const progressReportDocId = "thesisProgress";
+  
+  console.log('Setting up real-time listener for:', progressReportCollection, progressReportDocId);
+  
+  progressReportUnsubscribe = onSnapshot(doc(db, progressReportCollection, progressReportDocId), (docSnap) => {
+    console.log('📡 Member progress report listener triggered!');
+    console.log('Document exists:', docSnap.exists());
+    
+    if (docSnap.exists()) {
+      console.log('Document data received, calling window.loadProgressReport()');
+      try {
+        window.loadProgressReport().catch(err => {
+          console.error('❌ Error in loadProgressReport promise:', err);
+        });
+      } catch (err) {
+        console.error('❌ Caught error calling loadProgressReport:', err);
+        console.error('Error stack:', err.stack);
+      }
+    } else {
+      console.log('Progress report document does not exist');
+    }
+  }, (error) => {
+    console.error('❌ Error listening to progress report:', error);
+  });
+  
+  console.log('✅ Member real-time listener initialized');
+}
+
+window.initializeProgressReportListener = initializeProgressReportListener;
+
+// Save progress update
+// Load and display progress report assigned to member
+window.loadProgressReport = async function() {
+  try {
+    console.log('=== LOAD PROGRESS REPORT CALLED (MEMBER) ===');
+    console.log('Current userEmail:', userEmail);
+    
+    // Helper function to get status color
+    const getStatusColor = (status) => {
+      switch(status) {
+        case 'Completed':
+          return '#10b981'; // Green
+        case 'Pending':
+          return '#f59e0b'; // Amber/Orange
+        case 'Not Started':
+        default:
+          return '#94a3b8'; // Gray-blue
+      }
+    };
+    
+    // If userEmail is not set yet, retry in a moment
+    if (!userEmail) {
+      console.log('userEmail not set yet, retrying in 500ms');
+      setTimeout(() => {
+        window.loadProgressReport();
+      }, 500);
+      return;
+    }
+    
+    const progressReportCollection = "progressReports";
+    const progressReportDocId = "thesisProgress";
+    
+    console.log('Fetching progress report from:', progressReportCollection, progressReportDocId);
+    
+    const docRef = doc(db, progressReportCollection, progressReportDocId);
+    const docSnap = await getDoc(docRef);
+    
+    console.log('Document exists:', docSnap.exists());
+    
+    if (!docSnap.exists()) {
+      console.log('Progress report document does not exist');
+      const panel = document.getElementById("progressReportPanel");
+      if (panel) {
+        panel.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No progress report available yet. Your advisor will create one for you.</p>';
+      }
+      return;
+    }
+    
+    const data = docSnap.data();
+    console.log('Document data:', data);
+    
+    if (!data.sections) {
+      console.log('No sections in progress report');
+      const panel = document.getElementById("progressReportPanel");
+      if (panel) {
+        panel.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No progress report available yet. Your advisor will create one for you.</p>';
+      }
+      return;
+    }
+    
+    const allSections = data.sections || [];
+    console.log('All sections from Firestore:', allSections);
+    
+    // Display all progress report items to all members (no filtering by assignment)
+    const assignedItems = [];
+    allSections.forEach((section, sectionIndex) => {
+      if (Array.isArray(section.items)) {
+        section.items.forEach((item, itemIndex) => {
+          console.log(`Adding item "${item.name}" to display list`);
+          assignedItems.push({
+            name: item.name,
+            section: section.title,
+            status: item.status,
+            sectionIndex,
+            itemIndex
+          });
+        });
+      }
+    });
+    
+    console.log('✅ Total items to display:', assignedItems.length);
+    
+    const panel = document.getElementById("progressReportPanel");
+    if (!panel) {
+      console.warn('Progress report panel not found in DOM');
+      return;
+    }
+    
+    if (assignedItems.length === 0) {
+      console.log('No items found to display');
+      panel.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No progress report items yet.</p>';
+      return;
+    }
+    
+    // Render as card layout
+    panel.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 1rem;">
+        ${assignedItems.map((item) => {
+          const assignedToNames = Array.isArray(item.assignedTo) ? item.assignedTo.map(id => {
+            const member = members.find(m => m.uid === id);
+            return member ? member.name : id;
+          }).join(', ') : (item.assignedTo || 'Unassigned');
+          
+          return `
+            <div style="background: #111827; border: 1px solid #374151; border-radius: 0.5rem; padding: 1.5rem; display: flex; justify-content: space-between; align-items: flex-start;">
+              <div style="flex: 1;">
+                <div style="color: #d1d5db; font-weight: 600; font-size: 1.1rem; margin-bottom: 0.5rem;">${item.name}</div>
+                <div style="color: #6b7280; font-size: 0.85rem; margin-bottom: 0.75rem;">${item.section}</div>
+                <div style="color: #9ca3af; font-size: 0.9rem;">
+                  <span style="color: #6b7280;">Assigned to:</span>
+                  <span style="color: #cbd5e1; margin-left: 0.5rem;">${assignedToNames}</span>
+                </div>
+              </div>
+              <div style="text-align: right; margin-left: 1rem;">
+                <div style="color: ${getStatusColor(item.status || 'Not Started')}; font-weight: 600; font-size: 0.95rem;">${item.status || 'Not Started'}</div>
+              </div>
+            </div>
+          `;
+        }).join('')}
       </div>
     `;
-  }).join("");
-}
-
-async function loadMemberProgressReports() {
-  const details = document.getElementById("memberProgressReportDetails");
-  if (!details) return;
-
-  try {
-    const snapshot = await getDocs(collection(db, "progressReports"));
-    const reports = [];
-    snapshot.forEach(docSnap => reports.push({ id: docSnap.id, ...docSnap.data() }));
-    renderMemberProgressReports(reports);
+    console.log('✅ Progress report rendered successfully');
   } catch (error) {
-    console.error("Error loading member progress reports:", error);
-    if (details) {
-      details.innerHTML = `<p style="color: #ef4444;">Unable to load progress report status. Please refresh the page.</p>`;
+    console.error('❌ Error loading progress report:', error);
+    console.error('Error stack:', error.stack);
+    const panel = document.getElementById("progressReportPanel");
+    if (panel) {
+      panel.innerHTML = '<p style="color: #f87171;">Error loading progress report. Please try again.</p>';
     }
   }
-}
+};
+
+// Manual refresh function for testing
+window.refreshProgressReport = function() {
+  console.log('🔄 Manual refresh of progress report triggered');
+  loadProgressReport();
+};
+
+// Update task status in progress report
+window.updateTaskStatus = async function(sectionIndex, itemIndex) {
+  try {
+    const statusSelect = document.getElementById(`status-${sectionIndex}-${itemIndex}`);
+    const newStatus = statusSelect.value;
+    
+    const progressReportCollection = "progressReports";
+    const progressReportDocId = "thesisProgress";
+    
+    const docRef = doc(db, progressReportCollection, progressReportDocId);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) return;
+    
+    const sections = docSnap.data().sections || [];
+    
+    // Update the status directly using sectionIndex and itemIndex
+    if (sections[sectionIndex] && sections[sectionIndex].items && sections[sectionIndex].items[itemIndex]) {
+      sections[sectionIndex].items[itemIndex].status = newStatus;
+    }
+    
+    // Save updated sections
+    await setDoc(doc(db, progressReportCollection, progressReportDocId), { sections }, { merge: true });
+    console.log('Task status updated successfully');
+  } catch (error) {
+    console.error('Error updating task status:', error);
+    alert('Error updating status: ' + error.message);
+  }
+};
 
 function getDeadlineWarning(deadlineStr, status) {
   if (status === "done" || status === "pending validation") return { class: "", message: "" };
@@ -129,6 +385,10 @@ function getSafePollVotes(poll) {
   const votes = poll.votes || {};
   return typeof votes === 'object' && votes !== null ? votes : {};
 }
+
+function renderMemberProgressReport(sections) {}
+
+function mergeProgressStructures(defaultSections, savedSections) {}
 
 window.markDone = async function (id) {
   try {
@@ -289,11 +549,11 @@ function loadPolls() {
               <span>${option}</span>
               <div style="display: flex; align-items: center; gap: 0.5rem;">
                 <span>${optionVotes} votes (${percentage}%)</span>
-                ${!userVoted ? `<button onclick="votePoll('${doc.id}', ${index})" style="background: #4f46e5; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer;">Vote</button>` : ''}
+                ${!userVoted ? `<button onclick="votePoll('${doc.id}', ${index})" style="background: #3b82f6; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer;">Vote</button>` : ''}
               </div>
             </div>
             <div style="width: 100%; height: 8px; background: #374151; border-radius: 4px; margin-top: 0.25rem;">
-              <div style="width: ${percentage}%; height: 100%; background: ${isUserVote ? '#10b981' : '#4f46e5'}; border-radius: 4px;"></div>
+              <div style="width: ${percentage}%; height: 100%; background: ${isUserVote ? '#10b981' : '#3b82f6'}; border-radius: 4px;"></div>
             </div>
           </div>
         `;
@@ -431,7 +691,7 @@ function loadAnnouncements() {
             ${commentHtml}
             ${commentsEnabled ? `
               <textarea id="commentInput-${doc.id}" rows="3" placeholder="Write a comment..." style="width: 100%; padding: 0.75rem; border-radius: 0.375rem; border: 1px solid #4b5563; background: #111827; color: #f3f4f6; margin-bottom: 0.75rem;"></textarea>
-              <button onclick="addAnnouncementComment('${doc.id}')" style="background: #4f46e5; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer;">Post Comment</button>
+              <button onclick="addAnnouncementComment('${doc.id}')" style="background: #3b82f6; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer;">Post Comment</button>
             ` : `<p style="color: #f59e0b; margin-top: 0.5rem;">Comments are disabled for this announcement.</p>`}
           </div>
         </div>
@@ -456,14 +716,23 @@ function loadResources() {
   onSnapshot(collection(db, "resources"), (snap) => {
     console.log('=== MEMBER RESOURCES LISTENER TRIGGERED ===');
     console.log('Resources snapshot received, docs count:', snap.size);
+    
+    // Clear container
     container.innerHTML = "";
 
+    // Show/hide empty state based on whether resources exist
     if (emptyState) {
-      emptyState.style.display = snap.empty ? "block" : "none";
+      if (snap.empty) {
+        emptyState.style.display = "block";
+        console.log('No resources - showing empty state');
+        return;
+      } else {
+        emptyState.style.display = "none";
+        console.log('Resources found - hiding empty state');
+      }
     }
 
     if (snap.empty) {
-      container.innerHTML = "";
       return;
     }
 
@@ -506,23 +775,33 @@ function loadMeetings() {
     meetingsUnsubscribe();
   }
 
-  const meetingsQuery = query(collection(db, 'meetings'), where('assignedTo', 'in', [userEmail, 'everyone']));
-  meetingsUnsubscribe = onSnapshot(meetingsQuery, (snapshot) => {
-    const meetings = [];
-    snapshot.forEach(docSnap => {
-      meetings.push({ id: docSnap.id, ...docSnap.data() });
-    });
+  try {
+    const meetingsQuery = query(collection(db, 'meetings'), where('assignedTo', 'in', [userEmail, 'everyone']));
+    meetingsUnsubscribe = onSnapshot(meetingsQuery, (snapshot) => {
+      const meetings = [];
+      snapshot.forEach(docSnap => {
+        meetings.push({ id: docSnap.id, ...docSnap.data() });
+      });
 
-    meetings.sort((a, b) => {
-      const aDate = new Date(`${a.date}T${a.time}`);
-      const bDate = new Date(`${b.date}T${b.time}`);
-      return aDate - bDate;
-    });
+      meetings.sort((a, b) => {
+        const aDate = new Date(`${a.date}T${a.time}`);
+        const bDate = new Date(`${b.date}T${b.time}`);
+        return aDate - bDate;
+      });
 
-    renderMeetings(meetings);
-  }, (error) => {
-    console.error('Meetings listener error:', error);
-  });
+      renderMeetings(meetings);
+    }, (error) => {
+      console.error('Meetings listener error:', error);
+      // If permission error, show empty state
+      if (error.code === 'permission-denied') {
+        console.log('Meetings collection not yet accessible - showing empty state');
+        renderMeetings([]);
+      }
+    });
+  } catch (error) {
+    console.error('Error setting up meetings listener:', error);
+    renderMeetings([]);
+  }
 }
 
 window.loadMeetings = loadMeetings;
@@ -565,7 +844,7 @@ function renderMeetings(meetings) {
     const canJoin = !isUpcoming;
 
     let status = 'Upcoming';
-    let statusColor = '#4f46e5';
+    let statusColor = '#3b82f6';
 
     if (isOngoing) {
       status = 'Ongoing';
@@ -605,6 +884,655 @@ window.joinScheduledMeeting = function(roomName) {
 
   initializeJitsiConference(roomName);
 };
+
+function getChatRoomDisplayName(email) {
+  return getUserName(email) || email;
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatMessageWithMentions(text) {
+  return text.replace(/@\[([^\]]+)\]/g, '<span class="mention">@$1</span>');
+}
+
+function getMentionContext(input) {
+  const cursor = input.selectionStart;
+  const value = input.value;
+  const before = value.slice(0, cursor);
+  const atIndex = before.lastIndexOf('@');
+  if (atIndex === -1) return null;
+
+  const prefix = before.slice(atIndex + 1);
+  if (/\s/.test(prefix)) return null;
+  if (atIndex > 0 && /[^\s]/.test(before[atIndex - 1])) return null;
+
+  return {
+    start: atIndex,
+    query: prefix.toLowerCase()
+  };
+}
+
+function updateMentionDropdown(input, dropdown) {
+  const context = getMentionContext(input);
+  if (!context) {
+    dropdown.style.display = 'none';
+    return;
+  }
+
+  const filtered = mentionUsers.filter((user) => {
+    const search = `${user.name} ${user.uid}`.toLowerCase();
+    return search.includes(context.query);
+  });
+
+  if (filtered.length === 0) {
+    dropdown.innerHTML = '<div class="mention-item">No matching members found</div>';
+    dropdown.style.display = 'block';
+    return;
+  }
+
+  dropdown.innerHTML = filtered.map((user) => `
+    <div class="mention-item" data-name="${escapeHtml(user.name)}">
+      <strong>${escapeHtml(user.name)}</strong>
+      <span class="mention-email">${escapeHtml(user.uid)}</span>
+    </div>
+  `).join('');
+  dropdown.style.display = 'block';
+}
+
+function insertMentionAtCursor(input, dropdown, name) {
+  const cursor = input.selectionStart;
+  const value = input.value;
+  const before = value.slice(0, cursor);
+  const atIndex = before.lastIndexOf('@');
+  if (atIndex === -1) return;
+
+  const token = `@[${name}] `;
+  const newValue = value.slice(0, atIndex) + token + value.slice(cursor);
+  input.value = newValue;
+  const newCursor = atIndex + token.length;
+  input.setSelectionRange(newCursor, newCursor);
+  input.focus();
+  dropdown.style.display = 'none';
+}
+
+function setupMentionAutocomplete(inputId, dropdownId) {
+  const input = document.getElementById(inputId);
+  const dropdown = document.getElementById(dropdownId);
+  if (!input || !dropdown) return;
+
+  input.addEventListener('input', () => updateMentionDropdown(input, dropdown));
+
+  dropdown.addEventListener('click', (event) => {
+    const item = event.target.closest('.mention-item');
+    if (!item) return;
+    const name = item.dataset.name;
+    insertMentionAtCursor(input, dropdown, name);
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!input.contains(event.target) && !dropdown.contains(event.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
+}
+
+async function getNextLiveChatTitle() {
+  const snapshot = await getDocs(collection(db, 'liveChats'));
+  let maxIndex = 0;
+  snapshot.forEach((docSnap) => {
+    const title = String(docSnap.data().title || '').trim();
+    const match = title.match(/^live\s*chat\s*(\d+)$/i);
+    if (match) {
+      maxIndex = Math.max(maxIndex, Number(match[1]));
+    }
+  });
+  return `Livechat ${maxIndex + 1}`;
+}
+
+async function createLiveChatRoom(event) {
+  if (event && event.preventDefault) event.preventDefault();
+  let title = await getNextLiveChatTitle();
+
+  const currentEmail = userEmail || await getStoredUserEmail();
+  const chatRoom = {
+    title,
+    createdByEmail: currentEmail,
+    createdByName: getUserName(currentEmail),
+    status: 'Active',
+    createdAt: Date.now()
+  };
+
+  try {
+    await addDoc(collection(db, 'liveChats'), chatRoom);
+    loadChatRooms();
+  } catch (error) {
+    console.error('Failed to create live chat room:', error);
+    alert('Unable to create chat room. Please try again.');
+  }
+}
+
+function renderChatRooms(chatRooms) {
+  const container = document.getElementById('chatRoomsContainer');
+  if (!container) return;
+
+  if (!chatRooms || chatRooms.length === 0) {
+    container.innerHTML = '<p style="color: #94a3b8; text-align: center;">No live chat rooms available yet.</p>';
+    return;
+  }
+
+  chatRooms.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  chatRoomsById = {};
+  container.innerHTML = '';
+
+  chatRooms.forEach((room) => {
+    chatRoomsById[room.id] = room;
+    const roomDiv = document.createElement('div');
+    roomDiv.style.cssText = 'border: 1px solid #374151; background: #1e293b; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;';
+    const createdBy = room.createdByName || getUserName(room.createdByEmail) || 'Unknown';
+    const statusColor = room.status === 'Closed' ? '#ef4444' : '#10b981';
+    const isActive = room.status === 'Active';
+
+    roomDiv.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem;">
+        <div style="min-width: 0;">
+          <h4 style="margin: 0; color: #f8fafc;">${room.title}</h4>
+          <p style="margin: 0.5rem 0 0; color: #94a3b8; font-size: 0.9rem;">Created by ${createdBy}</p>
+        </div>
+        <span style="background: ${statusColor}; color: white; padding: 0.35rem 0.75rem; border-radius: 9999px; font-size: 0.8rem;">${room.status || 'Active'}</span>
+      </div>
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+        <button onclick="openChatRoom('${room.id}')" style="background: ${isActive ? '#10b981' : '#6b7280'}; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">${isActive ? 'Open Chat' : 'View Chat'}</button>
+      </div>
+    `;
+
+    container.appendChild(roomDiv);
+  });
+}
+
+function renderChatMessages(messages) {
+  const chatMessagesEl = document.getElementById('chatMessages');
+  if (!chatMessagesEl) return;
+
+  if (!messages || messages.length === 0) {
+    chatMessagesEl.innerHTML = '<p style="color: #94a3b8; text-align: center; margin: 1rem 0;">No messages yet. Start the conversation!</p>';
+    return;
+  }
+
+  chatMessagesEl.innerHTML = '';
+  messages.forEach((msg) => {
+    chatMessagesById[msg.id] = msg;
+    const msgDiv = document.createElement('div');
+    msgDiv.style.cssText = 'padding: 0.85rem 1rem; border-radius: 10px; margin-bottom: 0.75rem; background: #111827;';
+    const sender = msg.senderName || getUserName(msg.senderEmail) || 'Unknown';
+    const timestamp = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const messageText = msg.deleted ? 'This message was unsent.' : msg.text;
+    const safeText = escapeHtml(messageText);
+    const renderedText = msg.deleted ? safeText : formatMessageWithMentions(safeText);
+    const imageMarkup = !msg.deleted && msg.imageData ? `<div style="margin-bottom: 0.75rem;"><img class="chat-image" src="${msg.imageData}" alt="Sent image" style="width: auto; max-width: 100%; max-height: 280px; border-radius: 14px; object-fit: cover; display: block; cursor: pointer;"/></div>` : '';
+    const opacity = msg.deleted ? '0.7' : '1';
+    const isOwnMessage = msg.senderEmail === userEmail;
+    const replyPreview = msg.replyToId ? `
+      <div style="padding: 0.75rem 1rem; margin-bottom: 0.75rem; border-radius: 12px; background: #0f172a; border: 1px solid #374151;">
+        <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.25rem;">Replying to ${escapeHtml(msg.replyToSenderName || 'Unknown')}</div>
+        <div style="font-size: 0.9rem; color: #e5e7eb; line-height: 1.4;">${escapeHtml(msg.replyToText || '')}</div>
+      </div>
+    ` : '';
+    const buttonBaseStyle = 'display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;';
+    const replyButton = !msg.deleted ? `<button type="button" onclick="setReplyToMessage('${msg.id}')" style="${buttonBaseStyle}">Reply</button>` : '';
+    const unsendButton = isOwnMessage && !msg.deleted ? `<button type="button" onclick="unsendChatMessage('${selectedChatId}', '${msg.id}')" style="${buttonBaseStyle}">Unsend</button>` : '';
+    const actionButtons = [replyButton, unsendButton].filter(Boolean).join('<span style="margin: 0 0.35rem; color: #374151;">|</span>');
+
+    msgDiv.innerHTML = `
+      ${replyPreview}
+      <div style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem; opacity: ${opacity};">
+        <div style="font-size: 0.85rem; color: #94a3b8;">${escapeHtml(sender)}</div>
+        <div style="font-size: 0.75rem; color: #6b7280;">${timestamp}</div>
+      </div>
+      <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; margin-bottom: 0.5rem;">${imageMarkup}${renderedText}</div>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; margin-bottom: ${msg.reactions && Object.keys(msg.reactions).length > 0 ? '0.5rem' : '0'};">
+        ${actionButtons ? `<div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">${actionButtons}</div>` : ''}
+        <button type="button" class="chat-react-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">😊 React</button>
+      </div>
+      ${msg.reactions && Object.keys(msg.reactions).length > 0 ? `
+        <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; padding-top: 0.5rem; border-top: 1px solid #374151;">
+          ${Object.entries(msg.reactions).map(([emoji, users]) => `
+            <div class="chat-reaction-badge" data-message-id="${msg.id}" data-emoji="${emoji}" data-users='${JSON.stringify(users)}' style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.2); border-radius: 9999px; font-size: 0.8rem; cursor: pointer; transition: all 0.15s;">
+              <span>${emoji}</span>
+              <span style="color: #94a3b8;">${users.length}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+    `;
+
+    chatMessagesEl.appendChild(msgDiv);
+  });
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+
+  // Attach click listeners to chat images
+  const chatImages = chatMessagesEl.querySelectorAll('.chat-image');
+  chatImages.forEach(img => {
+    img.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openChatImageFullscreen(this.src);
+    });
+  });
+
+  // Attach click listeners to reaction buttons
+  const reactBtns = chatMessagesEl.querySelectorAll('.chat-react-btn');
+  reactBtns.forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const messageId = this.dataset.messageId;
+      showReactionMenu(messageId, e);
+    });
+  });
+
+  // Attach click listeners to reaction badges to view details
+  const reactionBadges = chatMessagesEl.querySelectorAll('.chat-reaction-badge');
+  reactionBadges.forEach(badge => {
+    badge.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const messageId = this.dataset.messageId;
+      const emoji = this.dataset.emoji;
+      const users = JSON.parse(this.dataset.users);
+      showReactionDetails(emoji, users);
+    });
+    badge.addEventListener('mouseover', function() {
+      this.style.background = 'rgba(96, 165, 250, 0.2)';
+    });
+    badge.addEventListener('mouseout', function() {
+      this.style.background = 'rgba(96, 165, 250, 0.1)';
+    });
+  });
+}
+
+function openChatRoom(chatId) {
+  const chatRoom = chatRoomsById[chatId];
+  if (!chatRoom) return;
+
+  selectedChatId = chatId;
+
+  const panel = document.getElementById('chatRoomPanel');
+  const titleEl = document.getElementById('activeChatTitle');
+  const metaEl = document.getElementById('activeChatMeta');
+  const messageInput = document.getElementById('chatMessageInput');
+  const messageForm = document.getElementById('chatMessageForm');
+
+  if (panel) panel.style.display = 'block';
+  if (titleEl) titleEl.textContent = chatRoom.title;
+  if (metaEl) metaEl.textContent = `Created by ${chatRoom.createdByName || getUserName(chatRoom.createdByEmail)} • Status: ${chatRoom.status}`;
+  if (messageInput) messageInput.disabled = chatRoom.status !== 'Active';
+  if (messageForm) messageForm.style.opacity = chatRoom.status !== 'Active' ? '0.7' : '1';
+
+  clearReplyToMessage();
+  subscribeChatMessages(chatId);
+}
+
+function closeChatRoomPanel() {
+  const panel = document.getElementById('chatRoomPanel');
+  if (panel) panel.style.display = 'none';
+
+  if (chatMessagesUnsubscribe) {
+    chatMessagesUnsubscribe();
+    chatMessagesUnsubscribe = null;
+  }
+
+  selectedChatId = null;
+  clearReplyToMessage();
+}
+
+function clearReplyToMessage() {
+  replyToMessage = null;
+  updateReplyPreview();
+}
+
+function updateReplyPreview() {
+  const preview = document.getElementById('chatReplyPreview');
+  const input = document.getElementById('chatMessageInput');
+  if (!preview || !input) return;
+
+  if (!replyToMessage) {
+    preview.style.display = 'none';
+    preview.innerHTML = '';
+    return;
+  }
+
+  const sender = escapeHtml(replyToMessage.senderName || getUserName(replyToMessage.senderEmail) || 'Unknown');
+  const text = escapeHtml(replyToMessage.text || 'This message was unsent.');
+  preview.style.display = 'flex';
+  preview.style.justifyContent = 'space-between';
+  preview.style.alignItems = 'center';
+  preview.style.gap = '1rem';
+  preview.innerHTML = `
+    <div style="min-width: 0;">
+      <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.25rem;">Replying to ${sender}</div>
+      <div style="font-size: 0.9rem; color: #e5e7eb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${text}</div>
+    </div>
+    <button type="button" onclick="clearReplyToMessage()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">Cancel</button>
+  `;
+}
+
+function updateChatImagePreview() {
+  const preview = document.getElementById('chatImagePreview');
+  if (!preview) return;
+
+  if (!selectedChatImageData) {
+    preview.style.display = 'none';
+    preview.innerHTML = '';
+    return;
+  }
+
+  preview.style.display = 'block';
+  preview.style.padding = '0.75rem 0.85rem';
+  preview.style.borderRadius = '12px';
+  preview.style.border = '1px solid #374151';
+  preview.style.background = '#0f172a';
+  preview.style.color = '#e5e7eb';
+  preview.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 0.75rem; min-width: 0; overflow: hidden;">
+        <img src="${selectedChatImageData}" alt="Selected image" style="max-width: 72px; max-height: 72px; border-radius: 12px; object-fit: cover;" />
+        <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(selectedChatImageName || 'Selected image')}</div>
+      </div>
+      <button type="button" onclick="clearChatImageSelection()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">Remove</button>
+    </div>
+  `;
+}
+
+function openChatImageFullscreen(imageSrc) {
+  let overlay = document.getElementById('chatImageFullscreenOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'chatImageFullscreenOverlay';
+    overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(15, 23, 42, 0.96); display: flex; align-items: center; justify-content: center; z-index: 100000; padding: 1rem; box-sizing: border-box;';
+    overlay.onclick = (event) => { if (event.target === overlay) closeChatImageFullscreen(); };
+    const img = document.createElement('img');
+    img.id = 'chatImageFullscreenOverlayImg';
+    img.style.cssText = 'max-width: 100%; max-height: 100%; border-radius: 16px; box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.innerText = '×';
+    close.style.cssText = 'position: absolute; top: 1rem; right: 1rem; background: rgba(0, 0, 0, 0.55); color: #f8fafc; border: none; border-radius: 9999px; width: 2.5rem; height: 2.5rem; font-size: 1.25rem; cursor: pointer;';
+    close.onclick = (event) => { event.stopPropagation(); closeChatImageFullscreen(); };
+    overlay.appendChild(img);
+    overlay.appendChild(close);
+    document.body.appendChild(overlay);
+  }
+  const img = document.getElementById('chatImageFullscreenOverlayImg');
+  if (img) img.src = imageSrc;
+  overlay.style.display = 'flex';
+}
+
+function closeChatImageFullscreen() {
+  const overlay = document.getElementById('chatImageFullscreenOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function clearChatImageSelection() {
+  selectedChatImageData = null;
+  selectedChatImageName = null;
+  const input = document.getElementById('chatImageInput');
+  if (input) input.value = '';
+  updateChatImagePreview();
+}
+
+function triggerChatImageInput() {
+  const input = document.getElementById('chatImageInput');
+  if (input) input.click();
+}
+
+function handleChatImageInputChange(event) {
+  const file = event.target.files?.[0];
+  if (!file) {
+    clearChatImageSelection();
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    selectedChatImageData = reader.result;
+    selectedChatImageName = file.name;
+    updateChatImagePreview();
+  };
+  reader.readAsDataURL(file);
+}
+
+function setReplyToMessage(messageId) {
+  if (!messageId) return;
+  const msg = chatMessagesById[messageId];
+  if (!msg) return;
+  replyToMessage = msg;
+  updateReplyPreview();
+}
+
+async function subscribeChatMessages(chatId) {
+  if (chatMessagesUnsubscribe) {
+    chatMessagesUnsubscribe();
+  }
+
+  const messagesQuery = query(collection(db, 'liveChats', chatId, 'messages'), orderBy('createdAt', 'asc'));
+  chatMessagesUnsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+    const messages = [];
+    snapshot.forEach((docSnap) => {
+      messages.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    renderChatMessages(messages);
+  }, (error) => {
+    console.error('Chat messages listener error:', error);
+  });
+}
+
+async function sendChatMessage(event) {
+  if (event && event.preventDefault) event.preventDefault();
+  if (!selectedChatId) return;
+
+  const messageInput = document.getElementById('chatMessageInput');
+  if (!messageInput) return;
+  const message = messageInput.value.trim();
+  if (!message && !selectedChatImageData) return;
+
+  const currentEmail = userEmail || await getStoredUserEmail();
+  const messageData = {
+    senderEmail: currentEmail,
+    senderName: getUserName(currentEmail),
+    text: message || '',
+    createdAt: Date.now(),
+    deleted: false
+  };
+
+  if (selectedChatImageData) {
+    messageData.imageData = selectedChatImageData;
+    if (selectedChatImageName) {
+      messageData.imageName = selectedChatImageName;
+    }
+  }
+
+  if (replyToMessage) {
+    messageData.replyToId = replyToMessage.id;
+    messageData.replyToSenderName = replyToMessage.senderName || getUserName(replyToMessage.senderEmail);
+    messageData.replyToText = replyToMessage.text || 'This message was unsent.';
+    messageData.replyToCreatedAt = replyToMessage.createdAt || null;
+  }
+
+  try {
+    await addDoc(collection(db, 'liveChats', selectedChatId, 'messages'), messageData);
+    messageInput.value = '';
+    clearChatImageSelection();
+    clearReplyToMessage();
+  } catch (error) {
+    console.error('Failed to send chat message:', error);
+    alert('Unable to send message. Please try again.');
+  }
+}
+
+async function unsendChatMessage(chatId, messageId) {
+  if (!chatId || !messageId || !userEmail) return;
+
+  const messageRef = doc(db, 'liveChats', chatId, 'messages', messageId);
+  try {
+    await updateDoc(messageRef, {
+      deleted: true,
+      text: 'This message was unsent.',
+      unsentAt: Date.now()
+    });
+  } catch (error) {
+    console.error('Failed to unsend chat message:', error);
+  }
+}
+
+function showReactionDetails(emoji, users) {
+  let modal = document.getElementById('reactionDetailsModal');
+  if (modal) modal.remove();
+
+  modal = document.createElement('div');
+  modal.id = 'reactionDetailsModal';
+  modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 100000; padding: 1rem; box-sizing: border-box;';
+
+  const content = document.createElement('div');
+  content.style.cssText = 'background: #111827; border: 1px solid #374151; border-radius: 16px; padding: 2rem; max-width: 400px; width: 100%; box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);';
+
+  content.innerHTML = `
+    <div style="margin-bottom: 1.5rem;">
+      <div style="font-size: 2.5rem; margin-bottom: 0.5rem; text-align: center;">${emoji}</div>
+      <div style="text-align: center; color: #94a3b8; font-size: 0.9rem;">${users.length} ${users.length === 1 ? 'person reacted' : 'people reacted'}</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; max-height: 300px; overflow-y: auto;">
+      ${users.map(email => `
+        <div style="padding: 0.75rem; background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.2); border-radius: 8px; color: #e5e7eb; font-size: 0.9rem;">
+          ${escapeHtml(getUserName(email) || email)}
+        </div>
+      `).join('')}
+    </div>
+    <button type="button" onclick="document.getElementById('reactionDetailsModal').remove();" style="width: 100%; padding: 0.75rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 0.9rem;">Close</button>
+  `;
+
+  modal.appendChild(content);
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.remove();
+  };
+
+  document.body.appendChild(modal);
+}
+
+function showReactionMenu(messageId, event) {
+  const emojis = [
+    { emoji: '😂', name: 'laughing' },
+    { emoji: '😠', name: 'mad' },
+    { emoji: '😢', name: 'sad' },
+    { emoji: '❤️', name: 'love' }
+  ];
+
+  let menu = document.getElementById('reactionMenu');
+  if (menu) menu.remove();
+
+  menu = document.createElement('div');
+  menu.id = 'reactionMenu';
+  menu.style.cssText = 'position: fixed; background: #111827; border: 1px solid #374151; border-radius: 9999px; display: flex; gap: 0.5rem; padding: 0.5rem; z-index: 50000; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);';
+
+  emojis.forEach(item => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = item.emoji;
+    btn.style.cssText = 'background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.2); color: #e5e7eb; padding: 0.5rem 0.75rem; border-radius: 9999px; cursor: pointer; font-size: 1.2rem; transition: all 0.15s;';
+    btn.onmouseover = () => btn.style.background = 'rgba(96, 165, 250, 0.2)';
+    btn.onmouseout = () => btn.style.background = 'rgba(96, 165, 250, 0.1)';
+    btn.onclick = () => {
+      toggleMessageReaction(messageId, item.emoji);
+      menu.remove();
+    };
+    menu.appendChild(btn);
+  });
+
+  document.body.appendChild(menu);
+  const rect = event.target.getBoundingClientRect();
+  menu.style.left = (rect.left + rect.width / 2 - menu.offsetWidth / 2) + 'px';
+  menu.style.top = (rect.top - menu.offsetHeight - 10) + 'px';
+
+  document.addEventListener('click', function closeMenu(e) {
+    if (!menu.contains(e.target) && e.target !== event.target) {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+    }
+  });
+}
+
+async function toggleMessageReaction(messageId, emoji) {
+  if (!selectedChatId || !messageId || !userEmail) return;
+
+  const messageRef = doc(db, 'liveChats', selectedChatId, 'messages', messageId);
+  const messageSnap = await getDoc(messageRef);
+  if (!messageSnap.exists()) return;
+
+  const reactions = messageSnap.data().reactions || {};
+  const currentUserEmail = userEmail;
+
+  if (!reactions[emoji]) {
+    reactions[emoji] = [];
+  }
+
+  const userIndex = reactions[emoji].indexOf(currentUserEmail);
+  if (userIndex > -1) {
+    reactions[emoji].splice(userIndex, 1);
+    if (reactions[emoji].length === 0) {
+      delete reactions[emoji];
+    }
+  } else {
+    reactions[emoji].push(currentUserEmail);
+  }
+
+  try {
+    await updateDoc(messageRef, { reactions });
+  } catch (error) {
+    console.error('Failed to update reaction:', error);
+  }
+}
+
+function loadChatRooms() {
+  if (chatRoomsUnsubscribe) {
+    chatRoomsUnsubscribe();
+  }
+
+  chatRoomsUnsubscribe = onSnapshot(collection(db, 'liveChats'), (snapshot) => {
+    const rooms = [];
+    snapshot.forEach((docSnap) => {
+      rooms.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    renderChatRooms(rooms);
+  }, (error) => {
+    console.error('Live chat rooms listener error:', error);
+  });
+}
+
+window.createLiveChatRoom = createLiveChatRoom;
+window.loadChatRooms = loadChatRooms;
+window.openChatRoom = openChatRoom;
+window.closeChatRoomPanel = closeChatRoomPanel;
+window.setReplyToMessage = setReplyToMessage;
+window.unsendChatMessage = unsendChatMessage;
+window.sendChatMessage = sendChatMessage;
+window.triggerChatImageInput = triggerChatImageInput;
+window.handleChatImageInputChange = handleChatImageInputChange;
+window.clearChatImageSelection = clearChatImageSelection;
+
+// Attach the chat form handler after DOM is ready
+const createChatFormElement = document.getElementById('createChatForm');
+if (createChatFormElement) {
+  createChatFormElement.addEventListener('submit', createLiveChatRoom);
+}
+const chatMessageFormElement = document.getElementById('chatMessageForm');
+if (chatMessageFormElement) {
+  chatMessageFormElement.addEventListener('submit', sendChatMessage);
+}
+
+setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
 
 // No scheduling controls on member page
 
@@ -649,9 +1577,8 @@ window.joinScheduledMeeting = function(roomName) {
       await signInAnonymously(auth);
       console.log('Auth ready');
     }
-    const displayName = await getMemberDisplayName(userEmail);
-    if (welcomeEl) welcomeEl.textContent = `Welcome, ${displayName}`;
-    console.log('User logged in as:', userEmail, 'displayName:', displayName);
+    if (welcomeEl) welcomeEl.textContent = `Welcome, ${getUserName(userEmail)}`;
+    console.log('User logged in as:', userEmail);
     console.log('Starting to load data from Firestore...');
     
     // Initialize notifications
@@ -714,8 +1641,20 @@ window.joinScheduledMeeting = function(roomName) {
     // Load polls and announcements
     loadPolls();
     loadAnnouncements();
-    loadMemberProgressReports();
     loadResources();
+    
+    // Load members and progress with real-time listener
+    console.log('🔄 Initializing members listener...');
+    initializeMembersListener();
+    
+    console.log('🔄 Initializing progress report listener...');
+    initializeProgressReportListener();
+    
+    console.log('🔄 Loading progress report data...');
+    window.loadProgressReport();
+
+    // Always ensure chat room list stays synced after refresh
+    loadChatRooms();
   }
   
   // Ensure the ticket history section exists in the DOM
@@ -741,7 +1680,7 @@ function ensureTicketHistorySection() {
   ticketCard.innerHTML = `
     <h2 style="margin-bottom: 1rem;">🎟️ Ticket History</h2>
     <div style="margin-bottom: 1rem;">
-      <button onclick="loadTicketHistory()" style="background: #4f46e5; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">Refresh Tickets</button>
+      <button onclick="loadTicketHistory()" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">Refresh Tickets</button>
     </div>
     <div id="ticketHistory"></div>
     <p id="ticketHistoryEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
@@ -858,6 +1797,5 @@ function loadTicketHistory() {
 
 // Make loadTicketHistory available globally
 window.loadTicketHistory = loadTicketHistory;
-
 
 

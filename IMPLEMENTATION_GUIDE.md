@@ -271,7 +271,7 @@ All workflows can also be manually triggered from Actions tab.
 ## 📝 Email Template Examples
 
 All emails include:
-- Project branding (My Collab)
+- Project branding (My Thesis Hub)
 - Relevant details (task title, deadline, etc.)
 - Direct action link to the application
 - Professional formatting

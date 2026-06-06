@@ -1,7 +1,7 @@
 # GitHub Email Notifications Setup Guide
 
 ## Overview
-The My Collab application now includes automated email notifications powered by **GitHub Actions**. The system sends emails when:
+The My Thesis Hub application now includes automated email notifications powered by **GitHub Actions**. The system sends emails when:
 
 - ✅ Admin releases a task to members
 - ✅ Admin creates an announcement
@@ -309,4 +309,4 @@ For issues or questions:
 ---
 
 **Last Updated:** April 2026
-**System:** My Collab Email Notifications v1.0
+**System:** My Thesis Hub Email Notifications v1.0

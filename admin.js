@@ -83,12 +83,14 @@ import {
   deleteDoc,
   setDoc,
   getDoc,
-  arrayUnion
+  getDocs,
+  arrayUnion,
+  query,
+  where,
+  orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-
-import { db, auth } from "./firebase.js";
+import { db } from "./firebase.js";
 import { signOutUser, getStoredUserEmail, getStoredUserRole } from "./auth.js";
 import { sendNotificationToUsers, showLocalNotification, initializeNotifications } from "./notifications.js";
 
@@ -99,369 +101,99 @@ const pushNotificationsManager = new PushNotificationsManager();
 let chart;
 let chartUpdateTimeout;
 let lastMemberProgress = {};
+let lastAnalyticsTasks = [];
+
+function parseDeadline(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === 'number') return new Date(value);
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (value && typeof value.toDate === 'function') {
+    return value.toDate();
+  }
+  return null;
+}
 
 window.lastMemberProgress = lastMemberProgress;
+window.lastAnalyticsTasks = lastAnalyticsTasks;
 
 const progressReportCollection = "progressReports";
 const progressReportDocId = "thesisProgress";
 const progressStatuses = ["Not Started", "Pending", "Completed"];
+const membersCollection = "members";
 
 let members = [
-  { uid: "everyone", name: "Everyone" },
-  { uid: "kingfordnabor@gmail.com", name: "Kingford Nabor" },
-  { uid: "allancorral@gmail.com", name: "Allan Corral" },
-  { uid: "phricksborebor@gmail.com", name: "Phricks Borebor" },
-  { uid: "moezarperez@gmail.com", name: "Moezar Perez" },
-  { uid: "test@example.com", name: "Test User" },
-  { uid: "rogelioledda@gmail.com", name: "Rogelio Ledda" }
+  { uid: "everyone", name: "Everyone" }
 ];
 
-(async () => {
-  // Retry getting admin credentials if first attempt fails (to handle timing issues)
-  let adminEmail = await getStoredUserEmail();
-  let adminRole = await getStoredUserRole();
-  let retries = 0;
-  
-  while ((!adminEmail || !adminRole) && retries < 5) {
-    if (!adminEmail) adminEmail = await getStoredUserEmail();
-    if (!adminRole) adminRole = await getStoredUserRole();
-    if (!adminEmail || !adminRole) {
-      retries++;
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-  }
+const mentionUsers = [];
 
-function getDefaultProgressStructure() {
-  return [
-    {
-      title: "Front Matter",
-      items: [
-        { name: "Title Page", status: "Not Started" },
-        { name: "Approval Sheet", status: "Not Started" },
-        { name: "Abstract", status: "Not Started" },
-        { name: "Acknowledgement", status: "Not Started" },
-        { name: "Table of Contents", status: "Not Started" },
-        { name: "List of Tables (if applicable)", status: "Not Started" },
-        { name: "List of Figures (if applicable)", status: "Not Started" }
-      ]
-    },
-    {
-      title: "Chapter 1 – Introduction",
-      items: [
-        { name: "Background of the Study", status: "Not Started" },
-        { name: "Statement of the Problem", status: "Not Started" },
-        { name: "Objectives of the Study", status: "Not Started" },
-        { name: "Scope and Delimitation", status: "Not Started" },
-        { name: "Significance of the Study", status: "Not Started" },
-        { name: "Definition of Terms", status: "Not Started" }
-      ]
-    },
-    {
-      title: "Chapter 2 – Review of Related Literature (RRL)",
-      items: [
-        { name: "Related studies and literature", status: "Not Started" },
-        { name: "Theoretical framework (if required)", status: "Not Started" },
-        { name: "Conceptual framework", status: "Not Started" }
-      ]
-    },
-    {
-      title: "Chapter 3 – Methodology",
-      items: [
-        { name: "Research design", status: "Not Started" },
-        { name: "Materials / instruments", status: "Not Started" },
-        { name: "Procedure / implementation", status: "Not Started" },
-        { name: "Data gathering method", status: "Not Started" },
-        { name: "Statistical treatment (if applicable)", status: "Not Started" }
-      ]
-    },
-    {
-      title: "Chapter 4 – Results and Discussion",
-      items: [
-        { name: "Presentation of data", status: "Not Started" },
-        { name: "Analysis and interpretation", status: "Not Started" }
-      ]
-    },
-    {
-      title: "Chapter 5 – Conclusion and Recommendations",
-      items: [
-        { name: "Summary of findings", status: "Not Started" },
-        { name: "Conclusion", status: "Not Started" },
-        { name: "Recommendations", status: "Not Started" }
-      ]
-    },
-    {
-      title: "Back Matter",
-      items: [
-        { name: "References / Bibliography", status: "Not Started" },
-        { name: "Appendices (survey forms, codes, drawings, etc.)", status: "Not Started" }
-      ]
-    }
-  ];
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
 }
 
-function renderAdminProgressReport(sections) {
-  console.log('=== RENDER ADMIN PROGRESS REPORT CALLED ===');
-  console.log('Sections to render:', sections);
-  const container = document.getElementById("progressReportPanel");
-  console.log('Progress report panel element:', container);
-
-  if (!container) {
-    console.error('Progress report panel not found!');
-    return;
-  }
-
-  if (!Array.isArray(sections) || sections.length === 0) {
-    console.log('No sections to render');
-    container.innerHTML = '<p style="color: #94a3b8; text-align: center;">No progress report data yet.</p>';
-    return;
-  }
-
-  console.log('Rendering', sections.length, 'sections');
-  container.innerHTML = sections.map((section, sectionIndex) => `
-    <div style="margin-bottom: 1.25rem;">
-      <h3 style="margin: 0 0 0.75rem 0; color: #2563eb;">${section.title}</h3>
-      ${Array.isArray(section.items) ? section.items.map((item, itemIndex) => {
-        const assignedToValue = Array.isArray(item.assignedTo) ? item.assignedTo : (item.assignedTo ? [item.assignedTo] : []);
-        return `
-          <div style="display: grid; gap: 0.75rem; margin-bottom: 0.65rem; padding: 0.75rem; background: #111827; border: 1px solid #374151; border-radius: 0.5rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
-              <span style="color: #d1d5db;">${item.name}</span>
-              <select id="progress-${sectionIndex}-${itemIndex}" style="background: #0f172a; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.875rem;">
-                <option value="Not Started" ${item.status === 'Not Started' || !item.status ? 'selected' : ''}>Not Started</option>
-                <option value="Pending" ${item.status === 'Pending' ? 'selected' : ''}>Pending</option>
-                <option value="Completed" ${item.status === 'Completed' ? 'selected' : ''}>Completed</option>
-              </select>
-            </div>
-            <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
-              <label style="color: #cbd5e1; font-size: 0.9rem; min-width: 120px;">Assign to:</label>
-              <select id="assignedTo-${sectionIndex}-${itemIndex}" multiple style="background: #0f172a; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.45rem 0.6rem; min-width: 180px; min-height: 40px;">
-                <option value="" ${Array.isArray(assignedToValue) ? (!assignedToValue.includes('') && assignedToValue.length === 0) : assignedToValue === '' ? 'selected' : ''}>Unassigned</option>
-                ${members.filter(member => member.uid !== 'everyone').map(member => `
-                  <option value="${member.uid}" ${Array.isArray(assignedToValue) ? (assignedToValue.includes(member.uid) ? 'selected' : '') : (member.uid === assignedToValue ? 'selected' : '')}>${member.name}</option>
-                `).join('')}
-              </select>
-            </div>
-          </div>
-        `;
-      }).join('') : ''}
-    </div>
-  `).join('');
+function getUserName(email) {
+  const normalized = normalizeEmail(email);
+  const member = members.find(m => normalizeEmail(m.uid) === normalized);
+  return member ? member.name : email;
 }
 
-function getProgressFormValues() {
-  const defaultSections = getDefaultProgressStructure();
-  return defaultSections.map((section, sectionIndex) => ({
-    title: section.title,
-    items: section.items.map((item, itemIndex) => {
-      const statusSelect = document.getElementById(`progress-${sectionIndex}-${itemIndex}`);
-      const assignedSelect = document.getElementById(`assignedTo-${sectionIndex}-${itemIndex}`);
-      const assignedTo = assignedSelect ? Array.from(assignedSelect.selectedOptions).map(option => option.value).filter(v => v !== '') : (Array.isArray(item.assignedTo) ? item.assignedTo : []);
-      const assignedToName = assignedSelect ? Array.from(assignedSelect.selectedOptions).map(option => members.find(m => m.uid === option.value)?.name).filter(Boolean) : (Array.isArray(item.assignedToName) ? item.assignedToName : []);
-      return {
-        name: item.name,
-        status: statusSelect ? statusSelect.value : item.status,
-        assignedTo,
-        assignedToName
-      };
-    })
-  }));
-}
-
-window.saveProgressReport = async function() {
+// Load members from Firestore
+async function loadMembersFromFirestore() {
   try {
-    const sections = getProgressFormValues();
-    await setDoc(doc(db, progressReportCollection, progressReportDocId), { sections }, { merge: true });
-    alert("Progress report saved successfully!");
-  } catch (error) {
-    console.error("Error saving progress report:", error);
-    alert("Failed to save progress report. Please try again.");
-  }
-};
-
-// ADD NEW PROGRESS REPORT
-window.addProgressReport = async function() {
-  const title = document.getElementById("reportTitle").value.trim();
-  const description = document.getElementById("reportDescription").value.trim();
-  const assignedTo = document.getElementById("reportAssignedTo").value.trim();
-  const status = document.getElementById("reportStatus").value;
-
-  if (!title || !assignedTo) {
-    alert("Please fill in Title and Assign To fields.");
-    return;
-  }
-
-  try {
-    // Get assigned member name
-    const assignedMember = members.find(m => m.uid === assignedTo);
-    const assignedName = assignedMember ? assignedMember.name : assignedTo;
-
-    // Create report in Firestore
-    await addDoc(collection(db, "progressReports"), {
-      title: title,
-      description: description,
-      assignedTo: assignedTo,
-      assignedName: assignedName,
-      status: status,
-      createdAt: new Date(),
-      createdBy: adminEmail,
-      updatedAt: new Date()
-    });
-
-    // Clear form
-    document.getElementById("reportTitle").value = "";
-    document.getElementById("reportDescription").value = "";
-    document.getElementById("reportAssignedTo").value = "";
-    document.getElementById("reportStatus").value = "Not Started";
-
-    // Reload reports list
-    loadProgressReports();
-
-    alert("Report added successfully!");
-  } catch (error) {
-    console.error("Error adding report:", error);
-    alert(`Failed to add report: ${error.message}`);
-  }
-};
-
-// LOAD AND DISPLAY PROGRESS REPORTS
-function loadProgressReports() {
-  const container = document.getElementById("reportsListContainer");
-  if (!container) return;
-
-  try {
-    onSnapshot(collection(db, "progressReports"), (snapshot) => {
-      if (snapshot.empty) {
-        container.innerHTML = "<p style='color: #94a3b8; text-align: center;'>No reports yet.</p>";
-        return;
-      }
-
-      let html = "";
-      snapshot.forEach(doc => {
-        const report = doc.data();
-        const reportId = doc.id;
-        const createdDate = report.createdAt?.toDate().toLocaleDateString() || "N/A";
-
-        // Determine status color
-        let statusColor = "#94a3b8";
-        if (report.status === "Completed") statusColor = "#10b981";
-        if (report.status === "Pending") statusColor = "#f59e0b";
-        if (report.status === "Not Started") statusColor = "#ef4444";
-
-        html += `
-          <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.5rem; background: #1e293b;">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem;">
-              <div style="flex: 1;">
-                <h4 style="margin: 0 0 0.25rem 0; color: #f8fafc;">${report.title}</h4>
-                <p style="margin: 0.25rem 0; color: #94a3b8; font-size: 0.85rem;">
-                  <strong>Assigned to:</strong> ${report.assignedName}
-                </p>
-                <p style="margin: 0.25rem 0; color: #94a3b8; font-size: 0.85rem;">
-                  <strong>Created:</strong> ${createdDate}
-                </p>
-                ${report.description ? `<p style="margin: 0.5rem 0 0 0; color: #cbd5e1; font-size: 0.9rem;">${report.description}</p>` : ''}
-              </div>
-              <div style="display: flex; gap: 0.5rem; flex-direction: column;">
-                <select onchange="window.updateReportStatus('${reportId}', this.value)" style="background: #0f172a; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.5rem; font-size: 0.85rem; cursor: pointer;">
-                  <option value="Not Started" ${report.status === "Not Started" ? "selected" : ""}>Not Started</option>
-                  <option value="Pending" ${report.status === "Pending" ? "selected" : ""}>Pending</option>
-                  <option value="Completed" ${report.status === "Completed" ? "selected" : ""}>Completed</option>
-                </select>
-                <span style="font-size: 0.8rem; color: ${statusColor}; font-weight: bold; text-align: center;">● ${report.status}</span>
-              </div>
-            </div>
-            <div style="display: flex; gap: 0.5rem;">
-              <button onclick="window.deleteProgressReport('${reportId}')" class="btn-danger" style="padding: 0.5rem 1rem; min-width: auto; font-size: 0.85rem;">
-                <i class="fas fa-trash"></i> Delete
-              </button>
-            </div>
-          </div>
-        `;
+    const querySnapshot = await getDocs(collection(db, membersCollection));
+    const firestoreMembers = [];
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      firestoreMembers.push({
+        uid: data.email,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+        gmailAddress: data.gmailAddress || null
       });
-
-      container.innerHTML = html;
     });
+    
+    // Update members array, keeping "Everyone" at the beginning
+    members = [
+      { uid: "everyone", name: "Everyone" },
+      ...firestoreMembers
+    ];
+    
+    // Update mention users to exclude "Everyone"
+    mentionUsers.length = 0;
+    members.filter(m => m.uid !== 'everyone').forEach(m => {
+      mentionUsers.push({ uid: m.uid, name: m.name });
+    });
+    
+    // Reload UI elements that depend on members
+    loadMembers();
+    loadAnnouncementAssignTo();
+    
+    console.log('Members loaded from Firestore:', members);
   } catch (error) {
-    console.error("Error loading reports:", error);
-    container.innerHTML = "<p style='color: #ef4444;'>Error loading reports.</p>";
+    console.error('Error loading members from Firestore:', error);
   }
 }
 
-// UPDATE REPORT STATUS
-window.updateReportStatus = async function(reportId, newStatus) {
-  try {
-    await updateDoc(doc(db, "progressReports", reportId), {
-      status: newStatus,
-      updatedAt: new Date()
-    });
-    console.log(`Report status updated to ${newStatus}`);
-  } catch (error) {
-    console.error("Error updating report status:", error);
-    alert(`Failed to update status: ${error.message}`);
-  }
-};
-
-// DELETE PROGRESS REPORT
-window.deleteProgressReport = async function(reportId) {
-  if (confirm("Are you sure you want to delete this report?")) {
-    try {
-      await deleteDoc(doc(db, "progressReports", reportId));
-      console.log("Report deleted successfully");
-    } catch (error) {
-      console.error("Error deleting report:", error);
-      alert(`Failed to delete report: ${error.message}`);
-    }
-  }
-};
-
-
-// Sync members with Firestore in real-time
-function initializeMembersSync() {
-  try {
-    // Set up real-time listener for members collection
-    onSnapshot(collection(db, "members"), (snapshot) => {
-      // Keep the "everyone" option always at the start
-      const everyoneOption = members.find(m => m.uid === "everyone");
-      
-      // Get all members from Firestore
-      const firestoreMembers = [];
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        firestoreMembers.push({
-          uid: data.uid || data.email,
-          name: data.name
-        });
-      });
-      
-      // Combine: always keep "Everyone", then add Firestore members
-      members = [
-        { uid: "everyone", name: "Everyone" },
-        ...firestoreMembers
-      ];
-      
-      // Refresh all dropdowns
-      loadMembers();
-      loadAnnouncementAssignTo();
-      loadMembersList();
-      loadProgressReportAssignTo();
-    }, (error) => {
-      console.warn('Error syncing members from Firestore:', error);
-      // Continue with local members if Firestore fails
-    });
-  } catch (error) {
-    console.warn('Could not set up members sync:', error);
-  }
-}
-
+// Load members into "Assign To" dropdown for task creation
 function loadMembers() {
   const select = document.getElementById("assignedTo");
   if (!select) return;
-  select.innerHTML = "";
+  
+  select.innerHTML = '<option value="">Select a member</option>';
 
   members.forEach(m => {
-    select.innerHTML += `<option value="${m.uid}">${m.name}</option>`;
+    if (m.uid !== 'everyone') {
+      select.innerHTML += `<option value="${m.uid}">${m.name}</option>`;
+    }
   });
 }
 
+// Load members into announcement assignment checkboxes
 function loadAnnouncementAssignTo() {
   const container = document.getElementById("announcementAssignTo");
   if (!container) return;
@@ -477,25 +209,334 @@ function loadAnnouncementAssignTo() {
   });
 }
 
-function loadProgressReportAssignTo() {
-  const select = document.getElementById("reportAssignedTo");
-  if (!select) return;
-
-  select.innerHTML = '<option value="">Select a member</option>';
-  members
-    .filter(m => m.uid !== "everyone")
-    .forEach(m => {
-      select.innerHTML += `<option value="${m.uid}">${m.name}</option>`;
+// Real-time listener for members - updates UI automatically when members change
+let membersUnsubscribe = null;
+function initializeMembersListener() {
+  if (membersUnsubscribe) {
+    membersUnsubscribe(); // Unsubscribe from previous listener if exists
+  }
+  
+  membersUnsubscribe = onSnapshot(collection(db, membersCollection), (snapshot) => {
+    const firestoreMembers = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      firestoreMembers.push({
+        uid: data.email,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+        gmailAddress: data.gmailAddress || null
+      });
     });
+    
+    // Update members array, keeping "Everyone" at the beginning
+    members = [
+      { uid: "everyone", name: "Everyone" },
+      ...firestoreMembers
+    ];
+    
+    // Update mention users to exclude "Everyone"
+    mentionUsers.length = 0;
+    members.filter(m => m.uid !== 'everyone').forEach(m => {
+      mentionUsers.push({ uid: m.uid, name: m.name });
+    });
+    
+    // Reload UI elements that depend on members
+    loadMembers();
+    loadAnnouncementAssignTo();
+    populateProgressReportAssignedTo();
+    renderMembersList();
+    loadProgressReport();
+    
+    console.log('Members updated from Firestore (real-time):', members);
+  }, (error) => {
+    console.error('Error listening to members:', error);
+  });
 }
 
-// Initialize real-time sync
-initializeMembersSync();
-loadMembers();
-loadAnnouncementAssignTo();
-loadMembersList();
-loadProgressReportAssignTo();
-loadProgressReports();
+// Real-time listener for progress reports - updates when members change status
+let progressReportUnsubscribe = null;
+function initializeProgressReportListener() {
+  console.log('=== INITIALIZE PROGRESS REPORT LISTENER ===');
+  if (progressReportUnsubscribe) {
+    console.log('Unsubscribing from previous listener');
+    progressReportUnsubscribe();
+  }
+  
+  progressReportUnsubscribe = onSnapshot(doc(db, progressReportCollection, progressReportDocId), (docSnap) => {
+    console.log('📡 Progress report listener triggered');
+    console.log('Document exists:', docSnap.exists());
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      console.log('Document data:', data);
+      const sections = data.sections || [];
+      console.log('Sections in listener:', sections.length);
+      renderAdminProgressReport(sections);
+    } else {
+      console.log('Progress report document does not exist yet');
+    }
+  }, (error) => {
+    console.error('❌ Error listening to progress report:', error);
+  });
+  
+  console.log('✅ Real-time listener initialized');
+}
+
+window.initializeProgressReportListener = initializeProgressReportListener;
+
+// Create new member account
+window.createMemberAccount = async function() {
+  const name = document.getElementById("memberName").value.trim();
+  const email = document.getElementById("memberEmail").value.trim().toLowerCase();
+  const password = document.getElementById("memberPassword").value;
+  const gmailAddress = document.getElementById("memberGmail").value.trim().toLowerCase();
+  
+  if (!name || !email || !password) {
+    alert("Please fill in all required fields");
+    return;
+  }
+  
+  try {
+    // Add member to Firestore
+    const docRef = await addDoc(collection(db, membersCollection), {
+      name: name,
+      email: email,
+      gmailAddress: gmailAddress || null,
+      role: "member",
+      createdAt: new Date(),
+      password: password // Note: In production, never store plain passwords - use proper backend authentication
+    });
+    
+    alert(`Member account created successfully for ${name}`);
+    
+    // Clear form
+    document.getElementById("memberName").value = '';
+    document.getElementById("memberEmail").value = '';
+    document.getElementById("memberPassword").value = '';
+    document.getElementById("memberGmail").value = '';
+    
+    // Reload members
+    loadMembersFromFirestore();
+  } catch (error) {
+    console.error('Error creating member account:', error);
+    alert(`Error creating member account: ${error.message}`);
+  }
+};
+
+// Generate random password
+window.generatePassword = function() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
+  let password = '';
+  for (let i = 0; i < 12; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  document.getElementById("memberPassword").value = password;
+};
+
+// Delete member
+window.deleteMember = async function(email) {
+  if (!confirm(`Are you sure you want to delete this member? This action cannot be undone.`)) {
+    return;
+  }
+  
+  try {
+    // Delete from Firestore
+    const q = query(collection(db, membersCollection), where("email", "==", email));
+    const querySnapshot = await getDocs(q);
+    
+    // Wait for all deletions to complete
+    const deletePromises = [];
+    querySnapshot.forEach((doc) => {
+      deletePromises.push(deleteDoc(doc.ref));
+    });
+    await Promise.all(deletePromises);
+    
+    alert("Member deleted successfully");
+    loadMembersFromFirestore();
+  } catch (error) {
+    console.error('Error deleting member:', error);
+    alert(`Error deleting member: ${error.message}`);
+  }
+};
+
+// Render members list in manage-members section
+async function renderMembersList() {
+  const membersList = document.getElementById('membersList');
+  if (!membersList) return;
+  
+  if (members.length <= 1) {
+    membersList.innerHTML = '<p style="color: #94a3b8; text-align: center;">No members yet. Create one using the form above.</p>';
+    return;
+  }
+  
+  membersList.innerHTML = members
+    .filter(m => m.uid !== 'everyone')
+    .map(m => `
+      <div style="padding: 1rem; background: #111827; border: 1px solid #374151; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+        <div>
+          <div style="color: #f8fafc; font-weight: 500;">${m.name}</div>
+          <div style="color: #94a3b8; font-size: 0.9rem;">🔐 Login: ${m.email}</div>
+          ${m.gmailAddress ? `<div style="color: #94a3b8; font-size: 0.9rem;">📧 Gmail: ${m.gmailAddress}</div>` : '<div style="color: #7c3aed; font-size: 0.9rem;">⚠️ No Gmail set</div>'}
+        </div>
+        <button onclick="deleteMember('${m.email}')" class="btn-delete" style="padding: 0.5rem 1rem; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer;">Delete</button>
+      </div>
+    `).join('');
+}
+
+window.renderMembersList = renderMembersList;
+
+let adminEmail = null;
+let adminRole = null;
+let liveChatRoomsUnsubscribe = null;
+let liveChatMessagesUnsubscribe = null;
+let selectedLiveChatId = null;
+let liveChatRoomsById = {};
+let adminChatMessagesById = {};
+let adminReplyToMessage = null;
+let selectedAdminChatImageData = null;
+let selectedAdminChatImageName = null;
+
+(async () => {
+  // Retry getting admin credentials if first attempt fails (to handle timing issues)
+  adminEmail = await getStoredUserEmail();
+  adminRole = await getStoredUserRole();
+  let retries = 0;
+  
+  while ((!adminEmail || !adminRole) && retries < 5) {
+    if (!adminEmail) adminEmail = await getStoredUserEmail();
+    if (!adminRole) adminRole = await getStoredUserRole();
+    if (!adminEmail || !adminRole) {
+      retries++;
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+
+// This function is no longer used - admins create custom sections dynamically
+
+function renderAdminProgressReport(sections) {
+  console.log('=== RENDER ADMIN PROGRESS REPORT CALLED ===');
+  console.log('Sections to render:', sections);
+  const container = document.getElementById("progressReportPanel");
+  console.log('Progress report panel element:', container);
+
+  if (!container) {
+    console.error('Progress report panel not found!');
+    return;
+  }
+
+  if (!Array.isArray(sections) || sections.length === 0) {
+    console.log('No sections to render');
+    container.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No items added yet. Create items to get started.</p>';
+    return;
+  }
+
+  console.log('Rendering', sections.length, 'sections');
+  
+  // Flatten all items from all sections into a single list
+  let allItems = [];
+  sections.forEach((section, sectionIndex) => {
+    console.log(`Processing section "${section.title}" with ${section.items?.length || 0} items`);
+    if (Array.isArray(section.items)) {
+      section.items.forEach((item, itemIndex) => {
+        console.log(`  Adding item: "${item.name}"`);
+        allItems.push({
+          name: item.name,
+          section: section.title,
+          status: item.status,
+          assignedTo: item.assignedTo,
+          sectionIndex,
+          itemIndex
+        });
+      });
+    }
+  });
+  
+  console.log('✅ Total items flattened:', allItems.length);
+  
+  if (allItems.length === 0) {
+    console.log('⚠️ No items to display');
+    container.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No items added yet. Create items to get started.</p>';
+    return;
+  }
+  
+  // Render as a table
+  const tableHTML = `
+    <table style="width: 100%; border-collapse: collapse; background: #111827; border: 1px solid #374151; border-radius: 0.5rem; overflow: hidden;">
+      <thead>
+        <tr style="background: #0f172a; border-bottom: 1px solid #4b5563;">
+          <th style="padding: 0.75rem 1rem; text-align: left; color: #cbd5e1; font-weight: 600;">Task Name</th>
+          <th style="padding: 0.75rem 1rem; text-align: left; color: #cbd5e1; font-weight: 600;">Assigned To</th>
+          <th style="padding: 0.75rem 1rem; text-align: left; color: #cbd5e1; font-weight: 600;">Status</th>
+          <th style="padding: 0.75rem 1rem; text-align: center; color: #cbd5e1; font-weight: 600; width: 60px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${allItems.map((item) => {
+          const assignedToNames = Array.isArray(item.assignedTo) ? item.assignedTo.map(email => {
+            const member = members.find(m => m.uid === email);
+            return member ? member.name : email;
+          }).join(', ') : 'Unassigned';
+          
+          return `
+            <tr style="border-bottom: 1px solid #374151; hover: background: #1a1f2e;">
+              <td style="padding: 0.75rem 1rem; color: #d1d5db; font-weight: 500;">${item.name}</td>
+              <td style="padding: 0.75rem 1rem; color: #94a3b8; font-size: 0.9rem;">${assignedToNames}</td>
+              <td style="padding: 0.75rem 1rem;">
+                <select id="progress-${item.sectionIndex}-${item.itemIndex}" style="background: #0f172a; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.4rem 0.5rem; font-size: 0.85rem; width: 100%;">
+                  <option value="Not Started" ${item.status === 'Not Started' || !item.status ? 'selected' : ''}>Not Started</option>
+                  <option value="Pending" ${item.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                  <option value="Completed" ${item.status === 'Completed' ? 'selected' : ''}>Completed</option>
+                </select>
+              </td>
+              <td style="padding: 0.75rem 1rem; text-align: center;">
+                <button onclick="editProgressItem(${item.sectionIndex}, ${item.itemIndex})" style="padding: 0.4rem 0.6rem; background: #3b82f6; color: white; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.85rem;"><i class="fas fa-edit"></i></button>
+              </td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+  
+  console.log('📋 Table HTML generated, setting innerHTML...');
+  container.innerHTML = tableHTML;
+  console.log('✅ Table rendered in DOM');
+}
+
+window.renderAdminProgressReport = renderAdminProgressReport;
+
+// Wrapper function for loading progress report in admin (called when section is shown)
+window.loadProgressReport = function() {
+  console.log('Admin loadProgressReport called');
+  // The real-time listener is already active and will render the report
+  // This function is just a placeholder for consistency
+};
+
+function getProgressFormValues() {
+  // Since changes are saved immediately via modal, just return empty
+  // The sections are already up to date in Firestore
+  return [];
+}
+
+window.saveProgressReport = async function() {
+  try {
+    // Just confirm that the latest data is in Firestore
+    alert("Task report is already saved! All changes are saved automatically when you click 'Save' in the edit modal.");
+  } catch (error) {
+    console.error("Error saving progress report:", error);
+    alert("Failed to save task report. Please try again.");
+  }
+};
+
+// Load members from Firestore on startup with real-time listener
+initializeMembersListener();
+
+// Initialize progress report real-time listener on startup
+initializeProgressReportListener();
+
+// Load live chat room list immediately so refresh always restores the list
+loadLiveChatRooms();
 
   // Initialize notifications
   initializeNotifications();
@@ -608,7 +649,7 @@ loadProgressReports();
           <div style="padding: 1rem; background: #0f172a; border-radius: 0.5rem; border: 1px solid #374151;">
             <textarea id="responseInput-${docSnap.id}" rows="3" placeholder="Type your response..." style="width: 100%; padding: 0.75rem; border-radius: 0.375rem; border: 1px solid #4b5563; background: #111827; color: #f3f4f6; margin-bottom: 0.75rem;"></textarea>
             <div style="display: flex; gap: 0.5rem;">
-              <button onclick="window.respondToTicket('${docSnap.id}')" style="background: #4f46e5; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer; flex: 1;">Send Response</button>
+              <button onclick="window.respondToTicket('${docSnap.id}')" style="background: #3b82f6; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer; flex: 1;">Send Response</button>
               ${statusButtons}
               <button onclick="window.deleteTicket('${docSnap.id}')" class="btn-danger" style="padding: 0.75rem 1rem;">Delete Ticket</button>
             </div>
@@ -659,44 +700,339 @@ loadProgressReports();
     });
   });
 
+// Deprecated: No longer using default sections - admins create custom sections from scratch
+// function mergeProgressStructures(defaultSections, savedSections) {...}
+
 function loadProgressReport() {
   console.log('=== LOAD PROGRESS REPORT CALLED ===');
   const container = document.getElementById("progressReportPanel");
   console.log('Progress report container element:', container);
-
-  if (!container) {
-    console.log('No progress report panel found, skipping loadProgressReport');
-    return;
-  }
 
   const progressRef = doc(db, progressReportCollection, progressReportDocId);
   console.log('Progress report reference:', progressRef);
 
   onSnapshot(progressRef, (snap) => {
     console.log('Progress report snapshot received:', snap.exists());
-    let sections = getDefaultProgressStructure();
+    let sections = [];
+    
     if (snap.exists()) {
       const data = snap.data();
       console.log('Progress report data:', data);
       if (Array.isArray(data.sections)) {
-        sections = data.sections.map(section => ({
-          ...section,
-          items: Array.isArray(section.items) ? section.items.map(item => ({
-            assignedTo: Array.isArray(item.assignedTo) ? item.assignedTo : (item.assignedTo ? [item.assignedTo] : []),
-            assignedToName: Array.isArray(item.assignedToName) ? item.assignedToName : (item.assignedToName ? [item.assignedToName] : []),
-            ...item
-          })) : []
-        }));
-      } else {
-        setDoc(progressRef, { sections }, { merge: true });
+        sections = data.sections;
       }
-    } else {
-      console.log('Progress report document does not exist, creating default');
-      setDoc(progressRef, { sections }, { merge: true });
     }
+    
     renderAdminProgressReport(sections);
   });
 }
+
+window.loadProgressReport = loadProgressReport;
+
+// Populate members dropdown in create form
+function populateProgressReportAssignedTo() {
+  const select = document.getElementById("reportItemAssignedTo");
+  if (!select) {
+    console.warn('Progress report select element not found');
+    return;
+  }
+  
+  console.log('Populating progress report members dropdown. Members count:', members.length);
+  select.innerHTML = '<option value="">-- Select Members --</option>';
+  members.forEach(m => {
+    if (m.uid !== 'everyone') {
+      select.innerHTML += `<option value="${m.uid}">${m.name}</option>`;
+    }
+  });
+  console.log('Progress report members dropdown populated successfully');
+}
+
+window.populateProgressReportAssignedTo = populateProgressReportAssignedTo;
+
+// Create new progress report item from form
+window.createProgressReportItem = async function() {
+  console.log('=== CREATE PROGRESS REPORT ITEM CALLED ===');
+  
+  const itemName = document.getElementById("reportItemName").value.trim();
+  const assignedSelect = document.getElementById("reportItemAssignedTo");
+  const assignedTo = Array.from(assignedSelect.selectedOptions).map(opt => opt.value).filter(v => v !== '');
+  const status = document.getElementById("reportItemStatus").value;
+  
+  console.log('Form values:', { itemName, assignedTo, status });
+  
+  if (!itemName) {
+    alert("Please enter an item name");
+    return;
+  }
+  
+  try {
+    const progressRef = doc(db, progressReportCollection, progressReportDocId);
+    console.log('Progress ref:', progressReportCollection, progressReportDocId);
+    
+    const docSnap = await getDoc(progressRef);
+    console.log('Document exists:', docSnap.exists());
+    
+    let sections = (docSnap.exists() && Array.isArray(docSnap.data().sections)) ? docSnap.data().sections : [];
+    console.log('Current sections:', sections);
+    
+    // Create default "Tasks" section if it doesn't exist
+    const defaultSectionName = "Tasks";
+    let sectionIndex = sections.findIndex(s => s.title === defaultSectionName);
+    if (sectionIndex === -1) {
+      console.log('Creating new Tasks section');
+      sections.push({
+        title: defaultSectionName,
+        items: []
+      });
+      sectionIndex = sections.length - 1;
+    }
+    
+    // Add item to section
+    if (!Array.isArray(sections[sectionIndex].items)) {
+      sections[sectionIndex].items = [];
+    }
+    
+    const newItem = {
+      name: itemName,
+      status: status,
+      assignedTo: assignedTo
+    };
+    
+    console.log('New item to add:', newItem);
+    sections[sectionIndex].items.push(newItem);
+    
+    console.log('Sections after adding item:', sections);
+    console.log('Saving to Firestore...');
+    
+    await setDoc(progressRef, { sections }, { merge: true });
+    
+    console.log('✅ Progress report item saved successfully');
+    
+    // Clear form
+    document.getElementById("reportItemName").value = '';
+    document.getElementById("reportItemStatus").value = 'Not Started';
+    
+    // Clear multi-select options
+    const options = assignedSelect.options;
+    for (let i = 0; i < options.length; i++) {
+      options[i].selected = false;
+    }
+    
+    alert('✅ Progress report item created successfully!');
+  } catch (error) {
+    console.error('❌ Error creating progress report item:', error);
+    console.error('Error stack:', error.stack);
+    alert('Error creating item: ' + error.message);
+  }
+};
+
+// Add new section to progress report
+window.addProgressSection = async function() {
+  const sectionName = document.getElementById("newSectionName").value.trim();
+  if (!sectionName) {
+    alert("Please enter a section name");
+    return;
+  }
+  
+  try {
+    const progressRef = doc(db, progressReportCollection, progressReportDocId);
+    const docSnap = await getDoc(progressRef);
+    
+    const sections = docSnap.exists() && Array.isArray(docSnap.data().sections) ? docSnap.data().sections : [];
+    
+    // Check if section already exists
+    if (sections.find(s => s.title.toLowerCase() === sectionName.toLowerCase())) {
+      alert("This section already exists");
+      return;
+    }
+    
+    // Add new section
+    sections.push({
+      title: sectionName,
+      items: []
+    });
+    
+    await setDoc(progressRef, { sections }, { merge: true });
+    document.getElementById("newSectionName").value = "";
+    console.log('Section added successfully');
+  } catch (error) {
+    console.error('Error adding section:', error);
+    alert('Error adding section: ' + error.message);
+  }
+};
+
+// Add new item to a section
+window.addProgressItem = async function(sectionIndex) {
+  const itemName = prompt("Enter item name:");
+  if (!itemName || !itemName.trim()) return;
+  
+  try {
+    const progressRef = doc(db, progressReportCollection, progressReportDocId);
+    const docSnap = await getDoc(progressRef);
+    
+    if (!docSnap.exists()) {
+      alert("Progress report not found");
+      return;
+    }
+    
+    const sections = docSnap.data().sections || [];
+    if (!sections[sectionIndex]) {
+      alert("Section not found");
+      return;
+    }
+    
+    // Add new item to section
+    if (!Array.isArray(sections[sectionIndex].items)) {
+      sections[sectionIndex].items = [];
+    }
+    
+    sections[sectionIndex].items.push({
+      name: itemName.trim(),
+      status: "Not Started",
+      assignedTo: []
+    });
+    
+    await setDoc(progressRef, { sections }, { merge: true });
+    console.log('Item added successfully');
+  } catch (error) {
+    console.error('Error adding item:', error);
+    alert('Error adding item: ' + error.message);
+  }
+};
+
+// Edit progress item (open modal)
+window.editProgressItem = async function(sectionIndex, itemIndex) {
+  const progressRef = doc(db, progressReportCollection, progressReportDocId);
+  const docSnap = await getDoc(progressRef);
+  
+  if (!docSnap.exists()) return;
+  
+  const sections = docSnap.data().sections || [];
+  const item = sections[sectionIndex]?.items[itemIndex];
+  const section = sections[sectionIndex];
+  
+  if (!item || !section) return;
+  
+  const assignedToValue = Array.isArray(item.assignedTo) ? item.assignedTo : (item.assignedTo ? [item.assignedTo] : []);
+  
+  const modalHTML = `
+    <div id="editModal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000;">
+      <div style="background: #0f172a; border: 1px solid #374151; border-radius: 0.5rem; padding: 2rem; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;">
+        <h3 style="color: #0ea5e9; margin-top: 0; margin-bottom: 1.5rem;">Edit Task</h3>
+        
+        <div style="margin-bottom: 1rem;">
+          <label style="color: #cbd5e1; display: block; margin-bottom: 0.5rem; font-weight: 500;">Task Name</label>
+          <p style="color: #d1d5db; margin: 0; padding: 0.75rem; background: #111827; border: 1px solid #374151; border-radius: 0.375rem;">${item.name}</p>
+        </div>
+        
+        <div style="margin-bottom: 1rem;">
+          <label style="color: #cbd5e1; display: block; margin-bottom: 0.5rem; font-weight: 500;">Status</label>
+          <select id="modalStatus" style="width: 100%; background: #111827; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.75rem;">
+            <option value="Not Started" ${item.status === 'Not Started' || !item.status ? 'selected' : ''}>Not Started</option>
+            <option value="Pending" ${item.status === 'Pending' ? 'selected' : ''}>Pending</option>
+            <option value="Completed" ${item.status === 'Completed' ? 'selected' : ''}>Completed</option>
+          </select>
+        </div>
+        
+        <div style="margin-bottom: 1.5rem;">
+          <label style="color: #cbd5e1; display: block; margin-bottom: 0.5rem; font-weight: 500;">Assign To (Select multiple)</label>
+          <select id="modalAssignedTo" multiple style="width: 100%; background: #111827; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.5rem; min-height: 120px;">
+            <option value="">Unassigned</option>
+            ${members.filter(member => member.uid !== 'everyone').map(member => `
+              <option value="${member.uid}" ${assignedToValue.includes(member.uid) ? 'selected' : ''}>${member.name}</option>
+            `).join('')}
+          </select>
+        </div>
+        
+        <div style="display: flex; gap: 1rem;">
+          <button onclick="saveEditProgressItem(${sectionIndex}, ${itemIndex})" style="flex: 1; background: #10b981; color: white; border: none; border-radius: 0.375rem; padding: 0.75rem; cursor: pointer; font-weight: 500; font-size: 0.95rem;">Save</button>
+          <button onclick="closeEditModal()" style="flex: 1; background: #6b7280; color: white; border: none; border-radius: 0.375rem; padding: 0.75rem; cursor: pointer; font-weight: 500; font-size: 0.95rem;">Cancel</button>
+          <button onclick="deleteProgressItem(${sectionIndex}, ${itemIndex}); closeEditModal();" style="flex: 1; background: #dc2626; color: white; border: none; border-radius: 0.375rem; padding: 0.75rem; cursor: pointer; font-weight: 500; font-size: 0.95rem;">Delete</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+};
+
+window.closeEditModal = function() {
+  const modal = document.getElementById('editModal');
+  if (modal) modal.remove();
+};
+
+window.saveEditProgressItem = async function(sectionIndex, itemIndex) {
+  try {
+    const progressRef = doc(db, progressReportCollection, progressReportDocId);
+    const docSnap = await getDoc(progressRef);
+    
+    if (!docSnap.exists()) return;
+    
+    const sections = docSnap.data().sections || [];
+    const newStatus = document.getElementById('modalStatus').value;
+    const assignedSelect = document.getElementById('modalAssignedTo');
+    const assignedTo = Array.from(assignedSelect.selectedOptions).map(option => option.value).filter(v => v !== '');
+    
+    // Update item
+    sections[sectionIndex].items[itemIndex].status = newStatus;
+    sections[sectionIndex].items[itemIndex].assignedTo = assignedTo;
+    
+    await setDoc(progressRef, { sections }, { merge: true });
+    closeEditModal();
+    console.log('Item updated successfully');
+  } catch (error) {
+    console.error('Error updating item:', error);
+    alert('Error updating item: ' + error.message);
+  }
+};
+
+// Delete item from section
+window.deleteProgressItem = async function(sectionIndex, itemIndex) {
+  if (!confirm("Are you sure you want to delete this item?")) return;
+  
+  try {
+    const progressRef = doc(db, progressReportCollection, progressReportDocId);
+    const docSnap = await getDoc(progressRef);
+    
+    if (!docSnap.exists()) {
+      alert("Progress report not found");
+      return;
+    }
+    
+    const sections = docSnap.data().sections || [];
+    if (!sections[sectionIndex] || !Array.isArray(sections[sectionIndex].items)) {
+      alert("Item not found");
+      return;
+    }
+    
+    // Remove item
+    sections[sectionIndex].items.splice(itemIndex, 1);
+    
+    await setDoc(progressRef, { sections }, { merge: true });
+    console.log('Item deleted successfully');
+  } catch (error) {
+    console.error('Error deleting item:', error);
+    alert('Error deleting item: ' + error.message);
+  }
+};
+
+// Clear all sections from progress report
+window.clearAllProgressSections = async function() {
+  if (!confirm("This will delete ALL sections and items. Are you sure?")) return;
+  
+  try {
+    const progressRef = doc(db, progressReportCollection, progressReportDocId);
+    
+    // Set sections to empty array
+    await setDoc(progressRef, { sections: [] }, { merge: true });
+    
+    console.log('All sections cleared successfully');
+    alert('All sections have been cleared!');
+  } catch (error) {
+    console.error('Error clearing sections:', error);
+    alert('Error clearing sections: ' + error.message);
+  }
+};
 
 /* CREATE TASK */
 window.createTask = async function () {
@@ -842,13 +1178,16 @@ onSnapshot(collection(db, "tasks"), (snap) => {
 
   // Track progress by member for analytics
   const memberProgress = {};
+  const allTasks = docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+  lastAnalyticsTasks = allTasks;
+  window.lastAnalyticsTasks = allTasks;
 
-  docs.forEach(docSnap => {
-    const t = docSnap.data();
+  allTasks.forEach(t => {
     const memberName = t.assignedToName || t.assignedTo || "Unassigned";
 
     let status = (t.status || "pending").toLowerCase().trim();
-    if (new Date(t.deadline).getTime() < now && (status === "pending" || status === "pending validation")) {
+    const deadline = parseDeadline(t.deadline);
+    if (deadline && deadline.getTime() < now && (status === "pending" || status === "pending validation")) {
       status = "overdue";
     }
 
@@ -907,212 +1246,200 @@ function updateChartIfNeeded() {
   }
 }
 
-let lastChartData = null;
-
 /* GRAPH */
 function updateChart(memberProgress) {
-  const ctx = document.getElementById("taskChart");
-  if (!ctx) {
-    console.error('Chart canvas element not found');
+  const container = document.getElementById("taskAnalyticsList");
+  if (!container) {
+    console.error('Analytics list container not found');
     return;
   }
 
-  if (typeof Chart === 'undefined') {
-    console.error('Chart.js is not loaded yet.');
-    return;
-  }
+  container.innerHTML = "";
 
-  const parent = ctx.parentElement;
-  const placeholderClass = 'chart-placeholder';
-  const existingPlaceholder = parent ? parent.querySelector(`.${placeholderClass}`) : null;
-
-  // Handle empty data
   if (!memberProgress || Object.keys(memberProgress).length === 0) {
-    if (chart) {
-      chart.destroy();
-      chart = null;
-    }
-
-    if (parent && !existingPlaceholder) {
-      const msg = document.createElement('p');
-      msg.className = placeholderClass;
-      msg.textContent = 'No task data available. Create a task to see analytics.';
-      msg.style.color = '#94a3b8';
-      msg.style.textAlign = 'center';
-      msg.style.padding = '2rem';
-      parent.appendChild(msg);
-    }
+    container.innerHTML = `<p style="color: #94a3b8; text-align: center; padding: 2rem;">No task data available. Create a task to see analytics.</p>`;
     return;
   }
 
-  if (existingPlaceholder) {
-    existingPlaceholder.remove();
-  }
-
-  const memberNames = Object.keys(memberProgress).filter(name => name && name !== "");
-  
+  const memberNames = Object.keys(memberProgress).filter(name => name && name !== "").sort();
   if (memberNames.length === 0) {
+    container.innerHTML = `<p style="color: #94a3b8; text-align: center; padding: 2rem;">No task data available. Create a task to see analytics.</p>`;
     return;
   }
 
-  const doneData = memberNames.map(member => memberProgress[member].done);
-  const pendingData = memberNames.map(member => memberProgress[member].pending);
-  const overdueData = memberNames.map(member => memberProgress[member].overdue);
-  const needsActionData = memberNames.map(member => memberProgress[member].needsAction);
-  const pendingValidationData = memberNames.map(member => memberProgress[member].pendingValidation);
+  memberNames.forEach(member => {
+    const progress = memberProgress[member] || {};
+    const pending = progress.pending || 0;
+    const needsAction = progress.needsAction || 0;
+    const overdue = progress.overdue || 0;
 
-  const currentData = {
-    labels: memberNames,
-    datasets: [doneData, pendingData, overdueData, needsActionData, pendingValidationData]
-  };
+    const card = document.createElement('div');
+    card.style.padding = '1rem';
+    card.style.border = '1px solid #334155';
+    card.style.borderRadius = '0.75rem';
+    card.style.background = '#0f172a';
+    card.style.display = 'grid';
+    card.style.gap = '0.5rem';
 
-  const dataChanged = !lastChartData ||
-    JSON.stringify(lastChartData.labels) !== JSON.stringify(currentData.labels) ||
-    JSON.stringify(lastChartData.datasets) !== JSON.stringify(currentData.datasets);
+    const title = document.createElement('h3');
+    title.textContent = member;
+    title.style.margin = '0';
+    title.style.fontSize = '1.05rem';
+    title.style.color = '#f8fafc';
 
-  if (!dataChanged) {
-    return; // No need to update if data hasn't changed
-  }
+    card.appendChild(title);
 
-  lastChartData = currentData;
+    const statusContainer = document.createElement('div');
+    statusContainer.style.display = 'flex';
+    statusContainer.style.flexWrap = 'wrap';
+    statusContainer.style.gap = '0.75rem';
 
-  // Update existing chart
-  if (chart && chart.data && !chart.destroyed) {
-    chart.data.labels = memberNames;
-    chart.data.datasets[0].data = doneData;
-    chart.data.datasets[1].data = pendingData;
-    chart.data.datasets[2].data = overdueData;
-    chart.data.datasets[3].data = needsActionData;
-    chart.data.datasets[4].data = pendingValidationData;
-    chart.update('none');
-    return;
-  }
+    const addStatus = (label, value, color, bg) => {
+      const status = document.createElement('span');
+      status.textContent = `${label}: ${value}`;
+      status.style.color = color;
+      status.style.background = bg;
+      status.style.padding = '0.35rem 0.75rem';
+      status.style.borderRadius = '999px';
+      status.style.fontSize = '0.92rem';
+      status.style.fontWeight = '600';
+      status.style.minWidth = 'max-content';
+      statusContainer.appendChild(status);
+    };
 
-  // Destroy any existing chart before creating new one
-  if (chart && !chart.destroyed) {
-    chart.destroy();
-  }
+    if (pending > 0) addStatus('Pending', pending, '#1d4ed8', 'rgba(59,130,246,0.12)');
+    if (needsAction > 0) addStatus('Needs Action', needsAction, '#b45309', 'rgba(245,158,11,0.15)');
+    if (overdue > 0) addStatus('Overdue', overdue, '#dc2626', 'rgba(239,68,68,0.15)');
 
-  // Create new chart
-  try {
-    const datasets = [
-      {
-        label: 'Done',
-        data: memberNames.map(member => memberProgress[member].done),
-        backgroundColor: '#16a34a',
-        borderColor: '#15803d',
-        borderWidth: 1
-      },
-      {
-        label: 'Pending',
-        data: memberNames.map(member => memberProgress[member].pending),
-        backgroundColor: '#2563eb',
-        borderColor: '#1d4ed8',
-        borderWidth: 1
-      },
-      {
-        label: 'Overdue',
-        data: memberNames.map(member => memberProgress[member].overdue),
-        backgroundColor: '#dc2626',
-        borderColor: '#b91c1c',
-        borderWidth: 1
-      },
-      {
-        label: 'Needs Action',
-        data: memberNames.map(member => memberProgress[member].needsAction),
-        backgroundColor: '#f59e0b',
-        borderColor: '#d97706',
-        borderWidth: 1
-      },
-      {
-        label: 'Pending Validation',
-        data: memberNames.map(member => memberProgress[member].pendingValidation),
-        backgroundColor: '#8b5cf6',
-        borderColor: '#7c3aed',
-        borderWidth: 1
-      }
-    ];
+    if (pending === 0 && needsAction === 0 && overdue === 0) {
+      const empty = document.createElement('p');
+      empty.textContent = 'No pending, needs action, or overdue tasks.';
+      empty.style.margin = '0';
+      empty.style.color = '#94a3b8';
+      card.appendChild(empty);
+    } else {
+      card.appendChild(statusContainer);
 
-    chart = new Chart(ctx, {
-      type: "bar",
-      data: {
-        labels: memberNames,
-        datasets
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        indexAxis: 'y',
-        animation: false,
-        layout: {
-          padding: {
-            left: 8,
-            right: 8,
-            top: 8,
-            bottom: 8
-          }
-        },
-        elements: {
-          bar: {
-            borderRadius: 4,
-            barThickness: 16,
-            maxBarThickness: 18
-          }
-        },
-        scales: {
-          x: {
-            beginAtZero: true,
-            ticks: {
-              color: '#cbd5e1',
-              maxTicksLimit: 5
-            },
-            grid: {
-              color: 'rgba(148, 163, 184, 0.12)'
-            }
-          },
-          y: {
-            ticks: {
-              color: '#cbd5e1',
-              font: {
-                size: 12
-              },
-              padding: 6
-            },
-            grid: {
-              display: false
-            }
-          }
-        },
-        plugins: {
-          legend: {
-            display: true,
-            position: 'top',
-            labels: {
-              color: '#cbd5e1',
-              boxWidth: 12,
-              boxHeight: 12,
-              padding: 12
-            }
-          },
-          tooltip: {
-            enabled: true,
-            callbacks: {
-              label: function(context) {
-                return context.dataset.label + ': ' + context.parsed.x;
-              }
-            }
-          }
-        }
-      }
-    });
-    window.adminTaskChart = chart;
-    window.updateChart = updateChart;
-  } catch (err) {
-    console.error('Chart initialization error:', err);
-  }
+      const detailsButton = document.createElement('button');
+      detailsButton.textContent = 'View Tasks';
+      detailsButton.style.marginTop = '0.75rem';
+      detailsButton.style.padding = '0.65rem 0.95rem';
+      detailsButton.style.border = 'none';
+      detailsButton.style.borderRadius = '0.75rem';
+      detailsButton.style.background = '#2563eb';
+      detailsButton.style.color = '#ffffff';
+      detailsButton.style.cursor = 'pointer';
+      detailsButton.style.fontWeight = '600';
+      detailsButton.onclick = () => showMemberTaskDetails(member);
+      card.appendChild(detailsButton);
+    }
+
+    container.appendChild(card);
+  });
 }
 
-// Expose updateChart and lastMemberProgress globally
+function showMemberTaskDetails(memberName) {
+  const modalOverlay = document.getElementById('taskAnalyticsModalOverlay');
+  const detailMessage = document.getElementById('taskAnalyticsDetailsMessage');
+  const detailList = document.getElementById('taskAnalyticsDetailsList');
+
+  if (!modalOverlay || !detailMessage || !detailList) {
+    console.error('Analytics detail modal elements not found');
+    return;
+  }
+
+  const tasks = window.lastAnalyticsTasks || [];
+  const now = Date.now();
+
+  const filtered = tasks.map(task => {
+    const status = (task.status || 'pending').toLowerCase().trim();
+    const deadline = parseDeadline(task.deadline);
+    const isOverdue = deadline && deadline.getTime() < now && (status === 'pending' || status === 'pending validation');
+    return {
+      ...task,
+      displayStatus: isOverdue ? 'overdue' : status,
+    };
+  }).filter(task => {
+    const name = task.assignedToName || task.assignedTo || 'Unassigned';
+    return name === memberName && ['pending', 'needs action', 'overdue'].includes(task.displayStatus);
+  });
+
+  detailList.innerHTML = '';
+  modalOverlay.style.display = 'flex';
+  modalOverlay.classList.add('show');
+  modalOverlay.style.visibility = 'visible';
+  modalOverlay.style.opacity = '1';
+  detailMessage.textContent = `Showing overdue, needs action, and pending tasks for ${memberName}.`;
+  document.body.style.overflow = 'hidden';
+
+  if (filtered.length === 0) {
+    detailList.innerHTML = `<p style="margin:0; color:#94a3b8;">No overdue, needs action, or pending tasks found for this member.</p>`;
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  filtered.forEach(task => {
+    const item = document.createElement('div');
+    item.style.padding = '0.85rem';
+    item.style.border = '1px solid rgba(148, 163, 184, 0.2)';
+    item.style.borderRadius = '0.75rem';
+    item.style.background = '#111827';
+
+    const title = document.createElement('p');
+    title.textContent = task.title || 'Untitled Task';
+    title.style.margin = '0 0 0.5rem 0';
+    title.style.fontWeight = '700';
+    title.style.color = '#f8fafc';
+
+    const status = document.createElement('span');
+    status.textContent = task.displayStatus === 'needs action' ? 'Needs Action' : task.displayStatus.charAt(0).toUpperCase() + task.displayStatus.slice(1);
+    status.style.display = 'inline-block';
+    status.style.padding = '0.25rem 0.65rem';
+    status.style.borderRadius = '999px';
+    status.style.fontSize = '0.82rem';
+    status.style.fontWeight = '600';
+    status.style.marginBottom = '0.5rem';
+    status.style.color = '#ffffff';
+    status.style.background = task.displayStatus === 'overdue' ? '#dc2626' : task.displayStatus === 'needs action' ? '#d97706' : '#2563eb';
+
+    const deadline = document.createElement('p');
+    const deadlineDate = parseDeadline(task.deadline);
+    deadline.textContent = `Deadline: ${deadlineDate ? deadlineDate.toLocaleDateString() : 'Not set'}`;
+    deadline.style.margin = '0 0 0.35rem 0';
+    deadline.style.color = '#cbd5e1';
+    deadline.style.fontSize = '0.92rem';
+
+    const description = document.createElement('p');
+    description.textContent = task.description || (task.title ? '' : 'No additional details available.');
+    description.style.margin = '0';
+    description.style.color = '#94a3b8';
+    description.style.fontSize = '0.92rem';
+
+    item.appendChild(title);
+    item.appendChild(status);
+    item.appendChild(deadline);
+    if (description.textContent) item.appendChild(description);
+    fragment.appendChild(item);
+  });
+
+  detailList.appendChild(fragment);
+}
+
+function hideMemberTaskDetails() {
+  const modalOverlay = document.getElementById('taskAnalyticsModalOverlay');
+  if (!modalOverlay) {
+    return;
+  }
+  modalOverlay.classList.remove('show');
+  modalOverlay.style.visibility = 'hidden';
+  modalOverlay.style.opacity = '0';
+  modalOverlay.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+window.showMemberTaskDetails = showMemberTaskDetails;
+window.hideMemberTaskDetails = hideMemberTaskDetails;
 window.updateChart = updateChart;
 window.updateChartIfNeeded = function() {
   if (window.lastMemberProgress) {
@@ -1488,7 +1815,7 @@ onSnapshot(collection(db, "announcements"), (snap) => {
           ${commentHtml}
           <div style="margin-top: 1rem;">
             <textarea id="adminCommentInput-${docSnap.id}" rows="3" placeholder="Add a comment as Admin..." style="width: 100%; padding: 0.75rem; border-radius: 0.375rem; border: 1px solid #4b5563; background: #0f172a; color: #f3f4f6; margin-bottom: 0.75rem;"></textarea>
-            <button onclick="addAnnouncementComment('${docSnap.id}')" style="background: #4f46e5; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer;">Post Comment as Admin</button>
+            <button onclick="addAnnouncementComment('${docSnap.id}')" style="background: #3b82f6; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer;">Post Comment as Admin</button>
           </div>
         </div>
         <button onclick="deleteAnnouncement('${docSnap.id}')" class="btn-danger" style="margin-top: 0.75rem;">🗑️ Delete Announcement</button>
@@ -1498,6 +1825,654 @@ onSnapshot(collection(db, "announcements"), (snap) => {
 });
 
 loadProgressReport();
+
+async function getNextLiveChatTitle() {
+  const snapshot = await getDocs(collection(db, 'liveChats'));
+  let maxIndex = 0;
+  snapshot.forEach((docSnap) => {
+    const title = String(docSnap.data().title || '').trim();
+    const match = title.match(/^live\s*chat\s*(\d+)$/i);
+    if (match) {
+      maxIndex = Math.max(maxIndex, Number(match[1]));
+    }
+  });
+  return `Livechat ${maxIndex + 1}`;
+}
+
+async function createLiveChatRoom(event) {
+  if (event && event.preventDefault) event.preventDefault();
+  const title = await getNextLiveChatTitle();
+
+  try {
+    await addDoc(collection(db, 'liveChats'), {
+      title,
+      createdByEmail: adminEmail,
+      createdByName: getUserName(adminEmail),
+      status: 'Active',
+      createdAt: Date.now()
+    });
+    loadLiveChatRooms();
+  } catch (error) {
+    console.error('Failed to create live chat room:', error);
+    alert('Unable to create chat room. Please try again.');
+  }
+}
+
+function renderAdminChatRooms(rooms) {
+  const container = document.getElementById('adminChatRoomsContainer');
+  if (!container) return;
+  if (!rooms.length) {
+    container.innerHTML = '<p style="color: #94a3b8; text-align: center;">No live chat rooms yet.</p>';
+    return;
+  }
+
+  rooms.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  liveChatRoomsById = {};
+  container.innerHTML = '';
+
+  rooms.forEach((room) => {
+    liveChatRoomsById[room.id] = room;
+    const statusColor = room.status === 'Closed' ? '#ef4444' : '#10b981';
+    const createdBy = room.createdByName || getUserName(room.createdByEmail) || 'Unknown';
+    const isActive = room.status === 'Active';
+    const canDelete = true;
+
+    const roomDiv = document.createElement('div');
+    roomDiv.style.cssText = 'border: 1px solid #374151; background: #1e293b; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;';
+    roomDiv.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
+        <div style="min-width: 0;">
+          <h4 style="margin: 0; color: #f8fafc;">${room.title}</h4>
+          <p style="margin: 0.5rem 0 0; color: #94a3b8; font-size: 0.9rem;">Created by ${createdBy}</p>
+          <p style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.8rem;">${new Date(room.createdAt).toLocaleString()}</p>
+        </div>
+        <span style="background: ${statusColor}; color: white; padding: 0.35rem 0.75rem; border-radius: 9999px; font-size: 0.8rem;">${room.status}</span>
+      </div>
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+        <button onclick="openAdminChatRoom('${room.id}')" style="background: ${isActive ? '#10b981' : '#6b7280'}; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">${isActive ? 'Open Chat' : 'View Chat'}</button>
+        ${canDelete ? `<button onclick="deleteLiveChatRoom('${room.id}')" style="background: #ef4444; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">Delete</button>` : ''}
+      </div>
+    `;
+    container.appendChild(roomDiv);
+  });
+}
+
+function openAdminChatRoom(chatId) {
+  const room = liveChatRoomsById[chatId];
+  if (!room) return;
+
+  selectedLiveChatId = chatId;
+  const panel = document.getElementById('adminChatRoomPanel');
+  const titleEl = document.getElementById('adminActiveChatTitle');
+  const metaEl = document.getElementById('adminActiveChatMeta');
+  const messageInput = document.getElementById('adminChatMessageInput');
+  const messageForm = document.getElementById('adminChatMessageForm');
+
+  if (panel) panel.style.display = 'block';
+  if (titleEl) titleEl.textContent = room.title;
+  if (metaEl) metaEl.textContent = `Created by ${room.createdByName || getUserName(room.createdByEmail)} • Status: ${room.status}`;
+  if (messageInput) messageInput.disabled = room.status !== 'Active';
+  if (messageForm) messageForm.style.opacity = room.status !== 'Active' ? '0.7' : '1';
+
+  clearAdminReplyToMessage();
+  subscribeAdminChatMessages(chatId);
+}
+
+function closeAdminChatPanel() {
+  const panel = document.getElementById('adminChatRoomPanel');
+  if (panel) panel.style.display = 'none';
+
+  if (liveChatMessagesUnsubscribe) {
+    liveChatMessagesUnsubscribe();
+    liveChatMessagesUnsubscribe = null;
+  }
+
+  selectedLiveChatId = null;
+  clearAdminReplyToMessage();
+}
+
+function clearAdminReplyToMessage() {
+  adminReplyToMessage = null;
+  updateAdminReplyPreview();
+}
+
+function updateAdminReplyPreview() {
+  const preview = document.getElementById('adminChatReplyPreview');
+  const input = document.getElementById('adminChatMessageInput');
+  if (!preview || !input) return;
+
+  if (!adminReplyToMessage) {
+    preview.style.display = 'none';
+    preview.innerHTML = '';
+    return;
+  }
+
+  const sender = escapeHtml(adminReplyToMessage.senderName || getUserName(adminReplyToMessage.senderEmail) || 'Unknown');
+  const text = escapeHtml(adminReplyToMessage.text || 'This message was unsent.');
+  preview.style.display = 'flex';
+  preview.style.justifyContent = 'space-between';
+  preview.style.alignItems = 'center';
+  preview.style.gap = '1rem';
+  const cancelButtonStyle = 'display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;';
+  preview.innerHTML = `
+    <div style="min-width: 0;">
+      <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.25rem;">Replying to ${sender}</div>
+      <div style="font-size: 0.9rem; color: #e5e7eb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${text}</div>
+    </div>
+    <button type="button" onclick="clearAdminReplyToMessage()" style="${cancelButtonStyle}">Cancel</button>
+  `;
+}
+
+function updateAdminChatImagePreview() {
+  const preview = document.getElementById('adminChatImagePreview');
+  if (!preview) return;
+
+  if (!selectedAdminChatImageData) {
+    preview.style.display = 'none';
+    preview.innerHTML = '';
+    return;
+  }
+
+  preview.style.display = 'block';
+  preview.style.padding = '0.75rem 0.85rem';
+  preview.style.borderRadius = '12px';
+  preview.style.border = '1px solid #374151';
+  preview.style.background = '#0f172a';
+  preview.style.color = '#e5e7eb';
+  preview.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 0.75rem; min-width: 0; overflow: hidden;">
+        <img src="${selectedAdminChatImageData}" alt="Selected image" style="max-width: 72px; max-height: 72px; border-radius: 12px; object-fit: cover;" />
+        <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(selectedAdminChatImageName || 'Selected image')}</div>
+      </div>
+      <button type="button" onclick="clearAdminChatImageSelection()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">Remove</button>
+    </div>
+  `;
+}
+
+function clearAdminChatImageSelection() {
+  selectedAdminChatImageData = null;
+  selectedAdminChatImageName = null;
+  const input = document.getElementById('adminChatImageInput');
+  if (input) input.value = '';
+  updateAdminChatImagePreview();
+}
+
+function triggerAdminChatImageInput() {
+  const input = document.getElementById('adminChatImageInput');
+  if (input) input.click();
+}
+
+function handleAdminChatImageInputChange(event) {
+  const file = event.target.files?.[0];
+  if (!file) {
+    clearAdminChatImageSelection();
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    selectedAdminChatImageData = reader.result;
+    selectedAdminChatImageName = file.name;
+    updateAdminChatImagePreview();
+  };
+  reader.readAsDataURL(file);
+}
+
+function setAdminReplyToMessage(messageId) {
+  if (!messageId) return;
+  const msg = adminChatMessagesById[messageId];
+  if (!msg) return;
+  adminReplyToMessage = msg;
+  updateAdminReplyPreview();
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatMessageWithMentions(text) {
+  return text.replace(/@\[([^\]]+)\]/g, '<span class="mention">@$1</span>');
+}
+
+function getMentionContext(input) {
+  const cursor = input.selectionStart;
+  const value = input.value;
+  const before = value.slice(0, cursor);
+  const atIndex = before.lastIndexOf('@');
+  if (atIndex === -1) return null;
+
+  const prefix = before.slice(atIndex + 1);
+  if (/\s/.test(prefix)) return null;
+  if (atIndex > 0 && /[^\s]/.test(before[atIndex - 1])) return null;
+
+  return {
+    start: atIndex,
+    query: prefix.toLowerCase()
+  };
+}
+
+function updateMentionDropdown(input, dropdown) {
+  const context = getMentionContext(input);
+  if (!context) {
+    dropdown.style.display = 'none';
+    return;
+  }
+
+  const filtered = mentionUsers.filter((user) => {
+    const search = `${user.name} ${user.uid}`.toLowerCase();
+    return search.includes(context.query);
+  });
+
+  if (filtered.length === 0) {
+    dropdown.innerHTML = '<div class="mention-item">No matching users</div>';
+    dropdown.style.display = 'block';
+    return;
+  }
+
+  dropdown.innerHTML = filtered.map((user) => `
+    <div class="mention-item" data-name="${escapeHtml(user.name)}">
+      <strong>${escapeHtml(user.name)}</strong>
+      <span class="mention-email">${escapeHtml(user.uid)}</span>
+    </div>
+  `).join('');
+  dropdown.style.display = 'block';
+}
+
+function insertMentionAtCursor(input, dropdown, name) {
+  const cursor = input.selectionStart;
+  const value = input.value;
+  const before = value.slice(0, cursor);
+  const atIndex = before.lastIndexOf('@');
+  if (atIndex === -1) return;
+
+  const token = `@[${name}] `;
+  input.value = value.slice(0, atIndex) + token + value.slice(cursor);
+  const newCursor = atIndex + token.length;
+  input.setSelectionRange(newCursor, newCursor);
+  input.focus();
+  dropdown.style.display = 'none';
+}
+
+function setupMentionAutocomplete(inputId, dropdownId) {
+  const input = document.getElementById(inputId);
+  const dropdown = document.getElementById(dropdownId);
+  if (!input || !dropdown) return;
+
+  input.addEventListener('input', () => updateMentionDropdown(input, dropdown));
+  dropdown.addEventListener('click', (event) => {
+    const item = event.target.closest('.mention-item');
+    if (!item) return;
+    insertMentionAtCursor(input, dropdown, item.dataset.name);
+  });
+  document.addEventListener('click', (event) => {
+    if (!input.contains(event.target) && !dropdown.contains(event.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
+}
+
+function renderAdminChatMessages(messages) {
+  const container = document.getElementById('adminChatMessages');
+  if (!container) return;
+
+  adminChatMessagesById = {};
+
+  if (!messages.length) {
+    container.innerHTML = '<p style="color: #94a3b8; text-align: center; margin: 1rem 0;">No messages in this chat yet.</p>';
+    return;
+  }
+
+  container.innerHTML = '';
+  messages.forEach((msg) => {
+    adminChatMessagesById[msg.id] = msg;
+    const isOwn = msg.senderEmail === adminEmail;
+    const messageText = msg.deleted ? 'This message was unsent.' : msg.text;
+    const safeText = escapeHtml(messageText);
+    const renderedText = msg.deleted ? safeText : formatMessageWithMentions(safeText);
+    const imageMarkup = !msg.deleted && msg.imageData ? `<div style="margin-bottom: 0.75rem;"><img class="admin-chat-image" src="${msg.imageData}" alt="Sent image" style="width: auto; max-width: 100%; max-height: 280px; border-radius: 14px; object-fit: cover; display: block; cursor: pointer;"/></div>` : '';
+    const replyPreview = msg.replyToId ? `
+      <div style="padding: 0.75rem 1rem; margin-bottom: 0.75rem; border-radius: 12px; background: #0f172a; border: 1px solid #374151;">
+        <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.25rem;">Replying to ${escapeHtml(msg.replyToSenderName || 'Unknown')}</div>
+        <div style="font-size: 0.9rem; color: #e5e7eb; line-height: 1.4;">${escapeHtml(msg.replyToText || '')}</div>
+      </div>
+    ` : '';
+    const buttonBaseStyle = 'display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;';
+    const replyButton = !msg.deleted ? `<button type="button" onclick="setAdminReplyToMessage('${msg.id}')" style="${buttonBaseStyle}">Reply</button>` : '';
+    const unsendButton = isOwn && !msg.deleted ? `<button type="button" onclick="unsendAdminChatMessage('${selectedLiveChatId}', '${msg.id}')" style="${buttonBaseStyle}">Unsend</button>` : '';
+    const actionButtons = [replyButton, unsendButton].filter(Boolean).join('<span style="margin: 0 0.35rem; color: #374151;">|</span>');
+
+    const messageDiv = document.createElement('div');
+    messageDiv.style.cssText = 'padding: 0.85rem 1rem; margin-bottom: 0.75rem; border-radius: 10px; background: #111827;';
+    messageDiv.innerHTML = `
+      ${replyPreview}
+      <div style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem; opacity: ${msg.deleted ? 0.7 : 1};">
+        <div style="font-size: 0.85rem; color: #94a3b8;">${escapeHtml(msg.senderName || getUserName(msg.senderEmail) || 'Guest')}</div>
+        <div style="font-size: 0.75rem; color: #6b7280;">${msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+      </div>
+      <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; margin-bottom: 0.5rem;">${imageMarkup}${renderedText}</div>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; margin-bottom: ${msg.reactions && Object.keys(msg.reactions).length > 0 ? '0.5rem' : '0'};">
+        ${actionButtons ? `<div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">${actionButtons}</div>` : ''}
+        <button type="button" class="admin-react-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">😊 React</button>
+      </div>
+      ${msg.reactions && Object.keys(msg.reactions).length > 0 ? `
+        <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; padding-top: 0.5rem; border-top: 1px solid #374151;">
+          ${Object.entries(msg.reactions).map(([emoji, users]) => `
+            <div class="admin-reaction-badge" data-message-id="${msg.id}" data-emoji="${emoji}" data-users='${JSON.stringify(users)}' style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.2); border-radius: 9999px; font-size: 0.8rem; cursor: pointer; transition: all 0.15s;">
+              <span>${emoji}</span>
+              <span style="color: #94a3b8;">${users.length}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+    `;
+    container.appendChild(messageDiv);
+  });
+  container.scrollTop = container.scrollHeight;
+
+  // Attach click listeners to chat images
+  const chatImages = container.querySelectorAll('.admin-chat-image');
+  chatImages.forEach(img => {
+    img.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openAdminChatImageFullscreen(this.src);
+    });
+  });
+
+  // Attach click listeners to reaction buttons
+  const reactBtns = container.querySelectorAll('.admin-react-btn');
+  reactBtns.forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const messageId = this.dataset.messageId;
+      showAdminReactionMenu(messageId, e);
+    });
+  });
+
+  // Attach click listeners to reaction badges to view details
+  const reactionBadges = container.querySelectorAll('.admin-reaction-badge');
+  reactionBadges.forEach(badge => {
+    badge.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const messageId = this.dataset.messageId;
+      const emoji = this.dataset.emoji;
+      const users = JSON.parse(this.dataset.users);
+      showAdminReactionDetails(emoji, users);
+    });
+    badge.addEventListener('mouseover', function() {
+      this.style.background = 'rgba(96, 165, 250, 0.2)';
+    });
+    badge.addEventListener('mouseout', function() {
+      this.style.background = 'rgba(96, 165, 250, 0.1)';
+    });
+  });
+}
+
+function openAdminChatImageFullscreen(imageSrc) {
+  let overlay = document.getElementById('adminChatImageFullscreenOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'adminChatImageFullscreenOverlay';
+    overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(15, 23, 42, 0.96); display: flex; align-items: center; justify-content: center; z-index: 100000; padding: 1rem; box-sizing: border-box;';
+    overlay.onclick = (event) => { if (event.target === overlay) closeAdminChatImageFullscreen(); };
+    const img = document.createElement('img');
+    img.id = 'adminChatImageFullscreenOverlayImg';
+    img.style.cssText = 'max-width: 100%; max-height: 100%; border-radius: 16px; box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.innerText = '×';
+    close.style.cssText = 'position: absolute; top: 1rem; right: 1rem; background: rgba(0, 0, 0, 0.55); color: #f8fafc; border: none; border-radius: 9999px; width: 2.5rem; height: 2.5rem; font-size: 1.25rem; cursor: pointer;';
+    close.onclick = (event) => { event.stopPropagation(); closeAdminChatImageFullscreen(); };
+    overlay.appendChild(img);
+    overlay.appendChild(close);
+    document.body.appendChild(overlay);
+  }
+  const img = document.getElementById('adminChatImageFullscreenOverlayImg');
+  if (img) img.src = imageSrc;
+  overlay.style.display = 'flex';
+}
+
+function closeAdminChatImageFullscreen() {
+  const overlay = document.getElementById('adminChatImageFullscreenOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+async function subscribeAdminChatMessages(chatId) {
+  if (liveChatMessagesUnsubscribe) {
+    liveChatMessagesUnsubscribe();
+  }
+
+  const messageQuery = query(collection(db, 'liveChats', chatId, 'messages'), orderBy('createdAt', 'asc'));
+  liveChatMessagesUnsubscribe = onSnapshot(messageQuery, (snapshot) => {
+    const messages = [];
+    snapshot.forEach((docSnap) => messages.push({ id: docSnap.id, ...docSnap.data() }));
+    renderAdminChatMessages(messages);
+  }, (error) => {
+    console.error('Admin live chat messages listener error:', error);
+  });
+}
+
+async function sendAdminChatMessage(event) {
+  if (event && event.preventDefault) event.preventDefault();
+  if (!selectedLiveChatId) return;
+
+  const messageInput = document.getElementById('adminChatMessageInput');
+  if (!messageInput) return;
+
+  const message = messageInput.value.trim();
+  if (!message && !selectedAdminChatImageData) return;
+
+  const newMessage = {
+    senderEmail: adminEmail,
+    senderName: getUserName(adminEmail),
+    text: message || '',
+    createdAt: Date.now(),
+    deleted: false
+  };
+
+  if (selectedAdminChatImageData) {
+    newMessage.imageData = selectedAdminChatImageData;
+    if (selectedAdminChatImageName) {
+      newMessage.imageName = selectedAdminChatImageName;
+    }
+  }
+
+  if (adminReplyToMessage) {
+    newMessage.replyToId = adminReplyToMessage.id;
+    newMessage.replyToSenderName = adminReplyToMessage.senderName || getUserName(adminReplyToMessage.senderEmail);
+    newMessage.replyToText = adminReplyToMessage.text || 'This message was unsent.';
+    newMessage.replyToCreatedAt = adminReplyToMessage.createdAt || null;
+  }
+
+  try {
+    await addDoc(collection(db, 'liveChats', selectedLiveChatId, 'messages'), newMessage);
+    messageInput.value = '';
+    clearAdminChatImageSelection();
+    clearAdminReplyToMessage();
+  } catch (error) {
+    console.error('Failed to send admin chat message:', error);
+    alert('Unable to send message. Please try again.');
+  }
+}
+
+async function unsendAdminChatMessage(chatId, messageId) {
+  if (!chatId || !messageId) return;
+
+  const messageRef = doc(db, 'liveChats', chatId, 'messages', messageId);
+  try {
+    await updateDoc(messageRef, {
+      deleted: true,
+      text: 'This message was unsent.',
+      unsentAt: Date.now()
+    });
+  } catch (error) {
+    console.error('Failed to unsend admin chat message:', error);
+  }
+}
+
+function showAdminReactionDetails(emoji, users) {
+  let modal = document.getElementById('adminReactionDetailsModal');
+  if (modal) modal.remove();
+
+  modal = document.createElement('div');
+  modal.id = 'adminReactionDetailsModal';
+  modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 100000; padding: 1rem; box-sizing: border-box;';
+
+  const content = document.createElement('div');
+  content.style.cssText = 'background: #111827; border: 1px solid #374151; border-radius: 16px; padding: 2rem; max-width: 400px; width: 100%; box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);';
+
+  content.innerHTML = `
+    <div style="margin-bottom: 1.5rem;">
+      <div style="font-size: 2.5rem; margin-bottom: 0.5rem; text-align: center;">${emoji}</div>
+      <div style="text-align: center; color: #94a3b8; font-size: 0.9rem;">${users.length} ${users.length === 1 ? 'person reacted' : 'people reacted'}</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; max-height: 300px; overflow-y: auto;">
+      ${users.map(email => `
+        <div style="padding: 0.75rem; background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.2); border-radius: 8px; color: #e5e7eb; font-size: 0.9rem;">
+          ${escapeHtml(getUserName(email) || email)}
+        </div>
+      `).join('')}
+    </div>
+    <button type="button" onclick="document.getElementById('adminReactionDetailsModal').remove();" style="width: 100%; padding: 0.75rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 0.9rem;">Close</button>
+  `;
+
+  modal.appendChild(content);
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.remove();
+  };
+
+  document.body.appendChild(modal);
+}
+
+function showAdminReactionMenu(messageId, event) {
+  const emojis = [
+    { emoji: '😂', name: 'laughing' },
+    { emoji: '😠', name: 'mad' },
+    { emoji: '😢', name: 'sad' },
+    { emoji: '❤️', name: 'love' }
+  ];
+
+  let menu = document.getElementById('adminReactionMenu');
+  if (menu) menu.remove();
+
+  menu = document.createElement('div');
+  menu.id = 'adminReactionMenu';
+  menu.style.cssText = 'position: fixed; background: #111827; border: 1px solid #374151; border-radius: 9999px; display: flex; gap: 0.5rem; padding: 0.5rem; z-index: 50000; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);';
+
+  emojis.forEach(item => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = item.emoji;
+    btn.style.cssText = 'background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.2); color: #e5e7eb; padding: 0.5rem 0.75rem; border-radius: 9999px; cursor: pointer; font-size: 1.2rem; transition: all 0.15s;';
+    btn.onmouseover = () => btn.style.background = 'rgba(96, 165, 250, 0.2)';
+    btn.onmouseout = () => btn.style.background = 'rgba(96, 165, 250, 0.1)';
+    btn.onclick = () => {
+      toggleAdminMessageReaction(messageId, item.emoji);
+      menu.remove();
+    };
+    menu.appendChild(btn);
+  });
+
+  document.body.appendChild(menu);
+  const rect = event.target.getBoundingClientRect();
+  menu.style.left = (rect.left + rect.width / 2 - menu.offsetWidth / 2) + 'px';
+  menu.style.top = (rect.top - menu.offsetHeight - 10) + 'px';
+
+  document.addEventListener('click', function closeMenu(e) {
+    if (!menu.contains(e.target) && e.target !== event.target) {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+    }
+  });
+}
+
+async function toggleAdminMessageReaction(messageId, emoji) {
+  if (!selectedLiveChatId || !messageId) return;
+
+  const messageRef = doc(db, 'liveChats', selectedLiveChatId, 'messages', messageId);
+  const messageSnap = await getDoc(messageRef);
+  if (!messageSnap.exists()) return;
+
+  const reactions = messageSnap.data().reactions || {};
+  const currentUserEmail = adminEmail;
+
+  if (!reactions[emoji]) {
+    reactions[emoji] = [];
+  }
+
+  const userIndex = reactions[emoji].indexOf(currentUserEmail);
+  if (userIndex > -1) {
+    reactions[emoji].splice(userIndex, 1);
+    if (reactions[emoji].length === 0) {
+      delete reactions[emoji];
+    }
+  } else {
+    reactions[emoji].push(currentUserEmail);
+  }
+
+  try {
+    await updateDoc(messageRef, { reactions });
+  } catch (error) {
+    console.error('Failed to update reaction:', error);
+  }
+}
+
+
+async function deleteLiveChatRoom(chatId) {
+  if (!chatId) return;
+  if (!confirm('Delete this live chat room? This will remove the room from the list.')) return;
+
+  try {
+    await deleteDoc(doc(db, 'liveChats', chatId));
+    closeAdminChatPanel();
+    loadLiveChatRooms();
+  } catch (error) {
+    console.error('Failed to delete live chat room:', error);
+    alert('Unable to delete chat room. Please try again.');
+  }
+}
+
+function loadLiveChatRooms() {
+  if (liveChatRoomsUnsubscribe) {
+    liveChatRoomsUnsubscribe();
+  }
+
+  liveChatRoomsUnsubscribe = onSnapshot(collection(db, 'liveChats'), (snapshot) => {
+    const rooms = [];
+    snapshot.forEach((docSnap) => rooms.push({ id: docSnap.id, ...docSnap.data() }));
+    renderAdminChatRooms(rooms);
+  }, (error) => {
+    console.error('Admin live chat rooms listener error:', error);
+  });
+}
+
+window.createLiveChatRoom = createLiveChatRoom;
+window.loadLiveChatRooms = loadLiveChatRooms;
+window.openAdminChatRoom = openAdminChatRoom;
+window.closeAdminChatPanel = closeAdminChatPanel;
+window.setAdminReplyToMessage = setAdminReplyToMessage;
+window.unsendAdminChatMessage = unsendAdminChatMessage;
+window.sendAdminChatMessage = sendAdminChatMessage;
+window.triggerAdminChatImageInput = triggerAdminChatImageInput;
+window.handleAdminChatImageInputChange = handleAdminChatImageInputChange;
+window.clearAdminChatImageSelection = clearAdminChatImageSelection;
+window.deleteLiveChatRoom = deleteLiveChatRoom;
+
+const adminCreateChatForm = document.getElementById('adminCreateChatForm');
+if (adminCreateChatForm) {
+  adminCreateChatForm.addEventListener('submit', createLiveChatRoom);
+}
+const adminChatMessageForm = document.getElementById('adminChatMessageForm');
+if (adminChatMessageForm) {
+  adminChatMessageForm.addEventListener('submit', sendAdminChatMessage);
+}
+
+setupMentionAutocomplete('adminChatMessageInput', 'adminMentionDropdown');
 
 /* TICKET MANAGEMENT FUNCTIONS */
 window.respondToTicket = async function(ticketId) {
@@ -1620,283 +2595,4 @@ console.log('window.changeTicketStatus:', typeof window.changeTicketStatus);
 console.log('window.deleteTicket:', typeof window.deleteTicket);
 console.log('window.deleteResource:', typeof window.deleteResource);
 
-/* MEMBER MANAGEMENT FUNCTIONS */
-
-/* LOAD MEMBERS LIST */
-function loadMembersList() {
-  const container = document.getElementById("membersList");
-  if (!container) return;
-  
-  // Filter out the "everyone" member and display existing members
-  const existingMembers = members.filter(m => m.uid !== "everyone");
-  
-  if (existingMembers.length === 0) {
-    container.innerHTML = "<p style='color: #94a3b8; text-align: center;'>No members created yet.</p>";
-    return;
-  }
-  
-  // Fetch member details from Firestore to get Gmail addresses
-  (async () => {
-    try {
-      let html = "";
-      for (const member of existingMembers) {
-        let gmailAddress = "Not configured";
-        try {
-          const memberDoc = await getDoc(doc(db, "members", member.uid));
-          if (memberDoc.exists()) {
-            gmailAddress = memberDoc.data().gmail || member.uid;
-          }
-        } catch (err) {
-          console.warn('Could not fetch member details:', err);
-        }
-        
-        html += `
-          <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.5rem; background: #1e293b;">
-            <div style="display: flex; justify-content: space-between; align-items: start;">
-              <div style="flex: 1;">
-                <h4 style="margin: 0 0 0.25rem 0; color: #f8fafc;">${member.name}</h4>
-                <p style="margin: 0.25rem 0; color: #94a3b8; font-size: 0.85rem;">
-                  <strong>Login:</strong> ${member.uid}
-                </p>
-                <p style="margin: 0.25rem 0; color: #94a3b8; font-size: 0.85rem;">
-                  <strong>Gmail:</strong> ${gmailAddress}
-                </p>
-              </div>
-              <button onclick="window.deleteMember('${member.uid}')" class="btn-danger" style="padding: 0.5rem 1rem; min-width: auto;">
-                <i class="fas fa-trash"></i> Delete
-              </button>
-            </div>
-          </div>
-        `;
-      }
-      container.innerHTML = html;
-    } catch (error) {
-      console.error('Error loading members list:', error);
-      container.innerHTML = "<p style='color: #ef4444;'>Error loading members. Please try again.</p>";
-    }
-  })();
-}
-
-/* CREATE MEMBER ACCOUNT */
-window.createMemberAccount = async function() {
-  const email = document.getElementById("memberEmail").value.trim();
-  const name = document.getElementById("memberName").value.trim();
-  const gmail = document.getElementById("memberGmail").value.trim();
-  const password = document.getElementById("memberPassword").value.trim();
-  
-  if (!email || !name || !gmail || !password) {
-    alert("Please fill all fields.");
-    return;
-  }
-  
-  // Validate email format
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    alert("Please enter a valid login email address.");
-    return;
-  }
-  
-  if (!emailRegex.test(gmail)) {
-    alert("Please enter a valid Gmail address.");
-    return;
-  }
-  
-  // Check if member already exists
-  const memberExists = members.some(m => m.uid === email);
-  if (memberExists) {
-    alert("This email is already registered as a member.");
-    return;
-  }
-  
-  try {
-    console.log('Creating member account for:', email);
-    
-    // Import credential management functions from auth.js
-    const { addPreRegisteredCredential } = await import('./auth.js');
-    
-    // Add to pre-registered credentials (in memory)
-    const credentialAdded = addPreRegisteredCredential(email, password, "member");
-    if (!credentialAdded) {
-      alert("This email is already registered. Please use a different email.");
-      return;
-    }
-    
-    let firestoreSuccess = true;
-    // Try to store in Firestore, but don't fail if permissions denied
-    try {
-      // Store member in Firestore members collection using email as document ID
-      await setDoc(doc(db, "members", email), {
-        uid: email,
-        email: email,
-        name: name,
-        gmail: gmail,
-        role: "member",
-        password: password,
-        createdAt: new Date(),
-        createdBy: adminEmail
-      });
-      console.log('Member document created in Firestore at members/' + email);
-      
-      // Store email mapping for notifications
-      await setDoc(doc(db, "emailMappings", email), {
-        loginEmail: email,
-        notificationEmail: gmail,
-        memberName: name,
-        createdAt: new Date(),
-        createdBy: adminEmail
-      });
-      console.log('Email mapping created');
-      
-      // Store user info
-      await setDoc(doc(db, "userInfo", email), {
-        name: name,
-        role: "member",
-        email: email,
-        createdAt: new Date()
-      });
-      console.log('User info created');
-      
-      // Initialize FCM token document (will be populated when user logs in)
-      await setDoc(doc(db, "fcmTokens", email), {
-        email: email,
-        token: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        isActive: false
-      });
-      console.log('FCM token document initialized');
-    } catch (firestoreError) {
-      firestoreSuccess = false;
-      console.warn('Could not write to Firestore (permission denied):', firestoreError);
-      console.log('Account created in memory - Firestore sync skipped');
-    }
-    
-    // Ensure the local member list includes the new member immediately
-    members = members.filter(m => m.uid !== email);
-    members.push({ uid: email, name: name });
-    loadMembers();
-    loadAnnouncementAssignTo();
-    loadMembersList();
-    loadProgressReportAssignTo();
-    
-    // Clear form
-    document.getElementById("memberEmail").value = "";
-    document.getElementById("memberName").value = "";
-    document.getElementById("memberGmail").value = "";
-    document.getElementById("memberPassword").value = "";
-
-    if (firestoreSuccess) {
-      alert(`Member account created successfully!\n\nLogin Email: ${email}\nGmail for Notifications: ${gmail}\nTemporary Password: ${password}\n\nThe member should change their password on first login.`);
-    } else {
-      alert(`Member account created locally, but Firestore syncing failed. The account may not be available in other browsers until Firestore permissions are corrected.`);
-    }
-  } catch (error) {
-    console.error("Error creating member account:", error);
-    alert(`Failed to create member account: ${error.message}`);
-  }
-};
-
-/* DELETE MEMBER ACCOUNT */
-window.deleteMember = async function(memberEmail) {
-  if (confirm(`Are you sure you want to delete the member account for ${memberEmail}? This action cannot be undone.`)) {
-    try {
-      console.log('Deleting member account:', memberEmail);
-      
-      // Import credential management functions from auth.js
-      const { removePreRegisteredCredential } = await import('./auth.js');
-      
-      // Remove from pre-registered credentials (in memory)
-      removePreRegisteredCredential(memberEmail);
-      console.log('Removed from pre-registered credentials');
-      
-      // Try to delete from Firestore, but don't fail if permissions denied
-      try {
-        // Delete from Firestore members collection
-        const memberSnapshot = await new Promise((resolve) => {
-          const unsubscribe = onSnapshot(
-            collection(db, "members"),
-            (snapshot) => {
-              resolve(snapshot);
-              unsubscribe();
-            },
-            (error) => {
-              console.warn('Could not query members collection:', error);
-              resolve(null);
-            }
-          );
-        });
-        
-        if (memberSnapshot) {
-          memberSnapshot.forEach(docSnap => {
-            if (docSnap.data().uid === memberEmail) {
-              deleteDoc(doc(db, "members", docSnap.id)).catch(err => 
-                console.warn('Could not delete member doc:', err)
-              );
-            }
-          });
-        }
-        
-        // Delete email mapping
-        await deleteDoc(doc(db, "emailMappings", memberEmail));
-        console.log('Email mapping deleted');
-        
-        // Delete user info
-        await deleteDoc(doc(db, "userInfo", memberEmail));
-        console.log('User info deleted');
-        
-        // Delete FCM token
-        await deleteDoc(doc(db, "fcmTokens", memberEmail));
-        console.log('FCM token deleted');
-        
-        // Delete any tasks assigned to this member
-        const tasksSnapshot = await new Promise((resolve) => {
-          const unsubscribe = onSnapshot(
-            collection(db, "tasks"),
-            (snapshot) => {
-              resolve(snapshot);
-              unsubscribe();
-            },
-            (error) => {
-              console.warn('Could not query tasks collection:', error);
-              resolve(null);
-            }
-          );
-        });
-        
-        if (tasksSnapshot) {
-          tasksSnapshot.forEach(docSnap => {
-            const task = docSnap.data();
-            if (task.assignedTo === memberEmail) {
-              deleteDoc(doc(db, "tasks", docSnap.id)).catch(err => 
-                console.warn('Could not delete task:', err)
-              );
-            }
-          });
-        }
-      } catch (firestoreError) {
-        console.warn('Could not delete from Firestore (permission denied):', firestoreError);
-        console.log('Account removed from memory - Firestore cleanup skipped');
-      }
-      
-      // Remove member from local memory and refresh UI immediately
-      members = members.filter(m => m.uid !== memberEmail);
-      loadMembers();
-      loadAnnouncementAssignTo();
-      loadMembersList();
-      loadProgressReportAssignTo();
-      loadProgressReports();
-      
-      alert("Member account deleted successfully!");
-    } catch (error) {
-      console.error("Error deleting member:", error);
-      alert(`Failed to delete member account: ${error.message}`);
-    }
-  }
-};
-
-console.log('=== MEMBER MANAGEMENT FUNCTIONS LOADED ===');
-console.log('window.createMemberAccount:', typeof window.createMemberAccount);
-console.log('window.deleteMember:', typeof window.deleteMember);
-
 })();
-

@@ -57,7 +57,7 @@ module.exports = async function handler(req, res) {
           Authorization: `token ${githubToken}`,
           Accept: 'application/vnd.github.v3+json',
           'Content-Type': 'application/json',
-          'User-Agent': 'My Collab Email Backend'
+          'User-Agent': 'MyThesisHub-Email-Backend'
         },
         body: JSON.stringify({
           event_type: 'send-email',
@@ -84,4 +84,3 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ success: false, error: 'Internal server error' });
   }
 }
-
