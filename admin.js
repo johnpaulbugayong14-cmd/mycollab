@@ -1908,7 +1908,20 @@ function openAdminChatRoom(chatId) {
   const messageInput = document.getElementById('adminChatMessageInput');
   const messageForm = document.getElementById('adminChatMessageForm');
 
-  if (panel) panel.style.display = 'block';
+  if (panel) {
+    panel.style.display = 'block';
+    
+    // Check if mobile (640px or less)
+    if (window.innerWidth <= 640) {
+      panel.classList.add('fullscreen-visible');
+      document.body.classList.add('chat-fullscreen-open');
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.height = '100vh';
+    }
+  }
+  
   if (titleEl) titleEl.textContent = room.title;
   if (metaEl) metaEl.textContent = `Created by ${room.createdByName || getUserName(room.createdByEmail)} • Status: ${room.status}`;
   if (messageInput) messageInput.disabled = room.status !== 'Active';
@@ -1916,11 +1929,29 @@ function openAdminChatRoom(chatId) {
 
   clearAdminReplyToMessage();
   subscribeAdminChatMessages(chatId);
+  
+  // Scroll to bottom after loading
+  setTimeout(() => {
+    const adminChatMessages = document.getElementById('adminChatMessages');
+    if (adminChatMessages) {
+      adminChatMessages.scrollTop = adminChatMessages.scrollHeight;
+    }
+  }, 100);
 }
 
 function closeAdminChatPanel() {
   const panel = document.getElementById('adminChatRoomPanel');
-  if (panel) panel.style.display = 'none';
+  if (panel) {
+    panel.style.display = 'none';
+    panel.classList.remove('fullscreen-visible');
+  }
+
+  // Remove fullscreen mode
+  document.body.classList.remove('chat-fullscreen-open');
+  document.body.style.overflow = '';
+  document.body.style.position = '';
+  document.body.style.width = '';
+  document.body.style.height = '';
 
   if (liveChatMessagesUnsubscribe) {
     liveChatMessagesUnsubscribe();
@@ -2462,6 +2493,34 @@ window.triggerAdminChatImageInput = triggerAdminChatImageInput;
 window.handleAdminChatImageInputChange = handleAdminChatImageInputChange;
 window.clearAdminChatImageSelection = clearAdminChatImageSelection;
 window.deleteLiveChatRoom = deleteLiveChatRoom;
+
+// Handle resize for responsive fullscreen chat
+window.addEventListener('resize', () => {
+  const chatPanel = document.getElementById('adminChatRoomPanel');
+  const isFullscreenOpen = document.body.classList.contains('chat-fullscreen-open');
+  
+  if (!chatPanel || chatPanel.style.display === 'none') return;
+  
+  // If screen is wider than 640px and fullscreen is active, close fullscreen mode
+  if (window.innerWidth > 640 && isFullscreenOpen) {
+    document.body.classList.remove('chat-fullscreen-open');
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.width = '';
+    document.body.style.height = '';
+    chatPanel.classList.remove('fullscreen-visible');
+  }
+  
+  // If screen becomes mobile again while chat is open, restore fullscreen
+  if (window.innerWidth <= 640 && !isFullscreenOpen && chatPanel.style.display !== 'none') {
+    document.body.classList.add('chat-fullscreen-open');
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100vh';
+    chatPanel.classList.add('fullscreen-visible');
+  }
+});
 
 const adminCreateChatForm = document.getElementById('adminCreateChatForm');
 if (adminCreateChatForm) {

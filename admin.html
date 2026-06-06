@@ -332,7 +332,7 @@
           <h2><i class="fas fa-video"></i> Video Conference</h2>
 
           <!-- Admin schedule form -->
-          <div class="meeting-schedule-panel" style="margin-bottom: 2rem;">
+          <div id="admin-schedule-panel" class="meeting-schedule-panel" style="margin-bottom: 2rem;">
             <h3 style="color: #f8fafc;">Schedule a Meeting</h3>
             <form id="adminMeetingForm" style="display: flex; flex-direction: column; gap: 1rem;">
               <input type="text" id="adminMeetingTitle" placeholder="Meeting Title" required style="padding: 0.75rem; border: 1px solid #374151; border-radius: 6px; background: #0f172a; color: #f8fafc; font-size: 16px;">
@@ -356,7 +356,7 @@
             <div id="adminMeetingsContainer" class="chat-room-list"></div>
           </div>
 
-          <div id="jaas-container" style="width: 100%; min-height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151; display: flex; align-items: stretch;"></div>
+          <div id="jaas-container" style="width: 100%; height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151; display: none; background: #020617;"></div>
         </div>
       </section>
 
@@ -640,10 +640,17 @@ function startMeeting(meetingId, roomName) {
   const schedulePanel = document.getElementById('admin-schedule-panel');
   const meetingsList = document.getElementById('adminMeetingsList');
   const container = document.getElementById('jaas-container');
+  const isMobile = window.innerWidth <= 640;
 
   if (schedulePanel) schedulePanel.style.display = 'none';
   if (meetingsList) meetingsList.style.display = 'none';
   if (container) container.style.display = 'block';
+
+  // Enable fullscreen mode on mobile
+  if (isMobile) {
+    document.body.classList.add('meeting-fullscreen-open');
+    if (container) container.classList.add('meeting-fullscreen');
+  }
 
   initializeJitsiConference(roomName);
 }
@@ -912,6 +919,30 @@ if (startInstantMeetingBtn) {
     }
   });
 }
+
+// Handle resize events for meeting fullscreen mode
+window.addEventListener('resize', () => {
+  const body = document.body;
+  const container = document.getElementById('jaas-container');
+  const isMobile = window.innerWidth <= 640;
+
+  if (currentMeetingId || (body.classList.contains('meeting-fullscreen-open') && container && container.style.display !== 'none')) {
+    // Meeting is active
+    if (isMobile) {
+      // Ensure fullscreen mode on mobile
+      if (!body.classList.contains('meeting-fullscreen-open')) {
+        body.classList.add('meeting-fullscreen-open');
+      }
+      if (container && !container.classList.contains('meeting-fullscreen')) {
+        container.classList.add('meeting-fullscreen');
+      }
+    } else {
+      // Exit fullscreen mode on larger screens
+      body.classList.remove('meeting-fullscreen-open');
+      if (container) container.classList.remove('meeting-fullscreen');
+    }
+  }
+});
 
 // Ensure scheduled meeting form is initialized on page load
 if (document.readyState !== 'loading') {

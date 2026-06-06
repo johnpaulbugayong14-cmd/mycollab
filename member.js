@@ -1166,7 +1166,20 @@ function openChatRoom(chatId) {
   const messageInput = document.getElementById('chatMessageInput');
   const messageForm = document.getElementById('chatMessageForm');
 
-  if (panel) panel.style.display = 'block';
+  if (panel) {
+    panel.style.display = 'block';
+    
+    // Check if mobile (640px or less)
+    if (window.innerWidth <= 640) {
+      panel.classList.add('fullscreen-visible');
+      document.body.classList.add('chat-fullscreen-open');
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.height = '100vh';
+    }
+  }
+  
   if (titleEl) titleEl.textContent = chatRoom.title;
   if (metaEl) metaEl.textContent = `Created by ${chatRoom.createdByName || getUserName(chatRoom.createdByEmail)} • Status: ${chatRoom.status}`;
   if (messageInput) messageInput.disabled = chatRoom.status !== 'Active';
@@ -1174,11 +1187,29 @@ function openChatRoom(chatId) {
 
   clearReplyToMessage();
   subscribeChatMessages(chatId);
+  
+  // Scroll to bottom after loading
+  setTimeout(() => {
+    const chatMessages = document.getElementById('chatMessages');
+    if (chatMessages) {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+  }, 100);
 }
 
 function closeChatRoomPanel() {
   const panel = document.getElementById('chatRoomPanel');
-  if (panel) panel.style.display = 'none';
+  if (panel) {
+    panel.style.display = 'none';
+    panel.classList.remove('fullscreen-visible');
+  }
+
+  // Remove fullscreen mode
+  document.body.classList.remove('chat-fullscreen-open');
+  document.body.style.overflow = '';
+  document.body.style.position = '';
+  document.body.style.width = '';
+  document.body.style.height = '';
 
   if (chatMessagesUnsubscribe) {
     chatMessagesUnsubscribe();
@@ -1521,6 +1552,34 @@ window.sendChatMessage = sendChatMessage;
 window.triggerChatImageInput = triggerChatImageInput;
 window.handleChatImageInputChange = handleChatImageInputChange;
 window.clearChatImageSelection = clearChatImageSelection;
+
+// Handle resize for responsive fullscreen chat
+window.addEventListener('resize', () => {
+  const chatPanel = document.getElementById('chatRoomPanel');
+  const isFullscreenOpen = document.body.classList.contains('chat-fullscreen-open');
+  
+  if (!chatPanel || chatPanel.style.display === 'none') return;
+  
+  // If screen is wider than 640px and fullscreen is active, close fullscreen mode
+  if (window.innerWidth > 640 && isFullscreenOpen) {
+    document.body.classList.remove('chat-fullscreen-open');
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.width = '';
+    document.body.style.height = '';
+    chatPanel.classList.remove('fullscreen-visible');
+  }
+  
+  // If screen becomes mobile again while chat is open, restore fullscreen
+  if (window.innerWidth <= 640 && !isFullscreenOpen && chatPanel.style.display !== 'none') {
+    document.body.classList.add('chat-fullscreen-open');
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100vh';
+    chatPanel.classList.add('fullscreen-visible');
+  }
+});
 
 // Attach the chat form handler after DOM is ready
 const createChatFormElement = document.getElementById('createChatForm');
