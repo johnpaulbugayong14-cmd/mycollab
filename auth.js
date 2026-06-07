@@ -147,8 +147,9 @@ function getPreRegisteredRole(email) {
 // Get stored user from storage
 async function getStoredUser() {
   try {
-    console.log('getStoredUser: Attempting to retrieve authUser from localStorage...');
-    const value = localStorage.getItem('authUser');
+    console.log('getStoredUser: Attempting to retrieve authUser...');
+    const result = await storage.get('authUser');
+    const value = result ? result.value : null;
     console.log('getStoredUser: Retrieved value:', value);
     
     if (value) {
@@ -156,10 +157,10 @@ async function getStoredUser() {
       console.log('getStoredUser: Parsed user:', parsed);
       return parsed;
     } else {
-      console.log('getStoredUser: No value found in localStorage');
+      console.log('getStoredUser: No value found in storage');
     }
   } catch (error) {
-    console.error("Error getting auth user from localStorage", error);
+    console.error("Error getting auth user from storage", error);
   }
   return null;
 }
@@ -170,10 +171,10 @@ async function storeUser(user) {
     console.log('storeUser: Storing user:', user);
     const userString = JSON.stringify(user);
     console.log('storeUser: Serialized to:', userString);
-    localStorage.setItem('authUser', userString);
-    console.log('storeUser: Successfully saved to localStorage');
+    await storage.set('authUser', userString);
+    console.log('storeUser: Successfully saved to storage');
   } catch (error) {
-    console.error("Error storing auth user to localStorage", error);
+    console.error("Error storing auth user to storage", error);
   }
 }
 

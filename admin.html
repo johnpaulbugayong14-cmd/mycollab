@@ -14,7 +14,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="style.css?v=1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
+  <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js"></script>
 </head>
 <body>
 
@@ -375,35 +375,42 @@
             <div id="adminChatRoomsContainer" class="chat-room-list"></div>
           </div>
 
-          <div id="adminChatRoomPanel" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 9999; padding: 0.75rem; box-sizing: border-box; overflow: hidden;">
-            <div style="height: 100%; display: flex; flex-direction: column; max-height: 100vh;">
-              <div style="display: flex; justify-content: flex-start; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
-                <button onclick="closeAdminChatPanel()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.5rem 0.75rem; font-size: 0.85rem; line-height: 1; white-space: nowrap; min-height: 40px;">
-                  ← Back
-                </button>
-                <div style="min-width: 0; flex: 1;">
-                  <h3 id="adminActiveChatTitle" style="margin: 0; color: #f8fafc; font-size: 1.1rem;"></h3>
-                  <p id="adminActiveChatMeta" style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.85rem;"></p>
-                </div>
-              </div>
-              <div id="adminChatMessages" style="flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 1rem; border: 1px solid #374151; border-radius: 12px; padding: 0.75rem; background: #020617;"></div>
-              <div id="adminChatReplyPreview" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border-radius: 14px; border: 1px solid #374151; background: #111827; color: #e5e7eb; font-size: 0.9rem;"></div>
-              <form id="adminChatMessageForm" style="display: flex; gap: 0.5rem; align-items: stretch; flex-wrap: nowrap; width: 100%;">
-                <div style="flex: 1 1 auto; min-width: 0; position: relative; display: flex; gap: 0.25rem;">
-                  <input id="adminChatMessageInput" type="text" placeholder="Message..." style="flex: 1; min-width: 0; padding: 0.75rem; border-radius: 9999px; border: 1px solid #374151; background: #020617; color: #f8fafc; font-size: 16px;">
-                  <button type="button" onclick="triggerAdminChatImageInput()" style="flex: 0 0 40px; width: 40px; padding: 0; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; min-height: 40px;">📷</button>
-                </div>
-                <input id="adminChatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleAdminChatImageInputChange(event)">
-                <button type="submit" style="flex: 0 0 auto; width: auto; padding: 0.65rem 1rem; background: #10b981; color: white; border: none; border-radius: 9999px; cursor: pointer; font-size: 0.85rem; min-width: 60px; min-height: 40px;">Send</button>
-              </form>
-              <div id="adminChatImagePreview" style="display:none; margin-top: 0.75rem;"></div>
-            </div>
-          </div>
         </div>
       </section>
 
     </div>
   </main>
+</div>
+
+<div id="adminChatRoomPanel" class="chat-fullscreen-panel">
+  <div class="chat-panel-container">
+    <div class="chat-panel-header">
+      <button onclick="closeAdminChatPanel()" class="chat-back-btn">
+        <i class="fas fa-arrow-left"></i> Back
+      </button>
+      <div class="chat-panel-title-area">
+        <h3 id="adminActiveChatTitle" class="chat-panel-title"></h3>
+        <p id="adminActiveChatMeta" class="chat-panel-subtitle"></p>
+      </div>
+    </div>
+
+    <div id="adminChatMessages" class="chat-messages-container"></div>
+
+    <div id="adminChatReplyPreview" class="chat-reply-preview" style="display: none;"></div>
+
+    <form id="adminChatMessageForm" class="chat-input-form">
+      <div class="chat-input-wrapper">
+        <input id="adminChatMessageInput" type="text" placeholder="Message..." class="chat-text-input">
+        <button type="button" onclick="triggerAdminChatImageInput()" class="chat-image-btn">
+          <i class="fas fa-camera"></i>
+        </button>
+      </div>
+      <input id="adminChatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleAdminChatImageInputChange(event)">
+      <button type="submit" class="chat-send-btn">Send</button>
+    </form>
+
+    <div id="adminChatImagePreview" class="chat-image-preview-area" style="display:none;"></div>
+  </div>
 </div>
 
 <div id="taskAnalyticsModalOverlay" class="analytics-modal-overlay" onclick="hideMemberTaskDetails()">
@@ -569,13 +576,26 @@ function buildJaasRoomName(roomName) {
   return roomName.startsWith(JAASTOKEN_ROOM_PREFIX) ? roomName : `${JAASTOKEN_ROOM_PREFIX}${roomName}`;
 }
 
-function initializeJitsiConference(roomName = null) {
+function initializeJitsiConference(roomName = null, attempts = 0) {
+  if (typeof JitsiMeetExternalAPI === 'undefined') {
+    if (attempts < 10) {
+      console.log('Jitsi API not loaded yet, retrying...');
+      setTimeout(() => initializeJitsiConference(roomName, attempts + 1), 500);
+      return;
+    }
+    console.error('Jitsi API failed to load');
+    return;
+  }
+
   if (jaasApi) {
     jaasApi.dispose();
   }
 
   const container = document.querySelector('#jaas-container');
   if (!container) return;
+
+  // Ensure the container is visible
+  container.style.display = 'block';
 
   const room = buildJaasRoomName(roomName || PROJECT_DISCUSSION_ROOM);
 
@@ -589,11 +609,19 @@ function initializeJitsiConference(roomName = null) {
       disableDeepLinking: true,
       startWithAudioMuted: true,
       startWithVideoMuted: true,
-      disableInitialGUM: true, // Prevent automatic media access to avoid autoplay errors
       enableClosePage: false,
       disableThirdPartyRequests: false,
       analytics: {
         disabled: true
+      },
+      // Mobile & Performance optimizations
+      videoQuality: {
+        maxReceiverVideoQuality: 360
+      },
+      resolution: 360,
+      disableAudioLevels: true,
+      p2p: {
+        enabled: true
       }
     },
     interfaceConfigOverwrite: {
@@ -604,11 +632,17 @@ function initializeJitsiConference(roomName = null) {
         'tileview', 'help'
       ],
       DISABLE_VIDEO_BACKGROUND: true,
-      HIDE_INVITE_MORE_HEADER: true
+      HIDE_INVITE_MORE_HEADER: true,
+      MOBILE_APP_PROMO: false
     }
   };
 
   jaasApi = new JitsiMeetExternalAPI("8x8.vc", apiOptions);
+
+  // Trigger fullscreen for mobile
+  if (window.innerWidth <= 640) {
+    document.body.classList.add('meeting-fullscreen-open');
+  }
 
   // Add error handling for Jitsi
   jaasApi.addEventListener('errorOccurred', (error) => {
@@ -620,6 +654,9 @@ function initializeJitsiConference(roomName = null) {
       jaasApi.dispose();
       jaasApi = null;
     }
+
+    // Remove fullscreen class
+    document.body.classList.remove('meeting-fullscreen-open');
 
     if (currentMeetingId) {
       try {
