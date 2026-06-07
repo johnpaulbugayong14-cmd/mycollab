@@ -876,67 +876,14 @@ function renderMeetings(meetings) {
 }
 
 window.joinScheduledMeeting = function(roomName) {
-  // Store the room name for use in the modal
-  window.pendingMeetingRoom = roomName;
-  
-  // Show the display name modal
-  const modal = document.getElementById('displayNameModal');
-  const input = document.getElementById('displayNameInput');
-  
-  if (modal) {
-    modal.style.display = 'flex';
-    modal.style.background = 'rgba(0, 0, 0, 0.7)';
-    if (input) {
-      input.focus();
-      input.value = '';
-    }
-  }
-};
-
-window.handleDisplayNameSubmit = function(event) {
-  if (event) event.preventDefault();
-  
-  const input = document.getElementById('displayNameInput');
-  const displayName = input ? input.value.trim() : '';
-  
-  if (!displayName) {
-    alert('Please enter your name to join the meeting');
-    return;
-  }
-  
-  const roomName = window.pendingMeetingRoom;
-  if (!roomName) {
-    alert('Error: No meeting room selected');
-    return;
-  }
-  
-  // Hide the modal
-  const modal = document.getElementById('displayNameModal');
-  if (modal) {
-    modal.style.display = 'none';
-  }
-  
-  // Store the display name temporarily for Jitsi
-  window.meetingDisplayName = displayName;
-  
-  // Update the Jitsi config with the display name
+  console.log('Joining meeting:', roomName);
   const container = document.getElementById('jaas-container');
   const meetingsList = document.getElementById('meetings-list');
-
   if (container) container.style.display = 'block';
   if (meetingsList) meetingsList.style.display = 'none';
-
   initializeJitsiConference(roomName);
 };
 
-window.cancelDisplayNameModal = function() {
-  const modal = document.getElementById('displayNameModal');
-  if (modal) {
-    modal.style.display = 'none';
-  }
-  window.pendingMeetingRoom = null;
-  window.meetingDisplayName = null;
-};
 
 function getChatRoomDisplayName(email) {
   return getUserName(email) || email;
@@ -1260,25 +1207,13 @@ function openChatRoom(chatId) {
   });
 
   if (panel) {
-    // Ensure panel is properly sized on mobile
+    panel.style.display = 'flex';
+    
+    // Always trigger fullscreen for mobile when opening a chat
     if (window.innerWidth <= 640) {
-      console.log('📱 Mobile detected, applying fullscreen styles');
-      panel.style.display = 'flex';
-      panel.style.position = 'fixed';
-      panel.style.inset = '0';
-      panel.style.width = '100vw';
-      panel.style.height = '100vh';
-      panel.style.zIndex = '99999';
-      panel.style.padding = '0.5rem';
-      panel.style.boxSizing = 'border-box';
-      panel.style.background = '#0f172a';
       document.body.classList.add('chat-fullscreen-open');
       panel.classList.add('fullscreen-visible');
-    } else {
-      panel.style.display = 'flex';
     }
-  } else {
-    console.error('❌ Chat panel not found in DOM');
   }
   
   if (titleEl) titleEl.textContent = chatRoom.title;
