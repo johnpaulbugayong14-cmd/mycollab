@@ -1177,6 +1177,8 @@ function openChatRoom(chatId) {
       document.body.style.position = 'fixed';
       document.body.style.width = '100%';
       document.body.style.height = '100vh';
+      document.body.style.top = '0';
+      document.body.style.left = '0';
     }
   }
   
@@ -1195,6 +1197,13 @@ function openChatRoom(chatId) {
       chatMessages.scrollTop = chatMessages.scrollHeight;
     }
   }, 100);
+
+  // Focus input on mobile for better UX
+  if (window.innerWidth <= 640) {
+    setTimeout(() => {
+      if (messageInput) messageInput.focus();
+    }, 200);
+  }
 }
 
 function closeChatRoomPanel() {
@@ -1210,6 +1219,8 @@ function closeChatRoomPanel() {
   document.body.style.position = '';
   document.body.style.width = '';
   document.body.style.height = '';
+  document.body.style.top = '';
+  document.body.style.left = '';
 
   if (chatMessagesUnsubscribe) {
     chatMessagesUnsubscribe();
@@ -1218,6 +1229,16 @@ function closeChatRoomPanel() {
 
   selectedChatId = null;
   clearReplyToMessage();
+
+  // Close mobile sidebar if open
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar) {
+    sidebar.classList.remove('open');
+  }
+  const overlay = document.querySelector('.sidebar-overlay');
+  if (overlay) {
+    overlay.classList.remove('show');
+  }
 }
 
 function clearReplyToMessage() {
@@ -1553,20 +1574,24 @@ window.triggerChatImageInput = triggerChatImageInput;
 window.handleChatImageInputChange = handleChatImageInputChange;
 window.clearChatImageSelection = clearChatImageSelection;
 
-// Handle resize for responsive fullscreen chat
+// Handle resize for responsive fullscreen chat and video
 window.addEventListener('resize', () => {
   const chatPanel = document.getElementById('chatRoomPanel');
+  const videoConference = document.getElementById('video-conference');
   const isFullscreenOpen = document.body.classList.contains('chat-fullscreen-open');
+  const isMeetingFullscreen = document.body.classList.contains('meeting-fullscreen-open');
   
   if (!chatPanel || chatPanel.style.display === 'none') return;
   
-  // If screen is wider than 640px and fullscreen is active, close fullscreen mode
+  // Handle chat panel fullscreen on mobile/desktop switch
   if (window.innerWidth > 640 && isFullscreenOpen) {
     document.body.classList.remove('chat-fullscreen-open');
     document.body.style.overflow = '';
     document.body.style.position = '';
     document.body.style.width = '';
     document.body.style.height = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
     chatPanel.classList.remove('fullscreen-visible');
   }
   
@@ -1577,7 +1602,21 @@ window.addEventListener('resize', () => {
     document.body.style.position = 'fixed';
     document.body.style.width = '100%';
     document.body.style.height = '100vh';
+    document.body.style.top = '0';
+    document.body.style.left = '0';
     chatPanel.classList.add('fullscreen-visible');
+  }
+
+  // Handle video conference sizing adjustments
+  const jaasContainer = document.getElementById('jaas-container');
+  if (jaasContainer && !isMeetingFullscreen) {
+    if (window.innerWidth <= 640) {
+      // Mobile: make video container fill available space
+      jaasContainer.style.minHeight = 'calc(100vh - 300px)';
+    } else {
+      // Desktop: normal sizing
+      jaasContainer.style.minHeight = '';
+    }
   }
 });
 

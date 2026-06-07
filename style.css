@@ -156,6 +156,7 @@ h2 {
   .app-container.has-collapsed-sidebar .main-content,
   .main-content {
     margin-left: 240px;
+    width: calc(100% - 240px);
   }
 
   .content-header,
@@ -173,6 +174,7 @@ h2 {
   .app-container.has-collapsed-sidebar .main-content,
   .main-content {
     margin-left: 220px;
+    width: calc(100% - 220px);
   }
 
   .content-header {
@@ -189,6 +191,7 @@ h2 {
   .app-container.has-collapsed-sidebar .main-content,
   .main-content {
     margin-left: 200px;
+    width: calc(100% - 200px);
   }
 
   .card {
@@ -243,7 +246,24 @@ h2 {
   }
 }
 
+/* Mobile Devices (≤640px) */
 @media (max-width: 640px) {
+  .sidebar {
+    width: 100%;
+    transform: translateX(-100%);
+    margin-left: 0;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+
+  .app-container.has-collapsed-sidebar .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+
   .app-footer {
     flex-direction: column;
     align-items: center;
@@ -354,10 +374,13 @@ h2 {
   flex: 1;
   margin-left: 280px;
   transition: margin-left 0.3s ease;
+  width: calc(100% - 280px);
+  box-sizing: border-box;
 }
 
 .app-container.has-collapsed-sidebar .main-content {
   margin-left: 60px;
+  width: calc(100% - 60px);
 }
 
 .content-header {
@@ -373,6 +396,8 @@ h2 {
   z-index: 1001;
   text-align: center;
   min-height: 140px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .content-header h1 {
@@ -381,6 +406,7 @@ h2 {
   text-overflow: ellipsis;
   white-space: nowrap;
   margin: 0;
+  flex-shrink: 0;
 }
 
 .header-actions {
@@ -418,29 +444,52 @@ h2 {
 
 @media (max-width: 780px) {
   .content-header {
-    padding: 1.5rem 1rem 2rem;
+    padding: 1rem 1rem 1.25rem;
+    min-height: auto;
+    width: 100%;
   }
 
   .content-header h1 {
     max-width: 100%;
     white-space: normal;
+    font-size: 1.5rem;
+    margin: 0 0 0.5rem 0;
   }
 
   .header-actions {
     position: static;
-    margin-top: 0.75rem;
+    margin-top: 0.5rem;
     justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    width: 100%;
   }
 
   .datetime-center {
     position: static;
     transform: none;
     margin-top: 0.5rem;
+    font-size: 0.9rem;
+  }
+
+  .welcome-header {
+    font-size: 0.85rem;
+  }
+
+  .header-logout {
+    min-width: 80px;
+  }
+
+  .content-sections {
+    padding: 1rem;
+    width: 100%;
   }
 }
 
 .content-sections {
   padding: 2rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Content Sections */
@@ -539,6 +588,9 @@ body.meeting-fullscreen-open {
   margin: 1.5rem auto;
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .form-group {
@@ -828,7 +880,7 @@ button:active {
 @media (max-width: 640px) {
   #chatRoomPanel,
   #adminChatRoomPanel {
-    padding: 0.5rem;
+    padding: 0;
     width: 100vw;
     height: 100vh;
     left: 0;
@@ -840,6 +892,8 @@ button:active {
   #adminChatRoomPanel > div {
     min-height: 0;
     height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   #chatRoomPanel.fullscreen-visible,
@@ -860,8 +914,11 @@ button:active {
   #chatMessages,
   #adminChatMessages {
     padding: 0.75rem;
-    max-height: calc(100vh - 200px);
-    min-height: 45vh;
+    max-height: calc(100vh - 180px);
+    min-height: auto;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   #chatMessageForm,
@@ -869,29 +926,33 @@ button:active {
     flex-direction: row;
     gap: 0.25rem;
     flex-wrap: nowrap;
-    padding: 0.5rem;
+    padding: 0.75rem;
     background: rgba(15, 23, 42, 0.98);
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    flex-shrink: 0;
   }
 
   #chatMessageForm button,
   #adminChatMessageForm button {
     width: auto;
-    min-width: auto;
+    min-width: 50px;
     max-width: none;
     padding: 0.65rem 0.75rem;
     font-size: 0.85rem;
     flex: 0 0 auto;
     margin-top: 0;
+    min-height: 44px;
   }
 
   #chatMessageInput,
   #adminChatMessageInput {
     width: 100%;
-    padding: 0.75rem;
+    padding: 0.75rem 1rem;
     font-size: 16px;
     min-width: 0;
     background: #020617;
     border-radius: 20px;
+    flex: 1 1 auto;
   }
 
   /* Mobile Chat Header */
@@ -900,6 +961,39 @@ button:active {
     padding: 1rem;
     background: rgba(15, 23, 42, 0.98);
     border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  #chatRoomPanel button:first-of-type,
+  #adminChatRoomPanel button:first-of-type {
+    flex-shrink: 0;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  #activeChatTitle {
+    font-size: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  #chatImagePreview {
+    display: none;
+    margin-top: 0.75rem;
+    max-width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  #chatImagePreview img {
+    max-width: 100%;
+    max-height: 150px;
+    object-fit: contain;
   }
 
   /* Video Conference Mobile Styles */
@@ -907,8 +1001,8 @@ button:active {
     height: auto;
     aspect-ratio: 16 / 9;
     width: 100%;
-    min-height: 250px;
-    max-height: calc(100vh - 250px);
+    min-height: 240px;
+    max-height: calc(100vh - 240px);
   }
 
   #jaas-container.meeting-fullscreen {
@@ -948,6 +1042,7 @@ button:active {
     width: 100vw;
     height: 100vh;
     background: #020617;
+    z-index: 99999;
   }
 
   .meeting-fullscreen-open #video-conference .card {
@@ -971,15 +1066,16 @@ button:active {
   }
 
   .meeting-fullscreen-open #jaas-container {
-    flex: 1;
-    height: 100vh;
-    min-height: 100vh;
-    width: 100vw;
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 100%;
+    width: 100%;
     border-radius: 0;
     border: none;
     aspect-ratio: auto;
-    max-height: none;
+    max-height: 100%;
     object-fit: contain;
+    margin: 0;
   }
 
   .video-conference-container {
@@ -1035,10 +1131,11 @@ button:active {
     padding: 1rem;
     margin: 0.75rem auto;
     border-radius: 12px;
+    width: 100%;
   }
 
   .card h2 {
-    font-size: 1.5rem;
+    font-size: 1.4rem;
     margin-bottom: 1rem;
   }
 
@@ -1056,6 +1153,8 @@ button:active {
     padding: 0.65rem 0.75rem;
     font-size: 16px;
     border-radius: 6px;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   button {
@@ -1063,12 +1162,12 @@ button:active {
     font-size: 0.95rem;
     min-height: 44px;
     border-radius: 6px;
+    width: 100%;
   }
 
   button:active {
     transform: scale(0.98);
   }
-}
 }
 
 .btn-secondary {
@@ -1527,12 +1626,12 @@ canvas {
     position: fixed;
     top: 0.75rem;
     left: 0.75rem;
-    z-index: 2200; /* Above the sidebar (z-index 2100) */
+    z-index: 2200;
     background: rgba(59, 130, 246, 0.9);
     color: white;
     border: none;
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2.75rem;
+    height: 2.75rem;
     align-items: center;
     justify-content: center;
     border-radius: 0.5rem;
@@ -1541,12 +1640,20 @@ canvas {
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
   }
 
+  .mobile-nav-toggle:active {
+    transform: scale(0.95);
+  }
+
   .sidebar {
-    width: 100%; /* Maximize mode: full width on mobile */
-    max-width: 100%; /* Full screen width */
+    width: 100%;
+    max-width: 100%;
     transform: translateX(-100%);
-    z-index: 2100; /* Highest layer */
-    background: #0f172a; /* Solid background for max readability */
+    z-index: 2100;
+    background: #0f172a;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .sidebar.open {
@@ -1554,18 +1661,25 @@ canvas {
   }
 
   .nav-btn {
-    padding: 1rem 2rem; /* Larger touch targets */
-    font-size: 1.1rem; /* More readable text */
+    padding: 1rem 2rem;
+    font-size: 1rem;
     border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    min-height: 48px;
+    display: flex;
+    align-items: center;
   }
 
   .sidebar-header {
     padding: 2rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 
   .sidebar-header h2 {
-    font-size: 1.5rem;
+    font-size: 1.4rem;
     display: block !important;
+    margin: 0;
   }
 
   .sidebar-toggle {
@@ -1577,51 +1691,24 @@ canvas {
   }
 
   .content-header h1 {
-    padding-left: 2.5rem; /* Make room for the fixed button in the header area */
+    padding-left: 3.5rem;
     text-align: left;
-    font-size: 1.5rem;
+    font-size: 1.4rem;
   }
 
-  .mention-dropdown {
+  .sidebar-overlay {
     display: none;
-    position: absolute;
-    bottom: calc(100% + 0.5rem);
+    position: fixed;
+    top: 0;
     left: 0;
-    right: 0;
-    max-height: 280px;
-    overflow-y: auto;
-    background: #0f172a;
-    border: 1px solid #374151;
-    border-radius: 0.75rem;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
-    z-index: 1000;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 2099;
   }
 
-  .mention-item {
-    padding: 0.85rem 1rem;
-    cursor: pointer;
-    color: #f8fafc;
-    border-bottom: 1px solid #1f2937;
-  }
-
-  .mention-item:last-child {
-    border-bottom: none;
-  }
-
-  .mention-item:hover {
-    background: #111827;
-  }
-
-  .mention-item .mention-email {
+  .sidebar-overlay.show {
     display: block;
-    color: #94a3b8;
-    font-size: 0.82rem;
-    margin-top: 0.25rem;
-  }
-
-  .mention {
-    color: #60a5fa;
-    font-weight: 700;
   }
 }
 
@@ -1638,6 +1725,16 @@ canvas {
   .meeting-fullscreen-open #jaas-container {
     height: 100vh;
     max-height: 100vh;
+  }
+
+  #chatMessages,
+  #adminChatMessages {
+    max-height: calc(100vh - 120px);
+  }
+
+  .card {
+    margin: 0.5rem auto;
+    padding: 0.75rem;
   }
 }
 
@@ -1678,11 +1775,50 @@ canvas {
   .meeting-fullscreen-open #jaas-container {
     height: 100vh;
   }
+
+  #chatMessages,
+  #adminChatMessages {
+    max-height: calc(100vh - 160px);
+  }
+
+  .card {
+    padding: 0.75rem;
+    margin: 0.5rem auto;
+  }
+
+  .card h2 {
+    font-size: 1.2rem;
+    margin-bottom: 0.75rem;
+  }
+
+  #activeChatTitle {
+    font-size: 0.9rem;
+  }
+
+  .chat-room-item {
+    padding: 0.65rem;
+  }
 }
 
 /* Smooth responsive scaling for all breakpoints */
 @media (max-width: 641px) {
   #jaas-container {
     transition: height 0.3s ease, max-height 0.3s ease;
+  }
+
+  /* Ensure proper touch targets */
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .nav-btn {
+    min-height: 48px;
+  }
+
+  /* Better spacing for interactive elements */
+  #chatMessageForm button {
+    min-height: 44px;
+    min-width: 44px;
   }
 }
