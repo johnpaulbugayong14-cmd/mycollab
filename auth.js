@@ -1,6 +1,7 @@
 // Firebase Auth imports
 import { signInAnonymously, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { auth } from "./firebase.js";
+import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { auth, db } from "./firebase.js";
 
 // Storage utility for cross-platform compatibility
 class StorageManager {
@@ -131,14 +132,9 @@ function showMessage(text, type = "error") {
   message.style.border = type === "error" ? "1px solid rgba(248, 113, 113, 0.35)" : "1px solid rgba(16, 185, 129, 0.35)";
 }
 
-// Pre-registered credentials
+// Pre-registered credentials - Only admin has a preset password
+// Members are created by the admin through the member management interface
 const PRE_REGISTERED_CREDENTIALS = [
-  { email: "kingfordnabor@gmail.com", password: "kingford002", role: "member" },
-  { email: "allancorral@gmail.com", password: "allan003", role: "member" },
-  { email: "phricksborebor@gmail.com", password: "phricks004", role: "member" },
-  { email: "moezarperez@gmail.com", password: "moezar005", role: "member" },
-  { email: "rogelioledda@gmail.com", password: "rogelio006", role: "member" },
-  { email: "test@example.com", password: "test000", role: "member" },
   { email: "johnpaulbugayong@gmail.com", password: "johnpaul001", role: "admin" }
 ];
 
@@ -184,34 +180,69 @@ async function storeUser(user) {
 // Login function - attached to window for global access
 window.login = async function() {
   console.log('=== LOGIN FUNCTION CALLED ===');
-  const email = document.getElementById("email").value.trim();
+  const email = document.getElementById("email").value.trim().toLowerCase();
   const password = document.getElementById("password").value;
   console.log('Login attempt for email:', email);
   
-  const account = PRE_REGISTERED_CREDENTIALS.find(a => a.email === email && a.password === password);
-
-  if (!account) {
-    console.log('Login failed: Invalid credentials');
-    showMessage("Invalid login credentials. Please try again.");
-    return;
-  }
-
-  console.log('Credentials valid, account found:', account);
-
   try {
-    console.log('Signing in with Firebase Auth (anonymously)...');
-    // Sign in anonymously with Firebase Auth
-    await signInAnonymously(auth);
-    console.log('Firebase Auth successful');
-
-    console.log('Storing user in storage...');
-    await storeUser({ email: account.email, role: account.role });
-    console.log('User stored, redirecting to:', account.role === "admin" ? "admin.html" : "member.html");
+    // First check pre-registered credentials (admin)
+    let account = PRE_REGISTERED_CREDENTIALS.find(a => a.email === email && a.password === password);
     
-    window.location.href = account.role === "admin" ? "admin.html" : "member.html";
+    // If not found in pre-registered, check Firestore members collection
+    if (!account) {
+      console.log('Not found in pre-registered, checking Firestore members...');
+      const q = query(collection(db, 'members'), where('email', '==', email));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        console.log('Login failed: Email not found in Firestore');
+        showMessage("Invalid login credentials. Please try again.");
+        return;
+      }
+      
+      const memberDoc = querySnapshot.docs[0];
+      const memberData = memberDoc.data();
+      
+      // Verify password
+      if (memberData.password !== password) {
+        console.log('Login failed: Invalid password for member');
+        showMessage("Invalid login credentials. Please try again.");
+        return;
+      }
+      
+      account = {
+        email: memberData.email,
+        role: memberData.role || 'member',
+        name: memberData.name
+      };
+    }
+
+    if (!account) {
+      console.log('Login failed: Invalid credentials');
+      showMessage("Invalid login credentials. Please try again.");
+      return;
+    }
+
+    console.log('Credentials valid, account found:', account);
+
+    try {
+      console.log('Signing in with Firebase Auth (anonymously)...');
+      // Sign in anonymously with Firebase Auth
+      await signInAnonymously(auth);
+      console.log('Firebase Auth successful');
+
+      console.log('Storing user in storage...');
+      await storeUser({ email: account.email, role: account.role, name: account.name });
+      console.log('User stored, redirecting to:', account.role === "admin" ? "admin.html" : "member.html");
+      
+      window.location.href = account.role === "admin" ? "admin.html" : "member.html";
+    } catch (error) {
+      console.error("Firebase Auth error:", error);
+      showMessage("Authentication failed. Please try again.");
+    }
   } catch (error) {
-    console.error("Firebase Auth error:", error);
-    showMessage("Authentication failed. Please try again.");
+    console.error('Login error:', error);
+    showMessage("Login error: " + error.message);
   }
 };
 
