@@ -1,7 +1,4 @@
 {
-  "name": "my-collab",
-  "version": "1.0.0",
-  "description": "Collaboration and task management platform",
   "dependencies": {
     "firebase": "^12.12.0"
   }

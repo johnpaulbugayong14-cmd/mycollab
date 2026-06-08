@@ -25,14 +25,23 @@ const pollsEmptyState = document.getElementById("pollsEmptyState");
 const announcementsContainer = document.getElementById("announcements");
 const announcementsEmptyState = document.getElementById("announcementsEmptyState");
 
-let members = [
-  { uid: "everyone", name: "Everyone" }
+const members = [
+  { uid: "everyone", name: "Everyone" },
+  { uid: "kingfordnabor@gmail.com", name: "Kingford Nabor" },
+  { uid: "allancorral@gmail.com", name: "Allan Corral" },
+  { uid: "phricksborebor@gmail.com", name: "Phricks Borebor" },
+  { uid: "moezarperez@gmail.com", name: "Moezar Perez" },
+  { uid: "rogelioledda@gmail.com", name: "Rogelio Ledda" },
+  { uid: "johnpaulbugayong@gmail.com", name: "Admin" }
 ];
 
-let mentionUsers = [];
+const mentionUsers = [
+  ...members.filter(member => member.uid !== 'everyone'),
+  { uid: 'johnpaulbugayong@gmail.com', name: 'Admin' }
+];
 
-const membersCollection = "members";
-const progressCollection = "memberProgress";
+const progressReportCollection = "progressReports";
+const progressReportDocId = "thesisProgress";
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -44,319 +53,80 @@ function getUserName(email) {
   return member ? member.name : email;
 }
 
-// Load members from Firestore
-async function loadMembersFromFirestore() {
-  try {
-    const querySnapshot = await getDocs(collection(db, membersCollection));
-    const firestoreMembers = [];
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      firestoreMembers.push({
-        uid: data.email,
-        name: data.name,
-        email: data.email,
-        role: data.role
-      });
-    });
-    
-    // Update members array
-    members = [
-      { uid: "everyone", name: "Everyone" },
-      ...firestoreMembers
-    ];
-    
-    // Update mention users
-    mentionUsers = members.filter(m => m.uid !== 'everyone').map(m => ({ uid: m.uid, name: m.name }));
-    
-    // Update the assign to dropdown if it exists
-    populateAssignToDropdown();
-    
-    console.log('Members loaded from Firestore:', members);
-  } catch (error) {
-    console.error('Error loading members from Firestore:', error);
-  }
+function getDefaultProgressStructure() {
+  return [
+    {
+      title: "Front Matter",
+      items: [
+        { name: "Title Page", status: "Not Started" },
+        { name: "Approval Sheet", status: "Not Started" },
+        { name: "Abstract", status: "Not Started" },
+        { name: "Acknowledgement", status: "Not Started" },
+        { name: "Table of Contents", status: "Not Started" },
+        { name: "List of Tables (if applicable)", status: "Not Started" },
+        { name: "List of Figures (if applicable)", status: "Not Started" }
+      ]
+    },
+    {
+      title: "Chapter 1 – Introduction",
+      items: [
+        { name: "Introduction", status: "Not Started" },
+        { name: "Background of the Study", status: "Not Started" },
+        { name: "Theoretical Framework", status: "Not Started" },
+        { name: "Conceptual Framework", status: "Not Started" },
+        { name: "Statement of the Problem", status: "Not Started" },
+        { name: "Objectives of the Study", status: "Not Started" },
+        { name: "Hypothesis of the Study", status: "Not Started" },  
+        { name: "Scope and limitation", status: "Not Started" },
+        { name: "Significance of the Study", status: "Not Started" },
+        { name: "Definition of Terms", status: "Not Started" }
+      ]
+    },
+    {
+      title: "Chapter 2 – Review of Related Literature (RRL)",
+      items: [
+        { name: "Introduction", status: "Not Started" },
+        { name: "Thematic Arrangement of Articles (RRL MINIMUM OF 30 ARTICLES)", status: "Not Started" },
+        { name: "Research Gaps", status: "Not Started" },
+        { name: "Synthesis", status: "Not Started" }
+      ]
+    },
+    {
+      title: "Chapter 3 – Methodology",
+      items: [
+        { name: "Introduction", status: "Not Started" },
+        { name: "Research design", status: "Not Started" },
+        { name: "System and Prototype Design", status: "Not Started" },
+        { name: "Material and Instrument", status: "Not Started" },
+        { name: "Locale and Population of Research", status: "Not Started" },
+        { name: "Statistical treatment of Research", status: "Not Started" },
+        { name: "Cost Benefit Analysis", status: "Not Started" }
+      ]
+    },
+    {
+      title: "Chapter 4 – Results and Discussion",
+      items: [
+        { name: "Presentation of data", status: "Not Started" },
+        { name: "Analysis and interpretation", status: "Not Started" }
+      ]
+    },
+    {
+      title: "Chapter 5 – Conclusion and Recommendations",
+      items: [
+        { name: "Summary of findings", status: "Not Started" },
+        { name: "Conclusion", status: "Not Started" },
+        { name: "Recommendations", status: "Not Started" }
+      ]
+    },
+    {
+      title: "Back Matter",
+      items: [
+        { name: "References / Bibliography", status: "Not Started" },
+        { name: "Appendices (survey forms, codes, drawings, etc.)", status: "Not Started" }
+      ]
+    }
+  ];
 }
-
-// Populate assign to dropdown with member names
-function populateAssignToDropdown() {
-  const assignToSelect = document.getElementById("progressAssignedTo");
-  if (!assignToSelect) return;
-  
-  // Get current value to restore after updating
-  const currentValue = assignToSelect.value;
-  
-  // Clear existing options except the first one
-  while (assignToSelect.options.length > 1) {
-    assignToSelect.remove(1);
-  }
-  
-  // Add member names to dropdown
-  members.forEach(member => {
-    if (member.uid !== 'everyone') {
-      const option = document.createElement('option');
-      option.value = member.name;
-      option.textContent = member.name;
-      assignToSelect.appendChild(option);
-    }
-  });
-  
-  // Restore previous value if it still exists
-  if (currentValue && Array.from(assignToSelect.options).some(opt => opt.value === currentValue)) {
-    assignToSelect.value = currentValue;
-  }
-}
-
-// Real-time listener for members - updates UI automatically when members change
-let membersUnsubscribe = null;
-function initializeMembersListener() {
-  if (membersUnsubscribe) {
-    membersUnsubscribe(); // Unsubscribe from previous listener if exists
-  }
-  
-  membersUnsubscribe = onSnapshot(collection(db, membersCollection), (snapshot) => {
-    const firestoreMembers = [];
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      firestoreMembers.push({
-        uid: data.email,
-        name: data.name,
-        email: data.email,
-        role: data.role
-      });
-    });
-    
-    // Update members array
-    members = [
-      { uid: "everyone", name: "Everyone" },
-      ...firestoreMembers
-    ];
-    
-    // Update mention users
-    mentionUsers = members.filter(m => m.uid !== 'everyone').map(m => ({ uid: m.uid, name: m.name }));
-    
-    // Update the assign to dropdown if it exists
-    populateAssignToDropdown();
-    
-    // Update welcome message with member name
-    const welcomeEl = document.getElementById("welcome");
-    if (welcomeEl && userEmail) {
-      welcomeEl.textContent = `Welcome, ${getUserName(userEmail)}`;
-    }
-    
-    console.log('Members updated from Firestore (real-time):', members);
-  }, (error) => {
-    console.error('Error listening to members:', error);
-  });
-}
-
-// Real-time listener for progress reports - updates automatically when admin makes changes
-let progressReportUnsubscribe = null;
-function initializeProgressReportListener() {
-  console.log('=== INITIALIZE PROGRESS REPORT LISTENER (MEMBER) ===');
-  
-  if (progressReportUnsubscribe) {
-    console.log('Unsubscribing from previous listener');
-    progressReportUnsubscribe();
-  }
-  
-  const progressReportCollection = "progressReports";
-  const progressReportDocId = "thesisProgress";
-  
-  console.log('Setting up real-time listener for:', progressReportCollection, progressReportDocId);
-  
-  progressReportUnsubscribe = onSnapshot(doc(db, progressReportCollection, progressReportDocId), (docSnap) => {
-    console.log('📡 Member progress report listener triggered!');
-    console.log('Document exists:', docSnap.exists());
-    
-    if (docSnap.exists()) {
-      console.log('Document data received, calling window.loadProgressReport()');
-      try {
-        window.loadProgressReport().catch(err => {
-          console.error('❌ Error in loadProgressReport promise:', err);
-        });
-      } catch (err) {
-        console.error('❌ Caught error calling loadProgressReport:', err);
-        console.error('Error stack:', err.stack);
-      }
-    } else {
-      console.log('Progress report document does not exist');
-    }
-  }, (error) => {
-    console.error('❌ Error listening to progress report:', error);
-  });
-  
-  console.log('✅ Member real-time listener initialized');
-}
-
-window.initializeProgressReportListener = initializeProgressReportListener;
-
-// Save progress update
-// Load and display progress report assigned to member
-window.loadProgressReport = async function() {
-  try {
-    console.log('=== LOAD PROGRESS REPORT CALLED (MEMBER) ===');
-    console.log('Current userEmail:', userEmail);
-    
-    // Helper function to get status color
-    const getStatusColor = (status) => {
-      switch(status) {
-        case 'Completed':
-          return '#10b981'; // Green
-        case 'Pending':
-          return '#f59e0b'; // Amber/Orange
-        case 'Not Started':
-        default:
-          return '#94a3b8'; // Gray-blue
-      }
-    };
-    
-    // If userEmail is not set yet, retry in a moment
-    if (!userEmail) {
-      console.log('userEmail not set yet, retrying in 500ms');
-      setTimeout(() => {
-        window.loadProgressReport();
-      }, 500);
-      return;
-    }
-    
-    const progressReportCollection = "progressReports";
-    const progressReportDocId = "thesisProgress";
-    
-    console.log('Fetching progress report from:', progressReportCollection, progressReportDocId);
-    
-    const docRef = doc(db, progressReportCollection, progressReportDocId);
-    const docSnap = await getDoc(docRef);
-    
-    console.log('Document exists:', docSnap.exists());
-    
-    if (!docSnap.exists()) {
-      console.log('Progress report document does not exist');
-      const panel = document.getElementById("progressReportPanel");
-      if (panel) {
-        panel.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No progress report available yet. Your advisor will create one for you.</p>';
-      }
-      return;
-    }
-    
-    const data = docSnap.data();
-    console.log('Document data:', data);
-    
-    if (!data.sections) {
-      console.log('No sections in progress report');
-      const panel = document.getElementById("progressReportPanel");
-      if (panel) {
-        panel.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No progress report available yet. Your advisor will create one for you.</p>';
-      }
-      return;
-    }
-    
-    const allSections = data.sections || [];
-    console.log('All sections from Firestore:', allSections);
-    
-    // Display all progress report items to all members (no filtering by assignment)
-    const assignedItems = [];
-    allSections.forEach((section, sectionIndex) => {
-      if (Array.isArray(section.items)) {
-        section.items.forEach((item, itemIndex) => {
-          console.log(`Adding item "${item.name}" to display list`);
-          assignedItems.push({
-            name: item.name,
-            section: section.title,
-            status: item.status,
-            sectionIndex,
-            itemIndex
-          });
-        });
-      }
-    });
-    
-    console.log('✅ Total items to display:', assignedItems.length);
-    
-    const panel = document.getElementById("progressReportPanel");
-    if (!panel) {
-      console.warn('Progress report panel not found in DOM');
-      return;
-    }
-    
-    if (assignedItems.length === 0) {
-      console.log('No items found to display');
-      panel.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No progress report items yet.</p>';
-      return;
-    }
-    
-    // Render as card layout
-    panel.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 1rem;">
-        ${assignedItems.map((item) => {
-          const assignedToNames = Array.isArray(item.assignedTo) ? item.assignedTo.map(id => {
-            const member = members.find(m => m.uid === id);
-            return member ? member.name : id;
-          }).join(', ') : (item.assignedTo || 'Unassigned');
-          
-          return `
-            <div style="background: #111827; border: 1px solid #374151; border-radius: 0.5rem; padding: 1.5rem; display: flex; justify-content: space-between; align-items: flex-start;">
-              <div style="flex: 1;">
-                <div style="color: #d1d5db; font-weight: 600; font-size: 1.1rem; margin-bottom: 0.5rem;">${item.name}</div>
-                <div style="color: #6b7280; font-size: 0.85rem; margin-bottom: 0.75rem;">${item.section}</div>
-                <div style="color: #9ca3af; font-size: 0.9rem;">
-                  <span style="color: #6b7280;">Assigned to:</span>
-                  <span style="color: #cbd5e1; margin-left: 0.5rem;">${assignedToNames}</span>
-                </div>
-              </div>
-              <div style="text-align: right; margin-left: 1rem;">
-                <div style="color: ${getStatusColor(item.status || 'Not Started')}; font-weight: 600; font-size: 0.95rem;">${item.status || 'Not Started'}</div>
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
-    console.log('✅ Progress report rendered successfully');
-  } catch (error) {
-    console.error('❌ Error loading progress report:', error);
-    console.error('Error stack:', error.stack);
-    const panel = document.getElementById("progressReportPanel");
-    if (panel) {
-      panel.innerHTML = '<p style="color: #f87171;">Error loading progress report. Please try again.</p>';
-    }
-  }
-};
-
-// Manual refresh function for testing
-window.refreshProgressReport = function() {
-  console.log('🔄 Manual refresh of progress report triggered');
-  loadProgressReport();
-};
-
-// Update task status in progress report
-window.updateTaskStatus = async function(sectionIndex, itemIndex) {
-  try {
-    const statusSelect = document.getElementById(`status-${sectionIndex}-${itemIndex}`);
-    const newStatus = statusSelect.value;
-    
-    const progressReportCollection = "progressReports";
-    const progressReportDocId = "thesisProgress";
-    
-    const docRef = doc(db, progressReportCollection, progressReportDocId);
-    const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists()) return;
-    
-    const sections = docSnap.data().sections || [];
-    
-    // Update the status directly using sectionIndex and itemIndex
-    if (sections[sectionIndex] && sections[sectionIndex].items && sections[sectionIndex].items[itemIndex]) {
-      sections[sectionIndex].items[itemIndex].status = newStatus;
-    }
-    
-    // Save updated sections
-    await setDoc(doc(db, progressReportCollection, progressReportDocId), { sections }, { merge: true });
-    console.log('Task status updated successfully');
-  } catch (error) {
-    console.error('Error updating task status:', error);
-    alert('Error updating status: ' + error.message);
-  }
-};
 
 function getDeadlineWarning(deadlineStr, status) {
   if (status === "done" || status === "pending validation") return { class: "", message: "" };
@@ -386,9 +156,94 @@ function getSafePollVotes(poll) {
   return typeof votes === 'object' && votes !== null ? votes : {};
 }
 
-function renderMemberProgressReport(sections) {}
+function renderMemberProgressReport(sections) {
+  const container = document.getElementById("progressReport");
+  const emptyState = document.getElementById("progressEmptyState");
 
-function mergeProgressStructures(defaultSections, savedSections) {}
+  if (!container) return;
+  if (!Array.isArray(sections) || sections.length === 0) {
+    container.innerHTML = "";
+    if (emptyState) emptyState.style.display = "block";
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = "none";
+  container.innerHTML = sections.map(section => `
+    <div style="margin-bottom: 1.25rem;">
+      <h3 style="margin: 0 0 0.75rem 0; color: #3b82f6;">${section.title}</h3>
+      ${Array.isArray(section.items) ? section.items.map(item => {
+        const assignedToName = Array.isArray(item.assignedToName) ? item.assignedToName.join(', ') : (item.assignedToName || (item.assignedTo ? getUserName(item.assignedTo) : 'Unassigned'));
+        return `
+          <div style="padding: 0.75rem; background: #111827; border: 1px solid #374151; border-radius: 0.5rem; margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+              <span style="color: #d1d5db;">${item.name}</span>
+              <span style="color: ${item.status === 'Completed' ? '#22c55e' : item.status === 'Pending' ? '#f59e0b' : '#94a3b8'}; font-weight: 600;">${item.status || 'Not Started'}</span>
+            </div>
+            <p style="margin: 0.5rem 0 0 0; color: #60a5fa; font-size: 0.85rem;">Assigned to: ${assignedToName}</p>
+          </div>
+        `;
+      }).join('') : ''}
+    </div>
+  `).join('');
+}
+
+function mergeProgressStructures(defaultSections, savedSections) {
+  // Merge saved data with default structure, preserving edits but adding new items
+  return defaultSections.map((defaultSection) => {
+    const savedSection = savedSections.find(s => s.title === defaultSection.title);
+    
+    if (!savedSection) {
+      // Section doesn't exist in saved data, use default
+      return defaultSection;
+    }
+    
+    // Merge items within the section
+    const mergedItems = defaultSection.items.map((defaultItem) => {
+      const savedItem = savedSection.items?.find(i => i.name === defaultItem.name);
+      
+      if (!savedItem) {
+        // Item doesn't exist in saved data, use default
+        return defaultItem;
+      }
+      
+      // Item exists in saved data, preserve status and assignments
+      return {
+        name: defaultItem.name,
+        status: savedItem.status || defaultItem.status,
+        assignedTo: Array.isArray(savedItem.assignedTo) ? savedItem.assignedTo : (savedItem.assignedTo ? [savedItem.assignedTo] : []),
+        assignedToName: Array.isArray(savedItem.assignedToName) ? savedItem.assignedToName : (savedItem.assignedToName ? [savedItem.assignedToName] : [])
+      };
+    });
+    
+    return {
+      title: defaultSection.title,
+      items: mergedItems
+    };
+  });
+}
+
+function loadProgressReport() {
+  const progressRef = doc(db, progressReportCollection, progressReportDocId);
+  onSnapshot(progressRef, (snap) => {
+    const defaultSections = getDefaultProgressStructure();
+    let sections = defaultSections;
+    
+    if (snap.exists()) {
+      const data = snap.data();
+      if (Array.isArray(data.sections)) {
+        // Merge saved data with default structure to include new items
+        sections = mergeProgressStructures(defaultSections, data.sections);
+      } else {
+        setDoc(progressRef, { sections: defaultSections }, { merge: true });
+      }
+    } else {
+      setDoc(progressRef, { sections: defaultSections }, { merge: true });
+    }
+    renderMemberProgressReport(sections);
+  }, (error) => {
+    console.error('Progress report onSnapshot error:', error);
+  });
+}
 
 window.markDone = async function (id) {
   try {
@@ -716,23 +571,14 @@ function loadResources() {
   onSnapshot(collection(db, "resources"), (snap) => {
     console.log('=== MEMBER RESOURCES LISTENER TRIGGERED ===');
     console.log('Resources snapshot received, docs count:', snap.size);
-    
-    // Clear container
     container.innerHTML = "";
 
-    // Show/hide empty state based on whether resources exist
     if (emptyState) {
-      if (snap.empty) {
-        emptyState.style.display = "block";
-        console.log('No resources - showing empty state');
-        return;
-      } else {
-        emptyState.style.display = "none";
-        console.log('Resources found - hiding empty state');
-      }
+      emptyState.style.display = snap.empty ? "block" : "none";
     }
 
     if (snap.empty) {
+      container.innerHTML = "";
       return;
     }
 
@@ -775,33 +621,23 @@ function loadMeetings() {
     meetingsUnsubscribe();
   }
 
-  try {
-    const meetingsQuery = query(collection(db, 'meetings'), where('assignedTo', 'in', [userEmail, 'everyone']));
-    meetingsUnsubscribe = onSnapshot(meetingsQuery, (snapshot) => {
-      const meetings = [];
-      snapshot.forEach(docSnap => {
-        meetings.push({ id: docSnap.id, ...docSnap.data() });
-      });
-
-      meetings.sort((a, b) => {
-        const aDate = new Date(`${a.date}T${a.time}`);
-        const bDate = new Date(`${b.date}T${b.time}`);
-        return aDate - bDate;
-      });
-
-      renderMeetings(meetings);
-    }, (error) => {
-      console.error('Meetings listener error:', error);
-      // If permission error, show empty state
-      if (error.code === 'permission-denied') {
-        console.log('Meetings collection not yet accessible - showing empty state');
-        renderMeetings([]);
-      }
+  const meetingsQuery = query(collection(db, 'meetings'), where('assignedTo', 'in', [userEmail, 'everyone']));
+  meetingsUnsubscribe = onSnapshot(meetingsQuery, (snapshot) => {
+    const meetings = [];
+    snapshot.forEach(docSnap => {
+      meetings.push({ id: docSnap.id, ...docSnap.data() });
     });
-  } catch (error) {
-    console.error('Error setting up meetings listener:', error);
-    renderMeetings([]);
-  }
+
+    meetings.sort((a, b) => {
+      const aDate = new Date(`${a.date}T${a.time}`);
+      const bDate = new Date(`${b.date}T${b.time}`);
+      return aDate - bDate;
+    });
+
+    renderMeetings(meetings);
+  }, (error) => {
+    console.error('Meetings listener error:', error);
+  });
 }
 
 window.loadMeetings = loadMeetings;
@@ -876,14 +712,14 @@ function renderMeetings(meetings) {
 }
 
 window.joinScheduledMeeting = function(roomName) {
-  console.log('Joining meeting:', roomName);
   const container = document.getElementById('jaas-container');
   const meetingsList = document.getElementById('meetings-list');
+
   if (container) container.style.display = 'block';
   if (meetingsList) meetingsList.style.display = 'none';
+
   initializeJitsiConference(roomName);
 };
-
 
 function getChatRoomDisplayName(email) {
   return getUserName(email) || email;
@@ -1058,33 +894,13 @@ function renderChatRooms(chatRooms) {
 
 function renderChatMessages(messages) {
   const chatMessagesEl = document.getElementById('chatMessages');
-  if (!chatMessagesEl) {
-    console.error('❌ chatMessages element not found in DOM');
-    return;
-  }
-
-  console.log('🎨 renderChatMessages called with', messages?.length || 0, 'messages');
+  if (!chatMessagesEl) return;
 
   if (!messages || messages.length === 0) {
-    console.log('📭 No messages to render, showing empty state');
     chatMessagesEl.innerHTML = '<p style="color: #94a3b8; text-align: center; margin: 1rem 0;">No messages yet. Start the conversation!</p>';
     return;
   }
 
-  console.log('Rendering', messages.length, 'messages');
-  
-  // Ensure container is visible before rendering
-  const computedStyle = window.getComputedStyle(chatMessagesEl);
-  console.log('Container visibility:', {
-    display: computedStyle.display,
-    height: computedStyle.height,
-    overflow: computedStyle.overflow,
-    visibility: computedStyle.visibility,
-    opacity: computedStyle.opacity,
-    clientHeight: chatMessagesEl.clientHeight,
-    offsetHeight: chatMessagesEl.offsetHeight
-  });
-  
   chatMessagesEl.innerHTML = '';
   messages.forEach((msg) => {
     chatMessagesById[msg.id] = msg;
@@ -1135,15 +951,9 @@ function renderChatMessages(messages) {
     chatMessagesEl.appendChild(msgDiv);
   });
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-  console.log('Messages rendered successfully. Final container state:', {
-    childCount: chatMessagesEl.children.length,
-    scrollHeight: chatMessagesEl.scrollHeight,
-    clientHeight: chatMessagesEl.clientHeight
-  });
 
   // Attach click listeners to chat images
   const chatImages = chatMessagesEl.querySelectorAll('.chat-image');
-  console.log('🖼️ Chat images found:', chatImages.length);
   chatImages.forEach(img => {
     img.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -1181,12 +991,8 @@ function renderChatMessages(messages) {
 }
 
 function openChatRoom(chatId) {
-  console.log('🔵 openChatRoom called with chatId:', chatId);
   const chatRoom = chatRoomsById[chatId];
-  if (!chatRoom) {
-    console.error('❌ Chat room not found for ID:', chatId);
-    return;
-  }
+  if (!chatRoom) return;
 
   selectedChatId = chatId;
 
@@ -1195,71 +1001,20 @@ function openChatRoom(chatId) {
   const metaEl = document.getElementById('activeChatMeta');
   const messageInput = document.getElementById('chatMessageInput');
   const messageForm = document.getElementById('chatMessageForm');
-  const chatMessages = document.getElementById('chatMessages');
 
-  console.log('📋 Panel elements found:', {
-    panel: !!panel,
-    titleEl: !!titleEl,
-    metaEl: !!metaEl,
-    messageInput: !!messageInput,
-    messageForm: !!messageForm,
-    chatMessages: !!chatMessages
-  });
-
-  if (panel) {
-    panel.style.display = 'flex';
-    
-    // Always trigger fullscreen for mobile when opening a chat
-    if (window.innerWidth <= 640) {
-      document.body.classList.add('chat-fullscreen-open');
-      panel.classList.add('fullscreen-visible');
-    }
-  }
-  
+  if (panel) panel.style.display = 'block';
   if (titleEl) titleEl.textContent = chatRoom.title;
   if (metaEl) metaEl.textContent = `Created by ${chatRoom.createdByName || getUserName(chatRoom.createdByEmail)} • Status: ${chatRoom.status}`;
   if (messageInput) messageInput.disabled = chatRoom.status !== 'Active';
   if (messageForm) messageForm.style.opacity = chatRoom.status !== 'Active' ? '0.7' : '1';
 
   clearReplyToMessage();
-  console.log('🔄 Subscribing to chat messages for:', chatId);
   subscribeChatMessages(chatId);
-  
-  // Scroll to bottom after loading
-  setTimeout(() => {
-    const chatMessagesEl = document.getElementById('chatMessages');
-    if (chatMessagesEl) {
-      console.log('📜 Scrolling to bottom, messages count:', chatMessagesEl.children.length);
-      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-    }
-  }, 100);
-
-  // Debug check after short delay
-  setTimeout(() => {
-    const chatMessagesEl = document.getElementById('chatMessages');
-    if (chatMessagesEl) {
-      console.log('✅ Chat panel status:', {
-        display: window.getComputedStyle(chatMessagesEl).display,
-        visibility: window.getComputedStyle(chatMessagesEl).visibility,
-        opacity: window.getComputedStyle(chatMessagesEl).opacity,
-        height: window.getComputedStyle(chatMessagesEl).height,
-        overflow: window.getComputedStyle(chatMessagesEl).overflow,
-        childCount: chatMessagesEl.children.length,
-        innerHTML: chatMessagesEl.innerHTML.substring(0, 100)
-      });
-    }
-  }, 500);
 }
 
 function closeChatRoomPanel() {
   const panel = document.getElementById('chatRoomPanel');
-  if (panel) {
-    panel.style.display = 'none';
-    panel.classList.remove('fullscreen-visible');
-  }
-
-  // Remove fullscreen mode
-  document.body.classList.remove('chat-fullscreen-open');
+  if (panel) panel.style.display = 'none';
 
   if (chatMessagesUnsubscribe) {
     chatMessagesUnsubscribe();
@@ -1400,17 +1155,14 @@ async function subscribeChatMessages(chatId) {
   }
 
   const messagesQuery = query(collection(db, 'liveChats', chatId, 'messages'), orderBy('createdAt', 'asc'));
-  console.log('Messages query created for chatId:', chatId);
   chatMessagesUnsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-    console.log('Snapshot received with docs:', snapshot.docs.length);
     const messages = [];
     snapshot.forEach((docSnap) => {
       messages.push({ id: docSnap.id, ...docSnap.data() });
     });
-    console.log('Calling renderChatMessages with', messages.length, 'messages');
     renderChatMessages(messages);
   }, (error) => {
-    console.error('Chat messages listener error:', error.message);
+    console.error('Chat messages listener error:', error);
   });
 }
 
@@ -1453,7 +1205,7 @@ async function sendChatMessage(event) {
     clearReplyToMessage();
   } catch (error) {
     console.error('Failed to send chat message:', error);
-    alert('Unable to send message: ' + (error.message || 'Unknown error'));
+    alert('Unable to send message. Please try again.');
   }
 }
 
@@ -1600,30 +1352,11 @@ window.loadChatRooms = loadChatRooms;
 window.openChatRoom = openChatRoom;
 window.closeChatRoomPanel = closeChatRoomPanel;
 window.setReplyToMessage = setReplyToMessage;
-window.clearReplyToMessage = clearReplyToMessage;
 window.unsendChatMessage = unsendChatMessage;
 window.sendChatMessage = sendChatMessage;
 window.triggerChatImageInput = triggerChatImageInput;
 window.handleChatImageInputChange = handleChatImageInputChange;
 window.clearChatImageSelection = clearChatImageSelection;
-
-// Handle resize for responsive fullscreen chat
-window.addEventListener('resize', () => {
-  const chatPanel = document.getElementById('chatRoomPanel');
-  const isFullscreenOpen = document.body.classList.contains('chat-fullscreen-open');
-  
-  if (!chatPanel || chatPanel.style.display === 'none') return;
-  
-  // If screen is wider than 640px and fullscreen is active, close fullscreen mode
-  if (window.innerWidth > 640 && isFullscreenOpen) {
-    document.body.classList.remove('chat-fullscreen-open');
-  }
-  
-  // If screen becomes mobile again while chat is open, restore fullscreen
-  if (window.innerWidth <= 640 && !isFullscreenOpen && chatPanel.style.display !== 'none') {
-    document.body.classList.add('chat-fullscreen-open');
-  }
-});
 
 // Attach the chat form handler after DOM is ready
 const createChatFormElement = document.getElementById('createChatForm');
@@ -1744,17 +1477,8 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     // Load polls and announcements
     loadPolls();
     loadAnnouncements();
+    loadProgressReport();
     loadResources();
-    
-    // Load members and progress with real-time listener
-    console.log('🔄 Initializing members listener...');
-    initializeMembersListener();
-    
-    console.log('🔄 Initializing progress report listener...');
-    initializeProgressReportListener();
-    
-    console.log('🔄 Loading progress report data...');
-    window.loadProgressReport();
 
     // Always ensure chat room list stays synced after refresh
     loadChatRooms();

@@ -1,7 +1,7 @@
 {
-  "name": "My Collab",
-  "short_name": "MyCollab",
-  "description": "Collaboration and task management platform",
+  "name": "mytaskForThesisHub",
+  "short_name": "MyTask",
+  "description": "Task management system for thesis",
   "start_url": "index.html",
   "display": "standalone",
   "background_color": "#0b1220",

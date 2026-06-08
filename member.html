@@ -6,15 +6,15 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>My Collab</title>
-  <meta name="application-name" content="My Collab">
-  <meta name="apple-mobile-web-app-title" content="My Collab">
+  <title>My Thesis Hub</title>
+  <meta name="application-name" content="My Thesis Hub">
+  <meta name="apple-mobile-web-app-title" content="My Thesis Hub">
   <link rel="manifest" href="manifest.json?v=6">
   <meta name="theme-color" content="#3b82f6">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=2">
-  <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js"></script>
+  <link rel="stylesheet" href="style.css?v=1">
+  <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
 </head>
 <body>
 <script>
@@ -34,7 +34,6 @@ if (savedMemberSection) {
   <!-- Sidebar Navigation -->
   <nav class="sidebar">
     <div class="sidebar-header">
-      <h2>My Collab</h2>
       <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
     </div>
     <ul class="nav-list">
@@ -46,7 +45,7 @@ if (savedMemberSection) {
       <li><button class="nav-btn active" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
       <li><button class="nav-btn" onclick="showSection('live-chat')"><i class="fas fa-comments"></i> Live Chat</button></li>
       <li><button class="nav-btn" onclick="showSection('resources')"><i class="fas fa-book"></i> Resources</button></li>
-      <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-clipboard-check"></i> Progress Report</button></li>
+      <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-file-alt"></i> Progress Report</button></li>
     </ul>
   </nav>
 
@@ -136,11 +135,11 @@ if (savedMemberSection) {
           <!-- Scheduled Meetings List -->
           <div id="meetings-list" style="margin-bottom: 2rem;">
             <h3 style="margin-bottom: 0.5rem; color: #f8fafc;">Scheduled Meetings</h3>
-            <p style="margin: 0 0 1rem 0; color: #94a3b8; font-size: 0.9rem;">Active scheduled meetings only; completed meetings are hidden.</p>
-            <div id="meetingsContainer" class="chat-room-list"></div>
+            <p style="margin: 0 0 1rem 0; color: #94a3b8; font-size: 0.9rem;">Showing active scheduled meetings only; completed/ended meetings are hidden.</p>
+            <div id="meetingsContainer"></div>
           </div>
 
-          <div id="jaas-container" style="width: 100%; height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151; display: none; background: #020617;"></div>
+          <div id="jaas-container" style="height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151; display: none;"></div>
         </div>
       </section>
 
@@ -150,13 +149,39 @@ if (savedMemberSection) {
           <h2 style="margin-bottom: 1rem;"><i class="fas fa-comments"></i> Live Chat</h2>
           <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #0f172a;">
             <form id="createChatForm" style="display: flex; gap: 0.75rem; align-items: center; justify-content: flex-start;">
-              <button type="submit" style="padding: 0.75rem 1.25rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; min-height: 44px; font-size: 0.95rem;">Create Chat Room</button>
+              <button type="submit" style="padding: 0.75rem 1.25rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer;">Create Chat Room</button>
             </form>
           </div>
 
           <div id="chatRoomsList" style="margin-bottom: 2rem;">
             <h3 style="margin-bottom: 0.75rem; color: #f8fafc;">Available Chat Rooms</h3>
-            <div id="chatRoomsContainer" class="chat-room-list"></div>
+            <div id="chatRoomsContainer"></div>
+          </div>
+
+          <div id="chatRoomPanel" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 9999; padding: 1rem; box-sizing: border-box; overflow: hidden;">
+            <div style="height: 100%; display: flex; flex-direction: column; max-height: 100%;">
+              <div style="display: flex; justify-content: flex-start; align-items: center; margin-bottom: 1rem; gap: 1rem;">
+                <button onclick="closeChatRoomPanel()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">
+                  ←
+                </button>
+                <div>
+                  <h3 id="activeChatTitle" style="margin: 0; color: #f8fafc;"></h3>
+                  <p id="activeChatMeta" style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.9rem;"></p>
+                </div>
+              </div>
+              <div id="chatMessages" style="flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 1rem; padding-right: 0.5rem; border: 1px solid #374151; border-radius: 12px; padding: 1rem; background: #020617;"></div>
+              <div id="chatReplyPreview" style="display: none; margin-bottom: 0.75rem; padding: 0.85rem 1rem; border-radius: 14px; border: 1px solid #374151; background: #111827; color: #e5e7eb;"></div>
+              <form id="chatMessageForm" style="display: flex; gap: 0.5rem; align-items: stretch; position: relative; flex-wrap: wrap;">
+                <div style="flex: 1 1 auto; min-width: 0; position: relative;">
+                  <input id="chatMessageInput" type="text" placeholder="Write a message..." style="width: 100%; min-width: 0; padding: 1rem; border-radius: 9999px; border: 1px solid #374151; background: #020617; color: #f8fafc;">
+                  <div id="memberMentionDropdown" class="mention-dropdown"></div>
+                </div>
+                <button type="button" onclick="triggerChatImageInput()" style="flex: 0 0 auto; width: auto; min-width: 56px; max-width: 56px; padding: 0 0.85rem; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer;">📷</button>
+                <input id="chatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleChatImageInputChange(event)">
+                <button type="submit" style="flex: 0 0 auto; width: auto; min-width: 120px; max-width: 180px; padding: 0 1.25rem; background: #10b981; color: white; border: none; border-radius: 9999px; cursor: pointer;">Send</button>
+              </form>
+              <div id="chatImagePreview" style="display:none; margin-top: 0.75rem;"></div>
+            </div>
           </div>
         </div>
       </section>
@@ -165,21 +190,21 @@ if (savedMemberSection) {
       <section id="resources" class="content-section">
         <div class="card">
           <h2 style="margin-bottom: 1rem;"><i class="fas fa-book"></i> Resources</h2>
-          <p id="resourcesEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem; font-size: 1rem;">
-            <i class="fas fa-inbox"></i> No resources created yet. Your advisor will upload resources here.
-          </p>
           <div id="resources"></div>
+          <p id="resourcesEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
+            No resources available yet.
+          </p>
         </div>
       </section>
 
-      <!-- Progress Report Section -->
+      <!-- Thesis Progress Report Section -->
       <section id="progress-report" class="content-section">
         <div class="card">
-          <h2 style="margin-bottom: 1rem;"><i class="fas fa-clipboard-check"></i> Progress Report</h2>
-          
-          <div id="progressReportPanel" style="display: flex; flex-direction: column; gap: 1.5rem;">
-            <p style="color: #94a3b8; text-align: center;">Loading progress report...</p>
-          </div>
+          <h2 style="margin-bottom: 1rem;"><i class="fas fa-file-alt"></i> Thesis Progress Report</h2>
+          <div id="progressReport"></div>
+          <p id="progressEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem; display: none;">
+            Thesis progress report is not available yet.
+          </p>
         </div>
       </section>
     </div>
@@ -188,13 +213,65 @@ if (savedMemberSection) {
 
 <footer class="app-footer">
   <div class="footer-right">
-    <div class="footer-appname">My Collab</div>
-    <div class="footer-credit">Collaboration Platform<br>Created by John Paul Bugayong</div>
+    <div class="footer-appname">My ThesisHub</div>
+    <div class="footer-credit">Created by John Paul Bugayong</div>
   </div>
 </footer>
 
 <script>
-// Navigation functions (using updated version below)
+// Navigation functions
+function showSection(sectionId) {
+  // Hide all sections
+  const sections = document.querySelectorAll('.content-section');
+  sections.forEach(section => section.classList.remove('active'));
+  
+  // Show selected section
+  const targetSection = document.getElementById(sectionId);
+  if (targetSection) {
+    targetSection.classList.add('active');
+    
+    // Handle video conference section
+    if (sectionId === 'video-conference') {
+      loadMeetings();
+    }
+    if (sectionId === 'live-chat') {
+      if (typeof loadChatRooms === 'function') {
+        loadChatRooms();
+      }
+    }
+  }
+  
+  // Update active nav button
+  const navButtons = document.querySelectorAll('.nav-btn');
+  navButtons.forEach(btn => btn.classList.remove('active'));
+  
+  // Find and activate the corresponding nav button
+  const activeBtn = document.querySelector(`[onclick="showSection('${sectionId}')"]`);
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+  }
+  
+  // Update page title
+  const titles = {
+    'my-tasks': '<i class="fas fa-clipboard-list"></i> My Tasks',
+    'ticket-history': '<i class="fas fa-ticket-alt"></i> Ticket History',
+    'active-polls': '<i class="fas fa-chart-bar"></i> Active Polls',
+    'announcements': '<i class="fas fa-bullhorn"></i> Announcements',
+    'submit-ticket': '<i class="fas fa-paper-plane"></i> Submit Ticket',
+    'video-conference': '<i class="fas fa-video"></i> Video Conference',
+    'live-chat': '<i class="fas fa-comments"></i> Live Chat',
+    'resources': '<i class="fas fa-book"></i> Resources',
+    'progress-report': '<i class="fas fa-file-alt"></i> Progress Report'
+  };
+  
+  const pageTitle = document.getElementById('page-title');
+  if (pageTitle && titles[sectionId]) {
+    pageTitle.innerHTML = titles[sectionId];
+  }
+  
+  // Close mobile sidebar after selection
+  closeMobileSidebar();
+}
 
 function toggleSidebar() {
   const sidebar = document.querySelector('.sidebar');
@@ -220,32 +297,6 @@ function closeMobileSidebar() {
   overlay.classList.remove('show');
 }
 </script>
-<!-- Chat Room Panel relocated to top-level for performance -->
-<div id="chatRoomPanel" style="display: none; position: fixed; inset: 0; background: #0f172a; z-index: 9999; padding: 0.75rem; box-sizing: border-box; overflow: hidden;">
-  <div style="height: 100%; display: flex; flex-direction: column; max-height: 100vh;">
-    <div style="display: flex; justify-content: flex-start; align-items: center; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap;">
-      <button onclick="closeChatRoomPanel()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.5rem 0.75rem; font-size: 0.85rem; line-height: 1; white-space: nowrap; min-height: 40px;">
-        ← Back
-      </button>
-      <div style="min-width: 0; flex: 1;">
-        <h3 id="activeChatTitle" style="margin: 0; color: #f8fafc; font-size: 1.1rem; text-align: left;"></h3>
-        <p id="activeChatMeta" style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.85rem; text-align: left;"></p>
-      </div>
-    </div>
-    <div id="chatMessages" style="flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 1rem; border: 1px solid #374151; border-radius: 12px; padding: 0.75rem; background: #020617;"></div>
-    <div id="chatReplyPreview" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border-radius: 14px; border: 1px solid #374151; background: #111827; color: #e5e7eb; font-size: 0.9rem;"></div>
-    <form id="chatMessageForm" style="display: flex; gap: 0.5rem; align-items: stretch; flex-wrap: nowrap; width: 100%;">
-      <div style="flex: 1 1 auto; min-width: 0; position: relative; display: flex; gap: 0.25rem;">
-        <input id="chatMessageInput" type="text" placeholder="Message..." style="flex: 1; min-width: 0; padding: 0.75rem; border-radius: 9999px; border: 1px solid #374151; background: #020617; color: #f8fafc; font-size: 16px;">
-        <button type="button" onclick="triggerChatImageInput()" style="flex: 0 0 40px; width: 40px; padding: 0; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; min-height: 40px;">📷</button>
-      </div>
-      <input id="chatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleChatImageInputChange(event)">
-      <button type="submit" style="flex: 0 0 auto; width: auto; padding: 0.65rem 1rem; background: #10b981; color: white; border: none; border-radius: 9999px; cursor: pointer; font-size: 0.85rem; min-width: 60px; min-height: 40px;">Send</button>
-    </form>
-    <div id="chatImagePreview" style="display:none; margin-top: 0.75rem;"></div>
-  </div>
-</div>
-
 <script type="module">
   import { requireAuth } from "./auth.js?v=5";
   import { initializeNotifications } from "./notifications.js?v=5";
@@ -269,35 +320,13 @@ function buildJaasRoomName(roomName) {
   return roomName.startsWith(JAASTOKEN_ROOM_PREFIX) ? roomName : `${JAASTOKEN_ROOM_PREFIX}${roomName}`;
 }
 
-function initializeJitsiConference(roomName = null, attempts = 0) {
-  if (typeof JitsiMeetExternalAPI === 'undefined') {
-    if (attempts < 10) {
-      console.log('Jitsi API not loaded yet, retrying...');
-      setTimeout(() => initializeJitsiConference(roomName, attempts + 1), 500);
-      return;
-    }
-    console.error('Jitsi API failed to load');
-    return;
-  }
-
+function initializeJitsiConference(roomName = null) {
   if (jaasApi) {
     jaasApi.dispose();
   }
 
   const container = document.querySelector('#jaas-container');
   if (!container) return;
-
-  // Ensure container is visible
-  container.style.display = 'block';
-
-  // Hide other elements if in fullscreen mobile
-  const isMobile = window.innerWidth <= 640;
-  if (isMobile) {
-    document.body.classList.add('meeting-fullscreen-open');
-    if (container) container.classList.add('meeting-fullscreen');
-    const meetingsList = document.getElementById('meetings-list');
-    if (meetingsList) meetingsList.style.display = 'none';
-  }
 
   const room = buildJaasRoomName(roomName || currentMeetingRoom);
 
@@ -311,24 +340,12 @@ function initializeJitsiConference(roomName = null, attempts = 0) {
       disableDeepLinking: true,
       startWithAudioMuted: true,
       startWithVideoMuted: true,
+      disableInitialGUM: true, // Prevent automatic media access to avoid autoplay errors
       enableClosePage: false,
       disableThirdPartyRequests: false,
-      disableBeforeUnload: true,
       analytics: {
         disabled: true
-      },
-      // Mobile & Performance optimizations
-      videoQuality: {
-        maxReceiverVideoQuality: 360
-      },
-      resolution: 360,
-      disableAudioLevels: true,
-      p2p: {
-        enabled: true
-      },
-      // Force mobile portrait-friendly layout if possible
-      disableSelfView: false,
-      filmStripOnly: false
+      }
     },
     interfaceConfigOverwrite: {
       TOOLBAR_BUTTONS: [
@@ -337,11 +354,8 @@ function initializeJitsiConference(roomName = null, attempts = 0) {
         'raisehand', 'videoquality', 'filmstrip',
         'tileview', 'help'
       ],
-      SETTINGS_SECTIONS: ['devices', 'language', 'profile'],
       DISABLE_VIDEO_BACKGROUND: true,
-      HIDE_INVITE_MORE_HEADER: true,
-      MOBILE_APP_PROMO: false,
-      VERTICAL_FILMSTRIP: true
+      HIDE_INVITE_MORE_HEADER: true
     }
   };
 
@@ -357,13 +371,8 @@ function initializeJitsiConference(roomName = null, attempts = 0) {
       jaasApi.dispose();
       jaasApi = null;
     }
-
-    // Remove fullscreen class
-    document.body.classList.remove('meeting-fullscreen-open');
-    const container = document.getElementById('jaas-container');
-    if (container) container.classList.remove('meeting-fullscreen');
-
     // Hide conference container and show scheduling interface
+    const container = document.getElementById('jaas-container');
     const scheduleForm = document.getElementById('schedule-form');
     const meetingsList = document.getElementById('meetings-list');
 
@@ -416,8 +425,7 @@ function showSection(sectionId) {
     'video-conference': '<i class="fas fa-video"></i> Video Conference',
     'live-chat': '<i class="fas fa-comments"></i> Live Chat',
     'resources': '<i class="fas fa-book"></i> Resources',
-    'my-progress': '<i class="fas fa-chart-line"></i> My Progress',
-    'progress-report': '<i class="fas fa-clipboard-check"></i> Progress Report'
+    'progress-report': '<i class="fas fa-file-alt"></i> Progress Report'
   };
   
   const pageTitle = document.getElementById('page-title');
@@ -430,42 +438,10 @@ function showSection(sectionId) {
       loadChatRooms();
     }
   }
-
-  if (sectionId === 'progress-report') {
-    if (typeof loadProgressReport === 'function') {
-      loadProgressReport();
-    }
-  }
   
   // Close mobile sidebar after selection
   closeMobileSidebar();
 }
-
-// Handle resize events for meeting fullscreen mode
-window.addEventListener('resize', () => {
-  const body = document.body;
-  const container = document.getElementById('jaas-container');
-  const isMobile = window.innerWidth <= 640;
-
-  if ((jaasApi || body.classList.contains('meeting-fullscreen-open')) && container && container.style.display !== 'none') {
-    // Meeting is active
-    if (isMobile) {
-      if (!body.classList.contains('meeting-fullscreen-open')) {
-        body.classList.add('meeting-fullscreen-open');
-      }
-      if (!container.classList.contains('meeting-fullscreen')) {
-        container.classList.add('meeting-fullscreen');
-      }
-      const meetingsList = document.getElementById('meetings-list');
-      if (meetingsList) meetingsList.style.display = 'none';
-    } else {
-      body.classList.remove('meeting-fullscreen-open');
-      container.classList.remove('meeting-fullscreen');
-      const meetingsList = document.getElementById('meetings-list');
-      if (meetingsList) meetingsList.style.display = 'block';
-    }
-  }
-});
 </script>
 
 </body>

@@ -61,39 +61,12 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Skip caching for Firestore and other streaming/API requests
-  const url = event.request.url;
-  const shouldSkipCache = 
-    url.includes('firestore.googleapis.com') ||
-    url.includes('accounts.google.com') ||
-    url.includes('identitytoolkit.googleapis.com') ||
-    url.includes('securetoken.googleapis.com') ||
-    url.includes('googleapis.com') ||
-    url.includes('8x8.vc') ||
-    event.request.method !== 'GET';
-
-  if (shouldSkipCache) {
-    // For non-cacheable requests, just fetch and return
-    event.respondWith(
-      fetch(event.request)
-        .catch(() => {
-          // Return offline response or error
-          return new Response('Network error', {
-            status: 503,
-            statusText: 'Service Unavailable'
-          });
-        })
-    );
-    return;
-  }
-
   event.respondWith(
     fetch(event.request)
       .then(response => {
-        // Only cache GET requests with successful responses
-        if ((event.request.method === 'GET' || event.request.method === 'HEAD') && response && response.ok) {
-          // Double-check response is cacheable
-          if (response.status === 200 || response.status === 301 || response.status === 404) {
+        // Only cache GET and HEAD requests
+        if (event.request.method === 'GET' || event.request.method === 'HEAD') {
+          if (response && response.ok) {
             const responseClone = response.clone();
             caches.open(CACHE_NAME).then(cache => {
               try {
@@ -109,21 +82,9 @@ self.addEventListener('fetch', event => {
       .catch(() => {
         // Try to return cached response on network error
         if (event.request.method === 'GET' || event.request.method === 'HEAD') {
-          return caches.match(event.request)
-            .then(cachedResponse => {
-              if (cachedResponse) {
-                return cachedResponse;
-              }
-              return new Response('Network error - offline', {
-                status: 503,
-                statusText: 'Service Unavailable'
-              });
-            });
+          return caches.match(event.request);
         }
-        return new Response('Network request failed', {
-          status: 503,
-          statusText: 'Service Unavailable'
-        });
+        throw new Error('Network request failed');
       })
   );
 });

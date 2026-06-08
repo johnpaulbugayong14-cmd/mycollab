@@ -6,15 +6,15 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Admin Dashboard - My Collab</title>
-  <meta name="application-name" content="My Collab">
-  <meta name="apple-mobile-web-app-title" content="My Collab">
+  <title>Admin Dashboard - My Thesis Hub</title>
+  <meta name="application-name" content="My Thesis Hub">
+  <meta name="apple-mobile-web-app-title" content="My Thesis Hub">
   <link rel="manifest" href="manifest.json?v=5">
   <meta name="theme-color" content="#3b82f6">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js"></script>
+  <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
 </head>
 <body>
 
@@ -28,12 +28,11 @@
   <!-- Sidebar Navigation -->
   <nav class="sidebar">
     <div class="sidebar-header">
-      <h2>Admin</h2>
+      <h2><i class="fas fa-chart-bar"></i> Admin</h2>
       <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
     </div>
     <ul class="nav-list">
       <li><button class="nav-btn active" onclick="showSection('create-task')"><i class="fas fa-plus"></i> Create Task</button></li>
-      <li><button class="nav-btn" onclick="showSection('manage-members')"><i class="fas fa-users-plus"></i> Manage Members</button></li>
       <li><button class="nav-btn" onclick="showSection('create-poll')"><i class="fas fa-poll"></i> Create Poll</button></li>
       <li><button class="nav-btn" onclick="showSection('create-announcement')"><i class="fas fa-bullhorn"></i> Announcement</button></li>
       <li><button class="nav-btn" onclick="showSection('create-resource')"><i class="fas fa-book"></i> Resource</button></li>
@@ -41,8 +40,8 @@
       <li><button class="nav-btn" onclick="showSection('manage-announcements')"><i class="fas fa-bullhorn"></i> Manage Announcements</button></li>
       <li><button class="nav-btn" onclick="showSection('support-tickets')"><i class="fas fa-ticket-alt"></i> Support Tickets</button></li>
       <li><button class="nav-btn" onclick="showSection('manage-resources')"><i class="fas fa-book"></i> Manage Resources</button></li>
+      <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-chart-line"></i> Progress Report</button></li>
       <li><button class="nav-btn" onclick="showSection('task-analytics')"><i class="fas fa-chart-bar"></i> Analytics</button></li>
-      <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-clipboard-check"></i> Progress Report</button></li>
       <li><button class="nav-btn" onclick="showSection('all-tasks')"><i class="fas fa-clipboard-list"></i> All Tasks</button></li>
       <li><button class="nav-btn" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
       <li><button class="nav-btn" onclick="showSection('live-chat')"><i class="fas fa-comments"></i> Live Chat</button></li>
@@ -226,44 +225,14 @@
         </div>
       </section>
       
-      <!-- Manage Members Section -->
-      <section id="manage-members" class="content-section">
+      <!-- Progress Report Section -->
+      <section id="progress-report" class="content-section">
         <div class="card">
-          <h2><i class="fas fa-users-plus"></i> Manage Members</h2>
-          
-          <div style="margin-bottom: 2rem; padding: 1rem; background: #1e293b; border: 1px solid #374151; border-radius: 8px;">
-            <h3 style="margin-bottom: 1rem; color: #f8fafc;">Create New Member Account</h3>
-            <form onsubmit="event.preventDefault(); createMemberAccount();" style="display: flex; flex-direction: column; gap: 1rem;">
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                <div class="form-group">
-                  <label for="memberName">Member Name</label>
-                  <input id="memberName" type="text" placeholder="Full Name" required style="background: #0f172a; border: 1px solid #374151; color: #f8fafc; padding: 0.5rem;">
-                </div>
-                <div class="form-group">
-                  <label for="memberEmail">Login Email (Credentials)</label>
-                  <input id="memberEmail" type="email" placeholder="login@example.com" required style="background: #0f172a; border: 1px solid #374151; color: #f8fafc; padding: 0.5rem;">
-                </div>
-              </div>
-              
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                <div class="form-group">
-                  <label for="memberPassword">Password</label>
-                  <input id="memberPassword" type="password" placeholder="Password" required style="background: #0f172a; border: 1px solid #374151; color: #f8fafc; padding: 0.5rem; width: 100%;">
-                </div>
-                <div class="form-group">
-                  <label for="memberGmail">Gmail Address (Notifications)</label>
-                  <input id="memberGmail" type="email" placeholder="user@gmail.com" style="background: #0f172a; border: 1px solid #374151; color: #f8fafc; padding: 0.5rem;">
-                </div>
-              </div>
-              
-              <button type="submit" class="btn-success"><i class="fas fa-user-plus"></i> Create Member</button>
-            </form>
+          <h2><i class="fas fa-chart-line"></i> Thesis Progress Report</h2>
+          <div id="progressReportPanel">
+            <p style="color: #94a3b8; text-align: center;">Loading thesis progress report...</p>
           </div>
-          
-          <h3 style="margin-bottom: 1rem; color: #f8fafc;">Current Members</h3>
-          <div id="membersList" style="display: flex; flex-direction: column; gap: 0.75rem;">
-            <p style="color: #94a3b8; text-align: center;">Loading members...</p>
-          </div>
+          <button type="button" onclick="saveProgressReport()" class="btn-success" style="margin-top: 1rem;"><i class="fas fa-save"></i> Save Progress</button>
         </div>
       </section>
       
@@ -273,47 +242,6 @@
           <h2><i class="fas fa-chart-bar"></i> Task Analytics</h2>
           <div class="analytics-list-container" style="display: flex; flex-direction: column; gap: 1rem; padding-top: 1rem;">
             <div id="taskAnalyticsList" class="analytics-list" style="display: grid; gap: 1rem;"></div>
-          </div>
-        </div>
-      </section>
-      
-      <!-- Progress Report Section -->
-      <section id="progress-report" class="content-section">
-        <div class="card">
-          <h2><i class="fas fa-clipboard-check"></i> Task Report</h2>
-          
-          <!-- Create New Progress Report Item Form -->
-          <div style="margin-bottom: 1.5rem; padding: 1.5rem; background: #0f172a; border: 1px solid #374151; border-radius: 0.5rem;">
-            <h3 style="margin-bottom: 1rem; color: #0ea5e9;">Create New Item</h3>
-            <form onsubmit="event.preventDefault(); createProgressReportItem();" style="display: flex; flex-direction: column; gap: 1rem;">
-              <div class="form-group">
-                <label for="reportItemName">Task Name</label>
-                <input id="reportItemName" type="text" placeholder="e.g., Complete literature review" required style="width: 100%;">
-              </div>
-              <div class="form-group">
-                <label for="reportItemStatus">Status</label>
-                <select id="reportItemStatus" required style="width: 100%;">
-                  <option value="Not Started">Not Started</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Completed">Completed</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="reportItemAssignedTo">Assign To (Select multiple)</label>
-                <select id="reportItemAssignedTo" multiple style="width: 100%; min-height: 100px;">
-                  <option value="">-- Select Members --</option>
-                </select>
-              </div>
-              <button type="submit" class="btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Create Item</button>
-            </form>
-          </div>
-          
-          <div id="progressReportPanel" style="display: flex; flex-direction: column; gap: 1.5rem;"></div>
-          
-          <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #374151;">
-            <div style="display: flex; gap: 1rem;">
-              <button onclick="saveProgressReport()" class="btn-success" style="flex: 1;"><i class="fas fa-save"></i> Save Progress Report</button>
-            </div>
           </div>
         </div>
       </section>
@@ -332,20 +260,20 @@
           <h2><i class="fas fa-video"></i> Video Conference</h2>
 
           <!-- Admin schedule form -->
-          <div id="admin-schedule-panel" class="meeting-schedule-panel" style="margin-bottom: 2rem;">
-            <h3 style="color: #f8fafc;">Schedule a Meeting</h3>
+          <div id="admin-schedule-panel" style="margin-bottom: 2rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #1e293b;">
+            <h3 style="margin-bottom: 1rem; color: #f8fafc;">Schedule a Meeting</h3>
             <form id="adminMeetingForm" style="display: flex; flex-direction: column; gap: 1rem;">
-              <input type="text" id="adminMeetingTitle" placeholder="Meeting Title" required style="padding: 0.75rem; border: 1px solid #374151; border-radius: 6px; background: #0f172a; color: #f8fafc; font-size: 16px;">
-              <div class="meeting-form-row">
-                <input type="date" id="adminMeetingDate" required style="padding: 0.75rem; border: 1px solid #374151; border-radius: 6px; background: #0f172a; color: #f8fafc; font-size: 16px;">
-                <input type="time" id="adminMeetingTime" required style="padding: 0.75rem; border: 1px solid #374151; border-radius: 6px; background: #0f172a; color: #f8fafc; font-size: 16px;">
+              <input type="text" id="adminMeetingTitle" placeholder="Meeting Title" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc;">
+              <div style="display: flex; gap: 1rem;">
+                <input type="date" id="adminMeetingDate" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc; flex: 1;">
+                <input type="time" id="adminMeetingTime" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc; flex: 1;">
               </div>
-              <button type="submit" style="padding: 0.75rem 1.5rem; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem; min-height: 44px;">Schedule Meeting</button>
+              <button type="submit" style="padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">Schedule Meeting</button>
             </form>
           </div>
 
-          <div style="margin-bottom: 2rem; text-align: center;">
-            <button onclick="startInstantMeeting()" style="padding: 0.85rem 1.5rem; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem; min-height: 44px;">
+                  <div style="margin-bottom: 2rem; text-align: center;">
+            <button onclick="startInstantMeeting()" style="padding: 0.75rem 1.5rem; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem;">
               <i class="fas fa-bolt"></i> Start Instant Meeting
             </button>
           </div>
@@ -353,10 +281,10 @@
           <!-- Scheduled Meetings List -->
           <div id="adminMeetingsList" style="margin-bottom: 2rem;">
             <h3 style="margin-bottom: 1rem; color: #f8fafc;">Scheduled Meetings</h3>
-            <div id="adminMeetingsContainer" class="chat-room-list"></div>
+            <div id="adminMeetingsContainer"></div>
           </div>
 
-          <div id="jaas-container" style="width: 100%; height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151; display: none; background: #020617;"></div>
+          <div id="jaas-container" style="height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151;"></div>
         </div>
       </section>
 
@@ -366,51 +294,45 @@
           <h2><i class="fas fa-comments"></i> Live Chat</h2>
           <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #0f172a;">
             <form id="adminCreateChatForm" style="display: flex; gap: 0.75rem; align-items: center; justify-content: flex-start;">
-              <button type="submit" style="padding: 0.75rem 1.25rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; min-height: 44px; font-size: 0.95rem;">Create Chat Room</button>
+              <button type="submit" style="padding: 0.75rem 1.25rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer;">Create Chat Room</button>
             </form>
           </div>
 
           <div id="adminChatRoomsList" style="margin-bottom: 2rem;">
             <h3 style="margin-bottom: 0.75rem; color: #f8fafc;">Chat Rooms</h3>
-            <div id="adminChatRoomsContainer" class="chat-room-list"></div>
+            <div id="adminChatRoomsContainer"></div>
           </div>
 
+          <div id="adminChatRoomPanel" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 9999; padding: 1rem; box-sizing: border-box; overflow: hidden;">
+            <div style="height: 100%; display: flex; flex-direction: column; max-height: 100%;">
+              <div style="display: flex; justify-content: flex-start; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                <button onclick="closeAdminChatPanel()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">
+                  ←
+                </button>
+                <div>
+                  <h3 id="adminActiveChatTitle" style="margin: 0; color: #f8fafc;"></h3>
+                  <p id="adminActiveChatMeta" style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.9rem;"></p>
+                </div>
+              </div>
+              <div id="adminChatMessages" style="flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 1rem; padding-right: 0.5rem; border: 1px solid #374151; border-radius: 12px; padding: 1rem; background: #020617;"></div>
+              <div id="adminChatReplyPreview" style="display: none; margin-bottom: 0.75rem; padding: 0.85rem 1rem; border-radius: 14px; border: 1px solid #374151; background: #111827; color: #e5e7eb;"></div>
+              <form id="adminChatMessageForm" style="display: flex; gap: 0.5rem; align-items: stretch; position: relative; flex-wrap: wrap;">
+                <div style="flex: 1 1 auto; min-width: 0; position: relative;">
+                  <input id="adminChatMessageInput" type="text" placeholder="Write a message..." style="width: 100%; min-width: 0; padding: 1rem; border-radius: 9999px; border: 1px solid #374151; background: #020617; color: #f8fafc;">
+                  <div id="adminMentionDropdown" class="mention-dropdown"></div>
+                </div>
+                <button type="button" onclick="triggerAdminChatImageInput()" style="flex: 0 0 auto; width: auto; min-width: 56px; max-width: 56px; padding: 0 0.85rem; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer;">📷</button>
+                <input id="adminChatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleAdminChatImageInputChange(event)">
+                <button type="submit" style="flex: 0 0 auto; width: auto; min-width: 120px; max-width: 180px; padding: 0 1.25rem; background: #10b981; color: white; border: none; border-radius: 9999px; cursor: pointer;">Send</button>
+              </form>
+              <div id="adminChatImagePreview" style="display:none; margin-top: 0.75rem;"></div>
+            </div>
+          </div>
         </div>
       </section>
 
     </div>
   </main>
-</div>
-
-<div id="adminChatRoomPanel" class="chat-fullscreen-panel">
-  <div class="chat-panel-container">
-    <div class="chat-panel-header">
-      <button onclick="closeAdminChatPanel()" class="chat-back-btn">
-        <i class="fas fa-arrow-left"></i> Back
-      </button>
-      <div class="chat-panel-title-area">
-        <h3 id="adminActiveChatTitle" class="chat-panel-title"></h3>
-        <p id="adminActiveChatMeta" class="chat-panel-subtitle"></p>
-      </div>
-    </div>
-
-    <div id="adminChatMessages" class="chat-messages-container"></div>
-
-    <div id="adminChatReplyPreview" class="chat-reply-preview" style="display: none;"></div>
-
-    <form id="adminChatMessageForm" class="chat-input-form">
-      <div class="chat-input-wrapper">
-        <input id="adminChatMessageInput" type="text" placeholder="Message..." class="chat-text-input">
-        <button type="button" onclick="triggerAdminChatImageInput()" class="chat-image-btn">
-          <i class="fas fa-camera"></i>
-        </button>
-      </div>
-      <input id="adminChatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleAdminChatImageInputChange(event)">
-      <button type="submit" class="chat-send-btn">Send</button>
-    </form>
-
-    <div id="adminChatImagePreview" class="chat-image-preview-area" style="display:none;"></div>
-  </div>
 </div>
 
 <div id="taskAnalyticsModalOverlay" class="analytics-modal-overlay" onclick="hideMemberTaskDetails()">
@@ -424,9 +346,8 @@
   </div>
 </div>
 
-<footer style="text-align: right; padding: 1rem 2rem; color: #94a3b8; font-size: 0.8rem; margin-top: 2rem;">
-  My Collab - Collaboration Platform<br>
-  Created by John Paul Bugayong
+<footer style="text-align: center; padding: 1rem; color: #94a3b8; font-size: 0.8rem; margin-top: 2rem;">
+  task assignment system for thesis
 </footer>
 
 <script>
@@ -458,13 +379,12 @@ function showSection(sectionId) {
     'create-poll': '<i class="fas fa-poll"></i> Create Poll',
     'create-announcement': '<i class="fas fa-bullhorn"></i> Create Announcement',
     'create-resource': '<i class="fas fa-book"></i> Create Resource',
-    'manage-members': '<i class="fas fa-users-plus"></i> Manage Members',
     'manage-polls': '<i class="fas fa-poll"></i> Manage Polls',
     'manage-announcements': '<i class="fas fa-bullhorn"></i> Manage Announcements',
     'support-tickets': '<i class="fas fa-ticket-alt"></i> Support Tickets',
     'manage-resources': '<i class="fas fa-book"></i> Manage Resources',
+    'progress-report': '<i class="fas fa-chart-line"></i> Progress Report',
     'task-analytics': '<i class="fas fa-chart-bar"></i> Task Analytics',
-    'progress-report': '<i class="fas fa-clipboard-check"></i> Progress Report',
     'all-tasks': '<i class="fas fa-clipboard-list"></i> All Tasks',
     'video-conference': '<i class="fas fa-video"></i> Video Conference',
     'live-chat': '<i class="fas fa-comments"></i> Live Chat'
@@ -488,30 +408,6 @@ function showSection(sectionId) {
         window.updateChart(window.lastMemberProgress);
       }
     }, 50); // Faster response when switching tabs
-  }
-  
-  // Load progress report when section is shown
-  if (sectionId === 'progress-report') {
-    setTimeout(() => {
-      if (typeof populateProgressReportAssignedTo === 'function') {
-        populateProgressReportAssignedTo();
-      }
-      if (typeof initializeProgressReportListener === 'function') {
-        initializeProgressReportListener();
-      }
-      if (typeof loadProgressReport === 'function') {
-        loadProgressReport();
-      }
-    }, 50);
-  }
-  
-  // Render members list when manage-members section is shown
-  if (sectionId === 'manage-members') {
-    setTimeout(() => {
-      if (window.renderMembersList && typeof window.renderMembersList === 'function') {
-        window.renderMembersList();
-      }
-    }, 50);
   }
   
   // Close mobile sidebar after selection
@@ -576,36 +472,13 @@ function buildJaasRoomName(roomName) {
   return roomName.startsWith(JAASTOKEN_ROOM_PREFIX) ? roomName : `${JAASTOKEN_ROOM_PREFIX}${roomName}`;
 }
 
-function initializeJitsiConference(roomName = null, attempts = 0) {
-  if (typeof JitsiMeetExternalAPI === 'undefined') {
-    if (attempts < 10) {
-      console.log('Jitsi API not loaded yet, retrying...');
-      setTimeout(() => initializeJitsiConference(roomName, attempts + 1), 500);
-      return;
-    }
-    console.error('Jitsi API failed to load');
-    return;
-  }
-
+function initializeJitsiConference(roomName = null) {
   if (jaasApi) {
     jaasApi.dispose();
   }
 
   const container = document.querySelector('#jaas-container');
   if (!container) return;
-
-  // Ensure container is visible
-  container.style.display = 'block';
-
-  // Hide other elements if in fullscreen mobile
-  const isMobile = window.innerWidth <= 640;
-  if (isMobile) {
-    document.body.classList.add('meeting-fullscreen-open');
-    const schedulePanel = document.getElementById('admin-schedule-panel');
-    const meetingsList = document.getElementById('adminMeetingsList');
-    if (schedulePanel) schedulePanel.style.display = 'none';
-    if (meetingsList) meetingsList.style.display = 'none';
-  }
 
   const room = buildJaasRoomName(roomName || PROJECT_DISCUSSION_ROOM);
 
@@ -619,24 +492,12 @@ function initializeJitsiConference(roomName = null, attempts = 0) {
       disableDeepLinking: true,
       startWithAudioMuted: true,
       startWithVideoMuted: true,
+      disableInitialGUM: true, // Prevent automatic media access to avoid autoplay errors
       enableClosePage: false,
       disableThirdPartyRequests: false,
-      disableBeforeUnload: true,
       analytics: {
         disabled: true
-      },
-      // Mobile & Performance optimizations
-      videoQuality: {
-        maxReceiverVideoQuality: 360
-      },
-      resolution: 360,
-      disableAudioLevels: true,
-      p2p: {
-        enabled: true
-      },
-      // Force mobile portrait-friendly layout
-      disableSelfView: false,
-      filmStripOnly: false
+      }
     },
     interfaceConfigOverwrite: {
       TOOLBAR_BUTTONS: [
@@ -645,11 +506,8 @@ function initializeJitsiConference(roomName = null, attempts = 0) {
         'raisehand', 'videoquality', 'filmstrip',
         'tileview', 'help'
       ],
-      SETTINGS_SECTIONS: ['devices', 'language', 'profile'],
       DISABLE_VIDEO_BACKGROUND: true,
-      HIDE_INVITE_MORE_HEADER: true,
-      MOBILE_APP_PROMO: false,
-      VERTICAL_FILMSTRIP: true
+      HIDE_INVITE_MORE_HEADER: true
     }
   };
 
@@ -665,9 +523,6 @@ function initializeJitsiConference(roomName = null, attempts = 0) {
       jaasApi.dispose();
       jaasApi = null;
     }
-
-    // Remove fullscreen class
-    document.body.classList.remove('meeting-fullscreen-open');
 
     if (currentMeetingId) {
       try {
@@ -688,17 +543,10 @@ function startMeeting(meetingId, roomName) {
   const schedulePanel = document.getElementById('admin-schedule-panel');
   const meetingsList = document.getElementById('adminMeetingsList');
   const container = document.getElementById('jaas-container');
-  const isMobile = window.innerWidth <= 640;
 
   if (schedulePanel) schedulePanel.style.display = 'none';
   if (meetingsList) meetingsList.style.display = 'none';
   if (container) container.style.display = 'block';
-
-  // Enable fullscreen mode on mobile
-  if (isMobile) {
-    document.body.classList.add('meeting-fullscreen-open');
-    if (container) container.classList.add('meeting-fullscreen');
-  }
 
   initializeJitsiConference(roomName);
 }
@@ -943,7 +791,6 @@ async function startInstantMeeting() {
 
 window.loadMeetings = loadMeetings;
 window.initializeAdminMeetingForm = initializeAdminMeetingForm;
-window.initializeJitsiConference = initializeJitsiConference;
 window.startMeeting = startMeeting;
 window.startInstantMeeting = startInstantMeeting;
 window.deleteAdminMeeting = deleteAdminMeeting;
@@ -968,38 +815,6 @@ if (startInstantMeetingBtn) {
     }
   });
 }
-
-// Handle resize events for meeting fullscreen mode
-window.addEventListener('resize', () => {
-  const body = document.body;
-  const container = document.getElementById('jaas-container');
-  const isMobile = window.innerWidth <= 640;
-
-  if (jaasApi || currentMeetingId || (body.classList.contains('meeting-fullscreen-open') && container && container.style.display !== 'none')) {
-    // Meeting is active
-    if (isMobile) {
-      // Ensure fullscreen mode on mobile
-      if (!body.classList.contains('meeting-fullscreen-open')) {
-        body.classList.add('meeting-fullscreen-open');
-      }
-      if (container && !container.classList.contains('meeting-fullscreen')) {
-        container.classList.add('meeting-fullscreen');
-      }
-      const schedulePanel = document.getElementById('admin-schedule-panel');
-      const meetingsList = document.getElementById('adminMeetingsList');
-      if (schedulePanel) schedulePanel.style.display = 'none';
-      if (meetingsList) meetingsList.style.display = 'none';
-    } else {
-      // Exit fullscreen mode on larger screens
-      body.classList.remove('meeting-fullscreen-open');
-      if (container) container.classList.remove('meeting-fullscreen');
-      const schedulePanel = document.getElementById('admin-schedule-panel');
-      const meetingsList = document.getElementById('adminMeetingsList');
-      if (schedulePanel && jaasApi) schedulePanel.style.display = 'none';
-      if (meetingsList && jaasApi) meetingsList.style.display = 'none';
-    }
-  }
-});
 
 // Ensure scheduled meeting form is initialized on page load
 if (document.readyState !== 'loading') {
@@ -1076,11 +891,11 @@ function showSection(sectionId) {
     'create-poll': '<i class="fas fa-poll"></i> Create Poll',
     'create-announcement': '<i class="fas fa-bullhorn"></i> Create Announcement',
     'create-resource': '<i class="fas fa-book"></i> Create Resource',
-    'manage-members': '<i class="fas fa-users-plus"></i> Manage Members',
     'manage-polls': '<i class="fas fa-poll"></i> Manage Polls',
     'manage-announcements': '<i class="fas fa-bullhorn"></i> Manage Announcements',
     'support-tickets': '<i class="fas fa-ticket-alt"></i> Support Tickets',
     'manage-resources': '<i class="fas fa-book"></i> Manage Resources',
+    'progress-report': '<i class="fas fa-chart-line"></i> Progress Report',
     'task-analytics': '<i class="fas fa-chart-bar"></i> Task Analytics',
     'all-tasks': '<i class="fas fa-clipboard-list"></i> All Tasks',
     'video-conference': '<i class="fas fa-video"></i> Video Conference',
