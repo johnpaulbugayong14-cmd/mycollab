@@ -13,8 +13,8 @@
   <meta name="theme-color" content="#3b82f6">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=1">
-  <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
+  <link rel="stylesheet" href="style.css?v=2">
+  <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js"></script>
 </head>
 <body>
 <script>
@@ -34,6 +34,7 @@ if (savedMemberSection) {
   <!-- Sidebar Navigation -->
   <nav class="sidebar">
     <div class="sidebar-header">
+      <h2>My Collab</h2>
       <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
     </div>
     <ul class="nav-list">
@@ -157,31 +158,6 @@ if (savedMemberSection) {
             <h3 style="margin-bottom: 0.75rem; color: #f8fafc;">Available Chat Rooms</h3>
             <div id="chatRoomsContainer" class="chat-room-list"></div>
           </div>
-
-          <div id="chatRoomPanel" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 9999; padding: 0.75rem; box-sizing: border-box; overflow: hidden;">
-            <div style="height: 100%; display: flex; flex-direction: column; max-height: 100vh;">
-              <div style="display: flex; justify-content: flex-start; align-items: center; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap;">
-                <button onclick="closeChatRoomPanel()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.5rem 0.75rem; font-size: 0.85rem; line-height: 1; white-space: nowrap; min-height: 40px;">
-                  ← Back
-                </button>
-                <div style="min-width: 0; flex: 1;">
-                  <h3 id="activeChatTitle" style="margin: 0; color: #f8fafc; font-size: 1.1rem;"></h3>
-                  <p id="activeChatMeta" style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.85rem;"></p>
-                </div>
-              </div>
-              <div id="chatMessages" style="flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 1rem; border: 1px solid #374151; border-radius: 12px; padding: 0.75rem; background: #020617;"></div>
-              <div id="chatReplyPreview" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border-radius: 14px; border: 1px solid #374151; background: #111827; color: #e5e7eb; font-size: 0.9rem;"></div>
-              <form id="chatMessageForm" style="display: flex; gap: 0.5rem; align-items: stretch; flex-wrap: nowrap; width: 100%;">
-                <div style="flex: 1 1 auto; min-width: 0; position: relative; display: flex; gap: 0.25rem;">
-                  <input id="chatMessageInput" type="text" placeholder="Message..." style="flex: 1; min-width: 0; padding: 0.75rem; border-radius: 9999px; border: 1px solid #374151; background: #020617; color: #f8fafc; font-size: 16px;">
-                  <button type="button" onclick="triggerChatImageInput()" style="flex: 0 0 40px; width: 40px; padding: 0; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; min-height: 40px;">📷</button>
-                </div>
-                <input id="chatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleChatImageInputChange(event)">
-                <button type="submit" style="flex: 0 0 auto; width: auto; padding: 0.65rem 1rem; background: #10b981; color: white; border: none; border-radius: 9999px; cursor: pointer; font-size: 0.85rem; min-width: 60px; min-height: 40px;">Send</button>
-              </form>
-              <div id="chatImagePreview" style="display:none; margin-top: 0.75rem;"></div>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -244,6 +220,32 @@ function closeMobileSidebar() {
   overlay.classList.remove('show');
 }
 </script>
+<!-- Chat Room Panel relocated to top-level for performance -->
+<div id="chatRoomPanel" style="display: none; position: fixed; inset: 0; background: #0f172a; z-index: 9999; padding: 0.75rem; box-sizing: border-box; overflow: hidden;">
+  <div style="height: 100%; display: flex; flex-direction: column; max-height: 100vh;">
+    <div style="display: flex; justify-content: flex-start; align-items: center; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap;">
+      <button onclick="closeChatRoomPanel()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.5rem 0.75rem; font-size: 0.85rem; line-height: 1; white-space: nowrap; min-height: 40px;">
+        ← Back
+      </button>
+      <div style="min-width: 0; flex: 1;">
+        <h3 id="activeChatTitle" style="margin: 0; color: #f8fafc; font-size: 1.1rem; text-align: left;"></h3>
+        <p id="activeChatMeta" style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.85rem; text-align: left;"></p>
+      </div>
+    </div>
+    <div id="chatMessages" style="flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 1rem; border: 1px solid #374151; border-radius: 12px; padding: 0.75rem; background: #020617;"></div>
+    <div id="chatReplyPreview" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border-radius: 14px; border: 1px solid #374151; background: #111827; color: #e5e7eb; font-size: 0.9rem;"></div>
+    <form id="chatMessageForm" style="display: flex; gap: 0.5rem; align-items: stretch; flex-wrap: nowrap; width: 100%;">
+      <div style="flex: 1 1 auto; min-width: 0; position: relative; display: flex; gap: 0.25rem;">
+        <input id="chatMessageInput" type="text" placeholder="Message..." style="flex: 1; min-width: 0; padding: 0.75rem; border-radius: 9999px; border: 1px solid #374151; background: #020617; color: #f8fafc; font-size: 16px;">
+        <button type="button" onclick="triggerChatImageInput()" style="flex: 0 0 40px; width: 40px; padding: 0; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; min-height: 40px;">📷</button>
+      </div>
+      <input id="chatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleChatImageInputChange(event)">
+      <button type="submit" style="flex: 0 0 auto; width: auto; padding: 0.65rem 1rem; background: #10b981; color: white; border: none; border-radius: 9999px; cursor: pointer; font-size: 0.85rem; min-width: 60px; min-height: 40px;">Send</button>
+    </form>
+    <div id="chatImagePreview" style="display:none; margin-top: 0.75rem;"></div>
+  </div>
+</div>
+
 <script type="module">
   import { requireAuth } from "./auth.js?v=5";
   import { initializeNotifications } from "./notifications.js?v=5";
@@ -267,13 +269,35 @@ function buildJaasRoomName(roomName) {
   return roomName.startsWith(JAASTOKEN_ROOM_PREFIX) ? roomName : `${JAASTOKEN_ROOM_PREFIX}${roomName}`;
 }
 
-function initializeJitsiConference(roomName = null) {
+function initializeJitsiConference(roomName = null, attempts = 0) {
+  if (typeof JitsiMeetExternalAPI === 'undefined') {
+    if (attempts < 10) {
+      console.log('Jitsi API not loaded yet, retrying...');
+      setTimeout(() => initializeJitsiConference(roomName, attempts + 1), 500);
+      return;
+    }
+    console.error('Jitsi API failed to load');
+    return;
+  }
+
   if (jaasApi) {
     jaasApi.dispose();
   }
 
   const container = document.querySelector('#jaas-container');
   if (!container) return;
+
+  // Ensure container is visible
+  container.style.display = 'block';
+
+  // Hide other elements if in fullscreen mobile
+  const isMobile = window.innerWidth <= 640;
+  if (isMobile) {
+    document.body.classList.add('meeting-fullscreen-open');
+    if (container) container.classList.add('meeting-fullscreen');
+    const meetingsList = document.getElementById('meetings-list');
+    if (meetingsList) meetingsList.style.display = 'none';
+  }
 
   const room = buildJaasRoomName(roomName || currentMeetingRoom);
 
@@ -287,12 +311,24 @@ function initializeJitsiConference(roomName = null) {
       disableDeepLinking: true,
       startWithAudioMuted: true,
       startWithVideoMuted: true,
-      disableInitialGUM: true, // Prevent automatic media access to avoid autoplay errors
       enableClosePage: false,
       disableThirdPartyRequests: false,
+      disableBeforeUnload: true,
       analytics: {
         disabled: true
-      }
+      },
+      // Mobile & Performance optimizations
+      videoQuality: {
+        maxReceiverVideoQuality: 360
+      },
+      resolution: 360,
+      disableAudioLevels: true,
+      p2p: {
+        enabled: true
+      },
+      // Force mobile portrait-friendly layout if possible
+      disableSelfView: false,
+      filmStripOnly: false
     },
     interfaceConfigOverwrite: {
       TOOLBAR_BUTTONS: [
@@ -301,8 +337,11 @@ function initializeJitsiConference(roomName = null) {
         'raisehand', 'videoquality', 'filmstrip',
         'tileview', 'help'
       ],
+      SETTINGS_SECTIONS: ['devices', 'language', 'profile'],
       DISABLE_VIDEO_BACKGROUND: true,
-      HIDE_INVITE_MORE_HEADER: true
+      HIDE_INVITE_MORE_HEADER: true,
+      MOBILE_APP_PROMO: false,
+      VERTICAL_FILMSTRIP: true
     }
   };
 
@@ -318,8 +357,13 @@ function initializeJitsiConference(roomName = null) {
       jaasApi.dispose();
       jaasApi = null;
     }
-    // Hide conference container and show scheduling interface
+
+    // Remove fullscreen class
+    document.body.classList.remove('meeting-fullscreen-open');
     const container = document.getElementById('jaas-container');
+    if (container) container.classList.remove('meeting-fullscreen');
+
+    // Hide conference container and show scheduling interface
     const scheduleForm = document.getElementById('schedule-form');
     const meetingsList = document.getElementById('meetings-list');
 
@@ -396,6 +440,32 @@ function showSection(sectionId) {
   // Close mobile sidebar after selection
   closeMobileSidebar();
 }
+
+// Handle resize events for meeting fullscreen mode
+window.addEventListener('resize', () => {
+  const body = document.body;
+  const container = document.getElementById('jaas-container');
+  const isMobile = window.innerWidth <= 640;
+
+  if ((jaasApi || body.classList.contains('meeting-fullscreen-open')) && container && container.style.display !== 'none') {
+    // Meeting is active
+    if (isMobile) {
+      if (!body.classList.contains('meeting-fullscreen-open')) {
+        body.classList.add('meeting-fullscreen-open');
+      }
+      if (!container.classList.contains('meeting-fullscreen')) {
+        container.classList.add('meeting-fullscreen');
+      }
+      const meetingsList = document.getElementById('meetings-list');
+      if (meetingsList) meetingsList.style.display = 'none';
+    } else {
+      body.classList.remove('meeting-fullscreen-open');
+      container.classList.remove('meeting-fullscreen');
+      const meetingsList = document.getElementById('meetings-list');
+      if (meetingsList) meetingsList.style.display = 'block';
+    }
+  }
+});
 </script>
 
 </body>

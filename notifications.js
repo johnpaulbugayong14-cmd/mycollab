@@ -24,7 +24,20 @@ import { getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/
 // 7. Copy the "Key pair" value and replace the line below
 const VAPID_PUBLIC_KEY = 'BBu_m1NKUZO5bp6k5q29DgzYpmjVWe8z1C6KojHrq7RDqOJ0O01txWvzqKWrnLMAGlrm8eOcdTn_O1wDnf5OZB8';
 
+const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+
 export async function requestNotificationPermission() {
+  if (isNative) {
+    try {
+      const { PushNotifications } = await import('@capacitor/push-notifications');
+      const permission = await PushNotifications.requestPermissions();
+      return permission.receive === 'granted';
+    } catch (error) {
+      console.error('Error requesting native notification permission:', error);
+      return false;
+    }
+  }
+
   if (!('Notification' in window)) {
     console.log('This browser does not support notifications');
     return false;
@@ -159,6 +172,43 @@ export async function initializeNotifications() {
   const permissionGranted = await requestNotificationPermission();
   if (!permissionGranted) {
     return null;
+  }
+
+  if (isNative) {
+    try {
+      const { PushNotifications } = await import('@capacitor/push-notifications');
+
+      // Register with FCM
+      await PushNotifications.register();
+
+      // Listen for registration success
+      PushNotifications.addListener('registration', async (token) => {
+        console.log('Native push registration success, token:', token.value);
+        await saveFcmTokenForCurrentUser(token.value);
+      });
+
+      // Listen for registration error
+      PushNotifications.addListener('registrationError', (error) => {
+        console.error('Native push registration error:', error);
+      });
+
+      // Listen for incoming notifications while app is in foreground
+      PushNotifications.addListener('pushNotificationReceived', (notification) => {
+        console.log('Native push received in foreground:', notification);
+        showLocalNotification(notification.title, notification.body);
+      });
+
+      // Listen for notification clicks
+      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+        console.log('Native push action performed:', notification);
+        // Handle notification click (e.g., navigate to a specific page)
+      });
+
+      return "native-registered";
+    } catch (error) {
+      console.error('Error initializing native notifications:', error);
+      return null;
+    }
   }
 
   const token = await subscribeToNotifications();

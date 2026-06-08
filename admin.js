@@ -1913,12 +1913,7 @@ function openAdminChatRoom(chatId) {
     
     // Check if mobile (640px or less)
     if (window.innerWidth <= 640) {
-      panel.classList.add('fullscreen-visible');
       document.body.classList.add('chat-fullscreen-open');
-      document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-      document.body.style.height = '100vh';
     }
   }
   
@@ -1943,7 +1938,6 @@ function closeAdminChatPanel() {
   const panel = document.getElementById('adminChatRoomPanel');
   if (panel) {
     panel.style.display = 'none';
-    panel.classList.remove('fullscreen-visible');
   }
 
   // Remove fullscreen mode
@@ -2487,6 +2481,7 @@ window.loadLiveChatRooms = loadLiveChatRooms;
 window.openAdminChatRoom = openAdminChatRoom;
 window.closeAdminChatPanel = closeAdminChatPanel;
 window.setAdminReplyToMessage = setAdminReplyToMessage;
+window.clearAdminReplyToMessage = clearAdminReplyToMessage;
 window.unsendAdminChatMessage = unsendAdminChatMessage;
 window.sendAdminChatMessage = sendAdminChatMessage;
 window.triggerAdminChatImageInput = triggerAdminChatImageInput;
@@ -2504,21 +2499,11 @@ window.addEventListener('resize', () => {
   // If screen is wider than 640px and fullscreen is active, close fullscreen mode
   if (window.innerWidth > 640 && isFullscreenOpen) {
     document.body.classList.remove('chat-fullscreen-open');
-    document.body.style.overflow = '';
-    document.body.style.position = '';
-    document.body.style.width = '';
-    document.body.style.height = '';
-    chatPanel.classList.remove('fullscreen-visible');
   }
   
   // If screen becomes mobile again while chat is open, restore fullscreen
   if (window.innerWidth <= 640 && !isFullscreenOpen && chatPanel.style.display !== 'none') {
     document.body.classList.add('chat-fullscreen-open');
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
-    document.body.style.height = '100vh';
-    chatPanel.classList.add('fullscreen-visible');
   }
 });
 

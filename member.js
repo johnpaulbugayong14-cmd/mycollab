@@ -876,14 +876,14 @@ function renderMeetings(meetings) {
 }
 
 window.joinScheduledMeeting = function(roomName) {
+  console.log('Joining meeting:', roomName);
   const container = document.getElementById('jaas-container');
   const meetingsList = document.getElementById('meetings-list');
-
   if (container) container.style.display = 'block';
   if (meetingsList) meetingsList.style.display = 'none';
-
   initializeJitsiConference(roomName);
 };
+
 
 function getChatRoomDisplayName(email) {
   return getUserName(email) || email;
@@ -1058,13 +1058,33 @@ function renderChatRooms(chatRooms) {
 
 function renderChatMessages(messages) {
   const chatMessagesEl = document.getElementById('chatMessages');
-  if (!chatMessagesEl) return;
+  if (!chatMessagesEl) {
+    console.error('❌ chatMessages element not found in DOM');
+    return;
+  }
+
+  console.log('🎨 renderChatMessages called with', messages?.length || 0, 'messages');
 
   if (!messages || messages.length === 0) {
+    console.log('📭 No messages to render, showing empty state');
     chatMessagesEl.innerHTML = '<p style="color: #94a3b8; text-align: center; margin: 1rem 0;">No messages yet. Start the conversation!</p>';
     return;
   }
 
+  console.log('Rendering', messages.length, 'messages');
+  
+  // Ensure container is visible before rendering
+  const computedStyle = window.getComputedStyle(chatMessagesEl);
+  console.log('Container visibility:', {
+    display: computedStyle.display,
+    height: computedStyle.height,
+    overflow: computedStyle.overflow,
+    visibility: computedStyle.visibility,
+    opacity: computedStyle.opacity,
+    clientHeight: chatMessagesEl.clientHeight,
+    offsetHeight: chatMessagesEl.offsetHeight
+  });
+  
   chatMessagesEl.innerHTML = '';
   messages.forEach((msg) => {
     chatMessagesById[msg.id] = msg;
@@ -1115,9 +1135,15 @@ function renderChatMessages(messages) {
     chatMessagesEl.appendChild(msgDiv);
   });
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  console.log('Messages rendered successfully. Final container state:', {
+    childCount: chatMessagesEl.children.length,
+    scrollHeight: chatMessagesEl.scrollHeight,
+    clientHeight: chatMessagesEl.clientHeight
+  });
 
   // Attach click listeners to chat images
   const chatImages = chatMessagesEl.querySelectorAll('.chat-image');
+  console.log('🖼️ Chat images found:', chatImages.length);
   chatImages.forEach(img => {
     img.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -1155,8 +1181,12 @@ function renderChatMessages(messages) {
 }
 
 function openChatRoom(chatId) {
+  console.log('🔵 openChatRoom called with chatId:', chatId);
   const chatRoom = chatRoomsById[chatId];
-  if (!chatRoom) return;
+  if (!chatRoom) {
+    console.error('❌ Chat room not found for ID:', chatId);
+    return;
+  }
 
   selectedChatId = chatId;
 
@@ -1165,20 +1195,24 @@ function openChatRoom(chatId) {
   const metaEl = document.getElementById('activeChatMeta');
   const messageInput = document.getElementById('chatMessageInput');
   const messageForm = document.getElementById('chatMessageForm');
+  const chatMessages = document.getElementById('chatMessages');
+
+  console.log('📋 Panel elements found:', {
+    panel: !!panel,
+    titleEl: !!titleEl,
+    metaEl: !!metaEl,
+    messageInput: !!messageInput,
+    messageForm: !!messageForm,
+    chatMessages: !!chatMessages
+  });
 
   if (panel) {
-    panel.style.display = 'block';
+    panel.style.display = 'flex';
     
-    // Check if mobile (640px or less)
+    // Always trigger fullscreen for mobile when opening a chat
     if (window.innerWidth <= 640) {
-      panel.classList.add('fullscreen-visible');
       document.body.classList.add('chat-fullscreen-open');
-      document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-      document.body.style.height = '100vh';
-      document.body.style.top = '0';
-      document.body.style.left = '0';
+      panel.classList.add('fullscreen-visible');
     }
   }
   
@@ -1188,22 +1222,33 @@ function openChatRoom(chatId) {
   if (messageForm) messageForm.style.opacity = chatRoom.status !== 'Active' ? '0.7' : '1';
 
   clearReplyToMessage();
+  console.log('🔄 Subscribing to chat messages for:', chatId);
   subscribeChatMessages(chatId);
   
   // Scroll to bottom after loading
   setTimeout(() => {
-    const chatMessages = document.getElementById('chatMessages');
-    if (chatMessages) {
-      chatMessages.scrollTop = chatMessages.scrollHeight;
+    const chatMessagesEl = document.getElementById('chatMessages');
+    if (chatMessagesEl) {
+      console.log('📜 Scrolling to bottom, messages count:', chatMessagesEl.children.length);
+      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
     }
   }, 100);
 
-  // Focus input on mobile for better UX
-  if (window.innerWidth <= 640) {
-    setTimeout(() => {
-      if (messageInput) messageInput.focus();
-    }, 200);
-  }
+  // Debug check after short delay
+  setTimeout(() => {
+    const chatMessagesEl = document.getElementById('chatMessages');
+    if (chatMessagesEl) {
+      console.log('✅ Chat panel status:', {
+        display: window.getComputedStyle(chatMessagesEl).display,
+        visibility: window.getComputedStyle(chatMessagesEl).visibility,
+        opacity: window.getComputedStyle(chatMessagesEl).opacity,
+        height: window.getComputedStyle(chatMessagesEl).height,
+        overflow: window.getComputedStyle(chatMessagesEl).overflow,
+        childCount: chatMessagesEl.children.length,
+        innerHTML: chatMessagesEl.innerHTML.substring(0, 100)
+      });
+    }
+  }, 500);
 }
 
 function closeChatRoomPanel() {
@@ -1215,12 +1260,6 @@ function closeChatRoomPanel() {
 
   // Remove fullscreen mode
   document.body.classList.remove('chat-fullscreen-open');
-  document.body.style.overflow = '';
-  document.body.style.position = '';
-  document.body.style.width = '';
-  document.body.style.height = '';
-  document.body.style.top = '';
-  document.body.style.left = '';
 
   if (chatMessagesUnsubscribe) {
     chatMessagesUnsubscribe();
@@ -1229,16 +1268,6 @@ function closeChatRoomPanel() {
 
   selectedChatId = null;
   clearReplyToMessage();
-
-  // Close mobile sidebar if open
-  const sidebar = document.querySelector('.sidebar');
-  if (sidebar) {
-    sidebar.classList.remove('open');
-  }
-  const overlay = document.querySelector('.sidebar-overlay');
-  if (overlay) {
-    overlay.classList.remove('show');
-  }
 }
 
 function clearReplyToMessage() {
@@ -1371,14 +1400,17 @@ async function subscribeChatMessages(chatId) {
   }
 
   const messagesQuery = query(collection(db, 'liveChats', chatId, 'messages'), orderBy('createdAt', 'asc'));
+  console.log('Messages query created for chatId:', chatId);
   chatMessagesUnsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+    console.log('Snapshot received with docs:', snapshot.docs.length);
     const messages = [];
     snapshot.forEach((docSnap) => {
       messages.push({ id: docSnap.id, ...docSnap.data() });
     });
+    console.log('Calling renderChatMessages with', messages.length, 'messages');
     renderChatMessages(messages);
   }, (error) => {
-    console.error('Chat messages listener error:', error);
+    console.error('Chat messages listener error:', error.message);
   });
 }
 
@@ -1421,7 +1453,7 @@ async function sendChatMessage(event) {
     clearReplyToMessage();
   } catch (error) {
     console.error('Failed to send chat message:', error);
-    alert('Unable to send message. Please try again.');
+    alert('Unable to send message: ' + (error.message || 'Unknown error'));
   }
 }
 
@@ -1568,55 +1600,28 @@ window.loadChatRooms = loadChatRooms;
 window.openChatRoom = openChatRoom;
 window.closeChatRoomPanel = closeChatRoomPanel;
 window.setReplyToMessage = setReplyToMessage;
+window.clearReplyToMessage = clearReplyToMessage;
 window.unsendChatMessage = unsendChatMessage;
 window.sendChatMessage = sendChatMessage;
 window.triggerChatImageInput = triggerChatImageInput;
 window.handleChatImageInputChange = handleChatImageInputChange;
 window.clearChatImageSelection = clearChatImageSelection;
 
-// Handle resize for responsive fullscreen chat and video
+// Handle resize for responsive fullscreen chat
 window.addEventListener('resize', () => {
   const chatPanel = document.getElementById('chatRoomPanel');
-  const videoConference = document.getElementById('video-conference');
   const isFullscreenOpen = document.body.classList.contains('chat-fullscreen-open');
-  const isMeetingFullscreen = document.body.classList.contains('meeting-fullscreen-open');
   
   if (!chatPanel || chatPanel.style.display === 'none') return;
   
-  // Handle chat panel fullscreen on mobile/desktop switch
+  // If screen is wider than 640px and fullscreen is active, close fullscreen mode
   if (window.innerWidth > 640 && isFullscreenOpen) {
     document.body.classList.remove('chat-fullscreen-open');
-    document.body.style.overflow = '';
-    document.body.style.position = '';
-    document.body.style.width = '';
-    document.body.style.height = '';
-    document.body.style.top = '';
-    document.body.style.left = '';
-    chatPanel.classList.remove('fullscreen-visible');
   }
   
   // If screen becomes mobile again while chat is open, restore fullscreen
   if (window.innerWidth <= 640 && !isFullscreenOpen && chatPanel.style.display !== 'none') {
     document.body.classList.add('chat-fullscreen-open');
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
-    document.body.style.height = '100vh';
-    document.body.style.top = '0';
-    document.body.style.left = '0';
-    chatPanel.classList.add('fullscreen-visible');
-  }
-
-  // Handle video conference sizing adjustments
-  const jaasContainer = document.getElementById('jaas-container');
-  if (jaasContainer && !isMeetingFullscreen) {
-    if (window.innerWidth <= 640) {
-      // Mobile: make video container fill available space
-      jaasContainer.style.minHeight = 'calc(100vh - 300px)';
-    } else {
-      // Desktop: normal sizing
-      jaasContainer.style.minHeight = '';
-    }
   }
 });
 
