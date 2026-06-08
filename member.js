@@ -1,3 +1,33 @@
+// Mobile meeting fullscreen handler
+window.initMobileMeetingHandlers = function() {
+  const originalJoinScheduledMeeting = window.joinScheduledMeeting;
+  if (originalJoinScheduledMeeting) {
+    window.joinScheduledMeeting = function(roomName) {
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        document.body.classList.add('meeting-fullscreen-open');
+      }
+      return originalJoinScheduledMeeting(roomName);
+    };
+  }
+  
+  window.addEventListener('orientationchange', function() {
+    const container = document.getElementById('jaas-container');
+    const isFullscreen = document.body.classList.contains('meeting-fullscreen-open');
+    if (container && isFullscreen && window.jaasApi && typeof window.jaasApi.executeCommand === 'function') {
+      setTimeout(() => {
+        window.jaasApi.executeCommand('resize', container.offsetWidth, container.offsetHeight);
+      }, 100);
+    }
+  });
+};
+
+// Call after DOM ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', window.initMobileMeetingHandlers);
+} else {
+  window.initMobileMeetingHandlers();
+}
 import { collection, onSnapshot, doc, updateDoc, addDoc, getDoc, setDoc, arrayUnion, getDocs, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db, auth } from "./firebase.js";
 import { signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
