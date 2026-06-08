@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -13,7 +13,7 @@
   <meta name="theme-color" content="#3b82f6">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=1">
+  <link rel="stylesheet" href="style.css?v=2">
   <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
 </head>
 <body>
@@ -40,7 +40,7 @@ if (savedMemberSection) {
       <li><button class="nav-btn" onclick="showSection('my-tasks')"><i class="fas fa-clipboard-list"></i> My Tasks</button></li>
       <li><button class="nav-btn" onclick="showSection('ticket-history')"><i class="fas fa-ticket-alt"></i> Ticket History</button></li>
       <li><button class="nav-btn" onclick="showSection('active-polls')"><i class="fas fa-chart-bar"></i> Active Polls</button></li>
-      <li><button class="nav-btn" onclick="showSection('announcements')"><i class="fas fa-bullhorn"></i> Announcements</button></li>
+      <li><button class="nav-btn" onclick="showSection('announcements-section')"><i class="fas fa-bullhorn"></i> Announcements</button></li>
       <li><button class="nav-btn" onclick="showSection('submit-ticket')"><i class="fas fa-headset"></i> Submit Ticket</button></li>
       <li><button class="nav-btn active" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
       <li><button class="nav-btn" onclick="showSection('live-chat')"><i class="fas fa-comments"></i> Live Chat</button></li>
@@ -97,10 +97,10 @@ if (savedMemberSection) {
       </section>
 
       <!-- Announcements Section -->
-      <section id="announcements" class="content-section">
+      <section id="announcements-section" class="content-section">
         <div class="card">
           <h2 style="margin-bottom: 1rem;"><i class="fas fa-bullhorn"></i> Announcements</h2>
-          <div id="announcements"></div>
+          <div id="announcements-list"></div>
           <p id="announcementsEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
             No announcements at the moment.
           </p>
@@ -158,30 +158,42 @@ if (savedMemberSection) {
             <div id="chatRoomsContainer" class="chat-room-list"></div>
           </div>
 
-          <div id="chatRoomPanel" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 9999; padding: 0.75rem; box-sizing: border-box; overflow: hidden;">
-            <div style="height: 100%; display: flex; flex-direction: column; max-height: 100vh;">
-              <div style="display: flex; justify-content: flex-start; align-items: center; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap;">
-                <button onclick="closeChatRoomPanel()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.5rem 0.75rem; font-size: 0.85rem; line-height: 1; white-space: nowrap; min-height: 40px;">
-                  ← Back
+          <div id="chatRoomPanel" style="display: none;">
+            <div>
+              <!-- Chat Header -->
+              <div class="chat-header">
+                <button onclick="closeChatRoomPanel()" style="width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.5rem 1rem; font-size: 0.85rem; min-height: 40px; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                  <i class="fas fa-arrow-left"></i> Back
                 </button>
                 <div style="min-width: 0; flex: 1;">
-                  <h3 id="activeChatTitle" style="margin: 0; color: #f8fafc; font-size: 1.1rem;"></h3>
-                  <p id="activeChatMeta" style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.85rem;"></p>
+                  <h3 id="activeChatTitle" style="margin: 0; color: #f8fafc; font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;"></h3>
+                  <p id="activeChatMeta" style="margin: 0; color: #94a3b8; font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;"></p>
                 </div>
               </div>
-              <div id="chatMessages" style="flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 1rem; border: 1px solid #374151; border-radius: 12px; padding: 0.75rem; background: #020617;"></div>
-              <div id="chatReplyPreview" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; border-radius: 14px; border: 1px solid #374151; background: #111827; color: #e5e7eb; font-size: 0.9rem;"></div>
-              <form id="chatMessageForm" style="display: flex; gap: 0.5rem; align-items: stretch; flex-wrap: nowrap; width: 100%;">
-                <div style="flex: 1 1 auto; min-width: 0; position: relative; display: flex; gap: 0.25rem;">
-                  <input id="chatMessageInput" type="text" placeholder="Message..." style="flex: 1; min-width: 0; padding: 0.75rem; border-radius: 9999px; border: 1px solid #374151; background: #020617; color: #f8fafc; font-size: 16px;">
-                  <button type="button" onclick="triggerChatImageInput()" style="flex: 0 0 40px; width: 40px; padding: 0; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; min-height: 40px;">📷</button>
-                </div>
-                <input id="chatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleChatImageInputChange(event)">
-                <button type="submit" style="flex: 0 0 auto; width: auto; padding: 0.65rem 1rem; background: #10b981; color: white; border: none; border-radius: 9999px; cursor: pointer; font-size: 0.85rem; min-width: 60px; min-height: 40px;">Send</button>
-              </form>
-              <div id="chatImagePreview" style="display:none; margin-top: 0.75rem;"></div>
+
+              <!-- Messages Area -->
+              <div id="chatMessages"></div>
+
+              <!-- Reply Preview -->
+              <div id="chatReplyPreview" style="display: none; margin: 0 1rem 0.75rem 1rem; padding: 0.75rem; border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.2); background: rgba(30, 41, 59, 0.8); color: #e5e7eb; font-size: 0.85rem;"></div>
+
+              <!-- Footer/Input Area -->
+              <div class="chat-footer">
+                <div id="chatImagePreview" style="display:none; margin-bottom: 0.5rem;"></div>
+                <form id="chatMessageForm" onsubmit="sendChatMessage(event)" style="display: flex; gap: 0.5rem; align-items: center; width: 100%;">
+                  <div class="chat-input-container">
+                    <input id="chatMessageInput" type="text" placeholder="Type a message..." autocomplete="off">
+                    <button type="button" onclick="triggerChatImageInput()" title="Send Image">📷</button>
+                  </div>
+                  <input id="chatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleChatImageInputChange(event)">
+                  <button type="submit" class="chat-send-btn">
+                    <i class="fas fa-paper-plane" style="font-size: 1rem;"></i>
+                  </button>
+                </form>
+              </div>
             </div>
           </div>
+
         </div>
       </section>
 
@@ -243,6 +255,57 @@ function closeMobileSidebar() {
   sidebar.classList.remove('open');
   overlay.classList.remove('show');
 }
+
+// Mobile meeting fullscreen handler
+window.initMobileMeetingHandlers = function() {
+  const originalJoinScheduledMeeting = window.joinScheduledMeeting;
+  if (originalJoinScheduledMeeting) {
+    window.joinScheduledMeeting = function(roomName) {
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        document.body.classList.add('meeting-fullscreen-open');
+      }
+      return originalJoinScheduledMeeting(roomName);
+    };
+  }
+  
+  window.addEventListener('orientationchange', function() {
+    const container = document.getElementById('jaas-container');
+    const isFullscreen = document.body.classList.contains('meeting-fullscreen-open');
+    if (container && isFullscreen && window.jaasApi && typeof window.jaasApi.executeCommand === 'function') {
+      setTimeout(() => {
+        window.jaasApi.executeCommand('resize', container.offsetWidth, container.offsetHeight);
+      }, 100);
+    }
+  });
+};
+
+// Run after DOM ready
+document.addEventListener('DOMContentLoaded', function() {
+  const overlay = document.querySelector('.sidebar-overlay');
+  if (overlay) {
+    overlay.addEventListener('click', closeMobileSidebar);
+  }
+  
+  window.addEventListener('resize', function() {
+    const isMobile = window.innerWidth <= 768;
+    const body = document.body;
+    
+    if (!isMobile && body.classList.contains('meeting-fullscreen-open')) {
+      body.classList.remove('meeting-fullscreen-open');
+    }
+    
+    if (!isMobile && body.classList.contains('chat-fullscreen-open')) {
+      body.classList.remove('chat-fullscreen-open');
+      body.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+      body.style.height = '';
+    }
+  });
+  
+  window.initMobileMeetingHandlers();
+});
 </script>
 <script type="module">
   import { requireAuth } from "./auth.js?v=5";
@@ -268,6 +331,12 @@ function buildJaasRoomName(roomName) {
 }
 
 function initializeJitsiConference(roomName = null) {
+  if (typeof JitsiMeetExternalAPI === 'undefined') {
+    console.warn('Jitsi Meet External API not loaded yet. Retrying in 1000ms...');
+    setTimeout(() => initializeJitsiConference(roomName), 1000);
+    return;
+  }
+
   if (jaasApi) {
     jaasApi.dispose();
   }
@@ -287,7 +356,7 @@ function initializeJitsiConference(roomName = null) {
       disableDeepLinking: true,
       startWithAudioMuted: true,
       startWithVideoMuted: true,
-      disableInitialGUM: true, // Prevent automatic media access to avoid autoplay errors
+      disableInitialGUM: true,
       enableClosePage: false,
       disableThirdPartyRequests: false,
       analytics: {
@@ -308,7 +377,22 @@ function initializeJitsiConference(roomName = null) {
 
   jaasApi = new JitsiMeetExternalAPI("8x8.vc", apiOptions);
 
-  // Add error handling for Jitsi
+  const applyMobileFixes = () => {
+    const iframe = container.querySelector('iframe');
+    if (iframe) {
+      iframe.style.zIndex = '99999';
+      const width = container.offsetWidth;
+      const height = container.offsetHeight;
+      jaasApi.executeCommand('resize', width, height);
+    }
+  };
+
+  window.addEventListener('orientationchange', () => {
+    setTimeout(applyMobileFixes, 200);
+  });
+
+  jaasApi.addEventListener('videoConferenceJoined', applyMobileFixes);
+
   jaasApi.addEventListener('errorOccurred', (error) => {
     console.error('Jitsi conference error:', error);
   });
@@ -318,43 +402,33 @@ function initializeJitsiConference(roomName = null) {
       jaasApi.dispose();
       jaasApi = null;
     }
-    // Hide conference container and show scheduling interface
     const container = document.getElementById('jaas-container');
-    const scheduleForm = document.getElementById('schedule-form');
     const meetingsList = document.getElementById('meetings-list');
 
     if (container) container.style.display = 'none';
-    if (scheduleForm) scheduleForm.style.display = 'block';
     if (meetingsList) meetingsList.style.display = 'block';
 
-    // Reload meetings to update status
     loadMeetings();
   });
 }
 
-// Initialize Jitsi when video conference section becomes active
 function showSection(sectionId) {
-  // Hide all sections
   const sections = document.querySelectorAll('.content-section');
   sections.forEach(section => section.classList.remove('active'));
   
-  // Show selected section
   const targetSection = document.getElementById(sectionId);
   if (targetSection) {
     targetSection.classList.add('active');
     
-    // Initialize Jitsi conference when video conference section is shown
     if (sectionId === 'video-conference') {
       loadMeetings();
       setTimeout(initializeJitsiConference, 100);
     }
   }
   
-  // Update active nav button
   const navButtons = document.querySelectorAll('.nav-btn');
   navButtons.forEach(btn => btn.classList.remove('active'));
   
-  // Find and activate the corresponding nav button
   const activeBtn = document.querySelector(`[onclick="showSection('${sectionId}')"]`);
   if (activeBtn) {
     activeBtn.classList.add('active');
@@ -362,12 +436,11 @@ function showSection(sectionId) {
 
   localStorage.setItem('memberSelectedSection', sectionId);
   
-  // Update page title
   const titles = {
     'my-tasks': '<i class="fas fa-check-circle"></i> My Tasks',
     'ticket-history': '<i class="fas fa-ticket-alt"></i> Ticket History',
     'active-polls': '<i class="fas fa-chart-bar"></i> Active Polls',
-    'announcements': '<i class="fas fa-bullhorn"></i> Announcements',
+    'announcements-section': '<i class="fas fa-bullhorn"></i> Announcements',
     'submit-ticket': '<i class="fas fa-headset"></i> Submit Ticket',
     'video-conference': '<i class="fas fa-video"></i> Video Conference',
     'live-chat': '<i class="fas fa-comments"></i> Live Chat',
@@ -393,7 +466,6 @@ function showSection(sectionId) {
     }
   }
   
-  // Close mobile sidebar after selection
   closeMobileSidebar();
 }
 </script>
