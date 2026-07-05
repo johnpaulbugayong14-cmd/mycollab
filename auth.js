@@ -622,7 +622,7 @@ window.login = async function() {
       accessReason = accessDetails.accessReason || '';
     }
 
-    const passwordChangeRequired = await getPasswordChangeRequired(signedInEmail);
+    let passwordChangeRequired = await getPasswordChangeRequired(signedInEmail);
 
     if (accessAllowed === false) {
       showMessage('Your account is restricted. Limited member access will be available after sign in.', 'info');
