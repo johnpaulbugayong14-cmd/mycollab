@@ -1,12 +1,16 @@
 module.exports = async function handler(req, res) {
-  const origin = req.headers.origin;
-  const allowedOrigin = origin === 'https://johnpaulbugayong14-cmd.github.io'
-    ? origin
-    : 'https://johnpaulbugayong14-cmd.github.io';
+  const origin = req.headers.origin || '*';
+  const allowedOrigins = [
+    'https://johnpaulbugayong14-cmd.github.io',
+    'https://mytaskprofessional-jpteams.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5173'
+  ];
+  const allowedOrigin = allowedOrigins.includes(origin) ? origin : '*';
 
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Vary', 'Origin');
 
@@ -57,7 +61,7 @@ module.exports = async function handler(req, res) {
           Authorization: `token ${githubToken}`,
           Accept: 'application/vnd.github.v3+json',
           'Content-Type': 'application/json',
-          'User-Agent': 'MyThesisHub-Email-Backend'
+          'User-Agent': 'MyCollab-Email-Backend'
         },
         body: JSON.stringify({
           event_type: 'send-email',

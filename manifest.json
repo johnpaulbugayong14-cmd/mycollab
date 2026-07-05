@@ -1,7 +1,7 @@
 {
-  "name": "My Collab",
-  "short_name": "MyCollab",
-  "description": "Collaboration and task management platform",
+  "name": "mytaskForMyCollab",
+  "short_name": "MyTask",
+  "description": "Task management system for My Collab",
   "start_url": "index.html",
   "display": "standalone",
   "background_color": "#0b1220",

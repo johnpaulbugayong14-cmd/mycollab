@@ -1,37 +1,7 @@
-// Mobile meeting fullscreen handler
-window.initMobileMeetingHandlers = function() {
-  const originalJoinScheduledMeeting = window.joinScheduledMeeting;
-  if (originalJoinScheduledMeeting) {
-    window.joinScheduledMeeting = function(roomName) {
-      const isMobile = window.innerWidth <= 768;
-      if (isMobile) {
-        document.body.classList.add('meeting-fullscreen-open');
-      }
-      return originalJoinScheduledMeeting(roomName);
-    };
-  }
-  
-  window.addEventListener('orientationchange', function() {
-    const container = document.getElementById('jaas-container');
-    const isFullscreen = document.body.classList.contains('meeting-fullscreen-open');
-    if (container && isFullscreen && window.jaasApi && typeof window.jaasApi.executeCommand === 'function') {
-      setTimeout(() => {
-        window.jaasApi.executeCommand('resize', container.offsetWidth, container.offsetHeight);
-      }, 100);
-    }
-  });
-};
-
-// Call after DOM ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', window.initMobileMeetingHandlers);
-} else {
-  window.initMobileMeetingHandlers();
-}
 import { collection, onSnapshot, doc, updateDoc, addDoc, getDoc, setDoc, arrayUnion, getDocs, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db, auth } from "./firebase.js";
 import { signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getStoredUserEmail, signOutUser } from "./auth.js";
+import { getStoredUserEmail, signOutUser, getPasswordChangeRequired, getAccountPasswordHint, updateAccountPassword } from "./auth.js";
 import { initializeNotifications, sendNotificationToUsers, showLocalNotification } from "./notifications.js";
 
 window.signOutUser = signOutUser;
@@ -46,7 +16,36 @@ let chatMessagesById = {};
 let replyToMessage = null;
 let selectedChatImageData = null;
 let selectedChatImageName = null;
+let shownDeadlineTaskIds = new Set();
+let shownInAppNotificationIds = new Set();
+let dismissedInAppNotificationIds = new Set(getDismissedInAppNotifications());
+let inAppNotificationQueue = [];
+let inAppNotificationDisplaying = false;
+let accessStatusUnsubscribe = null;
+let memberStatusUnsubscribe = null;
+let memberStatusDocs = {};
+let previousTaskMap = new Map();
+let previousPollMap = new Map();
+let previousAnnouncementMap = new Map();
+let previousTicketMap = new Map();
+let taskNotificationsInitialized = false;
+let pollNotificationsInitialized = false;
+let announcementNotificationsInitialized = false;
+let ticketNotificationsInitialized = false;
+let memberStatusPollTimer = null;
+let presenceHeartbeatTimer = null;
+let presenceTrackingInitialized = false;
+let presenceState = true;
+let presenceLastUpdatedAt = 0;
+let presenceAuthToken = null;
+let presenceAuthTokenLastRefreshed = 0;
+let completedTasksCollapsed = localStorage.getItem('completedTasksCollapsed') !== 'false';
+const FIREBASE_PROJECT_ID = "mycollab-89c11";
+const FIRESTORE_REST_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 const container = document.getElementById("tasks");
+const completedTasksSection = document.getElementById("completedTasksSection");
+const completedTasksToggleBtn = document.getElementById("completedTasksToggleBtn");
+const completedTasksList = document.getElementById("completedTasksList");
 const emptyState = document.getElementById("emptyState");
 const welcomeEl = document.getElementById("welcome");
 const datetimeEl = document.getElementById("datetime");
@@ -54,339 +53,349 @@ const pollsContainer = document.getElementById("polls");
 const pollsEmptyState = document.getElementById("pollsEmptyState");
 const announcementsContainer = document.getElementById("announcements");
 const announcementsEmptyState = document.getElementById("announcementsEmptyState");
-
-let members = [
+const members = [
   { uid: "everyone", name: "Everyone" }
 ];
 
-let mentionUsers = [];
+const mentionUsers = [];
 
-const membersCollection = "members";
-const progressCollection = "memberProgress";
+const progressReportCollection = "progressReports";
+const progressReportDocId = "thesisProgress";
+const progressStorageKey = "thesisProgressReportBackup";
+
+function getProgressBackupSections() {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return null;
+    const cached = window.localStorage.getItem(progressStorageKey);
+    if (!cached) return null;
+    const parsed = JSON.parse(cached);
+    if (Array.isArray(parsed?.sections)) return parsed.sections;
+    if (Array.isArray(parsed)) return parsed;
+  } catch (error) {
+    console.warn("Unable to read cached progress report:", error);
+  }
+  return null;
+}
+
+function saveProgressBackupSections(sections) {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      window.localStorage.setItem(progressStorageKey, JSON.stringify({ sections, updatedAt: new Date().toISOString() }));
+    }
+  } catch (error) {
+    console.warn("Unable to cache progress report locally:", error);
+  }
+}
+
+async function persistProgressReportSections(sections) {
+  try {
+    const progressRef = doc(db, progressReportCollection, progressReportDocId);
+    await setDoc(progressRef, { sections, updatedAt: new Date().toISOString() }, { merge: true });
+    saveProgressBackupSections(sections);
+    return true;
+  } catch (error) {
+    console.warn("Unable to save progress report to Firestore:", error);
+    saveProgressBackupSections(sections);
+    return false;
+  }
+}
+
+function normalizeProgressSections(sections, defaultSections = getDefaultProgressStructure()) {
+  if (!Array.isArray(sections)) return null;
+
+  const defaultTitles = defaultSections.map(section => section.title);
+  const extraSections = sections.filter(section => section && typeof section === 'object' && !defaultTitles.includes(section.title));
+
+  const normalizedDefault = defaultSections.map((defaultSection, sectionIndex) => {
+    const savedSection = sections.find(section => section.title === defaultSection.title) || sections[sectionIndex] || {};
+    const items = Array.isArray(savedSection.items) ? savedSection.items : [];
+
+    return {
+      title: defaultSection.title,
+      items: defaultSection.items.map((defaultItem, itemIndex) => {
+        const savedItem = items.find(item => item.name === defaultItem.name) || items[itemIndex] || {};
+        return {
+          name: defaultItem.name,
+          status: savedItem.status || defaultItem.status || "Not Started",
+          assignedTo: Array.isArray(savedItem.assignedTo) ? savedItem.assignedTo : (savedItem.assignedTo ? [savedItem.assignedTo] : []),
+          assignedToName: Array.isArray(savedItem.assignedToName) ? savedItem.assignedToName : (savedItem.assignedToName ? [savedItem.assignedToName] : [])
+        };
+      })
+    };
+  });
+
+  return [...normalizedDefault, ...extraSections];
+}
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function isHiddenMember(memberOrEmail) {
+  const normalized = normalizeEmail(memberOrEmail?.uid || memberOrEmail);
+  return normalized === 'everyone' || normalized === 'johnpaulbugayong@gmail.com';
+}
+
+function ensureMemberEntry(email, fallbackName = null) {
+  const normalized = normalizeEmail(email);
+  if (!normalized || isHiddenMember(normalized)) return null;
+
+  let member = members.find(m => normalizeEmail(m.uid) === normalized);
+  if (!member) {
+    member = { uid: normalized, name: fallbackName || normalized.split('@')[0] || normalized };
+    members.push(member);
+  }
+
+  if (!mentionUsers.find(user => normalizeEmail(user.uid) === normalized)) {
+    mentionUsers.push(member);
+  }
+
+  return member;
+}
+
+function syncMentionUsers() {
+  mentionUsers.splice(0, mentionUsers.length, ...members.filter(member => !isHiddenMember(member)));
+}
+
+function resetMemberCatalog() {
+  members.splice(0, members.length, { uid: 'everyone', name: 'Everyone' });
+  mentionUsers.splice(0, mentionUsers.length);
+}
+
+function isTrackedAuthMember(data = {}) {
+  return data.hasAuthAccount === true || data.authAccount === true || data.authProvider === 'password' || data.authProvider === 'firebase' || data.createdByAdmin === true || data.createdViaAuth === true || data.authTracked === true;
+}
+
+async function refreshMentionMembers() {
+  try {
+    const snapshot = await getDocs(collection(db, 'userRoles'));
+    resetMemberCatalog();
+
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() || {};
+      if (!isTrackedAuthMember(data)) return;
+
+      const docId = normalizeEmail(docSnap.id);
+      if (!docId) return;
+      const displayName = typeof data.displayName === 'string' && data.displayName.trim()
+        ? data.displayName.trim()
+        : (typeof data.name === 'string' && data.name.trim() ? data.name.trim() : (typeof data.email === 'string' && data.email.trim() ? data.email.trim() : docId));
+      ensureMemberEntry(docId, displayName);
+    });
+
+    if (userEmail) {
+      ensureMemberEntry(userEmail, userEmail);
+    }
+
+    syncMentionUsers();
+  } catch (error) {
+    console.warn('Unable to refresh member list:', error);
+  }
+}
+
+function formatDisplayNameFromEmail(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return 'Member';
+  const localPart = normalized.split('@')[0] || 'Member';
+  return localPart
+    .replace(/[._-]+/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
 function getUserName(email) {
   const normalized = normalizeEmail(email);
   const member = members.find(m => normalizeEmail(m.uid) === normalized);
-  return member ? member.name : email;
+  if (member) return member.name;
+
+  const created = ensureMemberEntry(email, email);
+  const fallbackName = created ? created.name : formatDisplayNameFromEmail(email);
+  return fallbackName && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fallbackName) ? formatDisplayNameFromEmail(fallbackName) : fallbackName;
 }
 
-// Load members from Firestore
-async function loadMembersFromFirestore() {
+function getFriendlyName(value) {
+  const text = String(value || '').trim();
+  if (!text) return 'Unknown';
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text) ? formatDisplayNameFromEmail(text) : text;
+}
+
+async function getWelcomeName(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return 'Member';
+
+  const member = members.find(m => normalizeEmail(m.uid) === normalized);
+  if (member?.name && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(member.name)) {
+    return member.name;
+  }
+
   try {
-    const querySnapshot = await getDocs(collection(db, membersCollection));
-    const firestoreMembers = [];
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      firestoreMembers.push({
-        uid: data.email,
-        name: data.name,
-        email: data.email,
-        role: data.role
-      });
-    });
-    
-    // Update members array
-    members = [
-      { uid: "everyone", name: "Everyone" },
-      ...firestoreMembers
-    ];
-    
-    // Update mention users
-    mentionUsers = members.filter(m => m.uid !== 'everyone').map(m => ({ uid: m.uid, name: m.name }));
-    
-    // Update the assign to dropdown if it exists
-    populateAssignToDropdown();
-    
-    console.log('Members loaded from Firestore:', members);
+    const roleSnap = await getDoc(doc(db, 'userRoles', normalized));
+    if (roleSnap.exists()) {
+      const data = roleSnap.data() || {};
+      const displayName = typeof data.displayName === 'string' && data.displayName.trim()
+        ? data.displayName.trim()
+        : (typeof data.name === 'string' && data.name.trim() ? data.name.trim() : '');
+      if (displayName && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(displayName)) {
+        return displayName;
+      }
+    }
   } catch (error) {
-    console.error('Error loading members from Firestore:', error);
+    console.warn('Unable to read display name for welcome text:', error);
   }
+
+  const fallbackName = member?.name || getUserName(email);
+  if (fallbackName && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fallbackName)) {
+    return fallbackName;
+  }
+
+  return formatDisplayNameFromEmail(email);
 }
 
-// Populate assign to dropdown with member names
-function populateAssignToDropdown() {
-  const assignToSelect = document.getElementById("progressAssignedTo");
-  if (!assignToSelect) return;
-  
-  // Get current value to restore after updating
-  const currentValue = assignToSelect.value;
-  
-  // Clear existing options except the first one
-  while (assignToSelect.options.length > 1) {
-    assignToSelect.remove(1);
+function parseDateValue(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === 'number') return new Date(value);
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed;
   }
-  
-  // Add member names to dropdown
-  members.forEach(member => {
-    if (member.uid !== 'everyone') {
-      const option = document.createElement('option');
-      option.value = member.name;
-      option.textContent = member.name;
-      assignToSelect.appendChild(option);
-    }
-  });
-  
-  // Restore previous value if it still exists
-  if (currentValue && Array.from(assignToSelect.options).some(opt => opt.value === currentValue)) {
-    assignToSelect.value = currentValue;
+  if (value && typeof value.toDate === 'function') {
+    return value.toDate();
   }
+  if (value && typeof value.toMillis === 'function') {
+    return new Date(value.toMillis());
+  }
+  return null;
 }
 
-// Real-time listener for members - updates UI automatically when members change
-let membersUnsubscribe = null;
-function initializeMembersListener() {
-  if (membersUnsubscribe) {
-    membersUnsubscribe(); // Unsubscribe from previous listener if exists
-  }
-  
-  membersUnsubscribe = onSnapshot(collection(db, membersCollection), (snapshot) => {
-    const firestoreMembers = [];
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      firestoreMembers.push({
-        uid: data.email,
-        name: data.name,
-        email: data.email,
-        role: data.role
-      });
-    });
-    
-    // Update members array
-    members = [
-      { uid: "everyone", name: "Everyone" },
-      ...firestoreMembers
-    ];
-    
-    // Update mention users
-    mentionUsers = members.filter(m => m.uid !== 'everyone').map(m => ({ uid: m.uid, name: m.name }));
-    
-    // Update the assign to dropdown if it exists
-    populateAssignToDropdown();
-    
-    // Update welcome message with member name
-    const welcomeEl = document.getElementById("welcome");
-    if (welcomeEl && userEmail) {
-      welcomeEl.textContent = `Welcome, ${getUserName(userEmail)}`;
-    }
-    
-    console.log('Members updated from Firestore (real-time):', members);
-  }, (error) => {
-    console.error('Error listening to members:', error);
-  });
+function formatDateTime(value) {
+  const date = parseDateValue(value);
+  if (!date) return 'Unknown';
+  return date.toLocaleString();
 }
 
-// Real-time listener for progress reports - updates automatically when admin makes changes
-let progressReportUnsubscribe = null;
-function initializeProgressReportListener() {
-  console.log('=== INITIALIZE PROGRESS REPORT LISTENER (MEMBER) ===');
-  
-  if (progressReportUnsubscribe) {
-    console.log('Unsubscribing from previous listener');
-    progressReportUnsubscribe();
-  }
-  
-  const progressReportCollection = "progressReports";
-  const progressReportDocId = "thesisProgress";
-  
-  console.log('Setting up real-time listener for:', progressReportCollection, progressReportDocId);
-  
-  progressReportUnsubscribe = onSnapshot(doc(db, progressReportCollection, progressReportDocId), (docSnap) => {
-    console.log('📡 Member progress report listener triggered!');
-    console.log('Document exists:', docSnap.exists());
-    
-    if (docSnap.exists()) {
-      console.log('Document data received, calling window.loadProgressReport()');
-      try {
-        window.loadProgressReport().catch(err => {
-          console.error('❌ Error in loadProgressReport promise:', err);
-        });
-      } catch (err) {
-        console.error('❌ Caught error calling loadProgressReport:', err);
-        console.error('Error stack:', err.stack);
-      }
-    } else {
-      console.log('Progress report document does not exist');
-    }
-  }, (error) => {
-    console.error('❌ Error listening to progress report:', error);
-  });
-  
-  console.log('✅ Member real-time listener initialized');
+function getTimeAgo(value) {
+  const date = parseDateValue(value);
+  if (!date) return '';
+  const diffMs = Date.now() - date.getTime();
+  const seconds = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days >= 1) return days === 1 ? '1 day ago' : `${days} days ago`;
+  if (hours >= 1) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  if (minutes >= 1) return minutes === 1 ? '1 minute ago' : `${minutes} minutes ago`;
+  return 'just now';
 }
 
-window.initializeProgressReportListener = initializeProgressReportListener;
+function isMemberCurrentlyActive(statusData) {
+  if (!statusData || !statusData.lastActive) return false;
+  if (statusData.isOnline === false) return false;
+  const lastActiveDate = parseDateValue(statusData.lastActive);
+  if (!lastActiveDate) return false;
+  return (Date.now() - lastActiveDate.getTime()) / 1000 < 120;
+}
 
-// Save progress update
-// Load and display progress report assigned to member
-window.loadProgressReport = async function() {
-  try {
-    console.log('=== LOAD PROGRESS REPORT CALLED (MEMBER) ===');
-    console.log('Current userEmail:', userEmail);
-    
-    // Helper function to get status color
-    const getStatusColor = (status) => {
-      switch(status) {
-        case 'Completed':
-          return '#10b981'; // Green
-        case 'Pending':
-          return '#f59e0b'; // Amber/Orange
-        case 'Not Started':
-        default:
-          return '#94a3b8'; // Gray-blue
-      }
-    };
-    
-    // If userEmail is not set yet, retry in a moment
-    if (!userEmail) {
-      console.log('userEmail not set yet, retrying in 500ms');
-      setTimeout(() => {
-        window.loadProgressReport();
-      }, 500);
-      return;
-    }
-    
-    const progressReportCollection = "progressReports";
-    const progressReportDocId = "thesisProgress";
-    
-    console.log('Fetching progress report from:', progressReportCollection, progressReportDocId);
-    
-    const docRef = doc(db, progressReportCollection, progressReportDocId);
-    const docSnap = await getDoc(docRef);
-    
-    console.log('Document exists:', docSnap.exists());
-    
-    if (!docSnap.exists()) {
-      console.log('Progress report document does not exist');
-      const panel = document.getElementById("progressReportPanel");
-      if (panel) {
-        panel.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No progress report available yet. Your advisor will create one for you.</p>';
-      }
-      return;
-    }
-    
-    const data = docSnap.data();
-    console.log('Document data:', data);
-    
-    if (!data.sections) {
-      console.log('No sections in progress report');
-      const panel = document.getElementById("progressReportPanel");
-      if (panel) {
-        panel.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No progress report available yet. Your advisor will create one for you.</p>';
-      }
-      return;
-    }
-    
-    const allSections = data.sections || [];
-    console.log('All sections from Firestore:', allSections);
-    
-    // Display all progress report items to all members (no filtering by assignment)
-    const assignedItems = [];
-    allSections.forEach((section, sectionIndex) => {
-      if (Array.isArray(section.items)) {
-        section.items.forEach((item, itemIndex) => {
-          console.log(`Adding item "${item.name}" to display list`);
-          assignedItems.push({
-            name: item.name,
-            section: section.title,
-            status: item.status,
-            sectionIndex,
-            itemIndex
-          });
-        });
-      }
-    });
-    
-    console.log('✅ Total items to display:', assignedItems.length);
-    
-    const panel = document.getElementById("progressReportPanel");
-    if (!panel) {
-      console.warn('Progress report panel not found in DOM');
-      return;
-    }
-    
-    if (assignedItems.length === 0) {
-      console.log('No items found to display');
-      panel.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No progress report items yet.</p>';
-      return;
-    }
-    
-    // Render as card layout
-    panel.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 1rem;">
-        ${assignedItems.map((item) => {
-          const assignedToNames = Array.isArray(item.assignedTo) ? item.assignedTo.map(id => {
-            const member = members.find(m => m.uid === id);
-            return member ? member.name : id;
-          }).join(', ') : (item.assignedTo || 'Unassigned');
-          
-          return `
-            <div style="background: #111827; border: 1px solid #374151; border-radius: 0.5rem; padding: 1.5rem; display: flex; justify-content: space-between; align-items: flex-start;">
-              <div style="flex: 1;">
-                <div style="color: #d1d5db; font-weight: 600; font-size: 1.1rem; margin-bottom: 0.5rem;">${item.name}</div>
-                <div style="color: #6b7280; font-size: 0.85rem; margin-bottom: 0.75rem;">${item.section}</div>
-                <div style="color: #9ca3af; font-size: 0.9rem;">
-                  <span style="color: #6b7280;">Assigned to:</span>
-                  <span style="color: #cbd5e1; margin-left: 0.5rem;">${assignedToNames}</span>
-                </div>
-              </div>
-              <div style="text-align: right; margin-left: 1rem;">
-                <div style="color: ${getStatusColor(item.status || 'Not Started')}; font-weight: 600; font-size: 0.95rem;">${item.status || 'Not Started'}</div>
-              </div>
+function renderMemberStatusPanel() {
+  const panel = document.getElementById('memberStatusPanel');
+  if (!panel) return;
+
+  const rows = members
+    .filter(member => !isHiddenMember(member))
+    .map(member => {
+      const normalizedId = normalizeEmail(member.uid);
+      const statusData = memberStatusDocs[normalizedId] || {};
+      const active = isMemberCurrentlyActive(statusData);
+      const restricted = statusData.accessAllowed === false;
+      const badgeColor = active ? '#10b981' : '#6b7280';
+      const badgeText = active ? 'ACTIVE' : 'OFFLINE';
+      const lastSeenActiveLabel = statusData.lastActive ? formatDateTime(statusData.lastActive) : 'Unknown';
+      const lastSeenLabel = statusData.lastActive ? getTimeAgo(statusData.lastActive) : 'Unknown';
+      const statusNote = active ? `Last active ${lastSeenLabel}` : `Last seen active ${lastSeenLabel}`;
+      const restrictedNote = restricted ? '<p style="margin: 0.5rem 0 0 0; color: #fca5a5; font-size: 0.9rem; font-weight: 600;">Restricted access</p>' : '';
+
+      return `
+        <div style="border: 1px solid #374151; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem; background: #111827;">
+          <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; flex-wrap: wrap;">
+            <div>
+              <h3 style="margin: 0 0 0.5rem 0; color: #f8fafc;">${member.name}</h3>
+              <p style="margin: 0 0.5rem 0 0; color: #94a3b8; font-size: 0.9rem;">${member.uid}</p>
+              <p style="margin: 0; color: #cbd5e1; font-size: 0.9rem;">${statusNote}</p>
+              <p style="margin: 0.5rem 0 0 0; color: #9ca3af; font-size: 0.85rem;">Last seen active: ${lastSeenActiveLabel}</p>
+              ${restrictedNote}
             </div>
-          `;
-        }).join('')}
-      </div>
-    `;
-    console.log('✅ Progress report rendered successfully');
-  } catch (error) {
-    console.error('❌ Error loading progress report:', error);
-    console.error('Error stack:', error.stack);
-    const panel = document.getElementById("progressReportPanel");
-    if (panel) {
-      panel.innerHTML = '<p style="color: #f87171;">Error loading progress report. Please try again.</p>';
-    }
+            <div style="display: inline-flex; align-items: center; gap: 0.5rem;">
+              <span style="display: inline-flex; align-items: center; justify-content: center; min-width: 92px; padding: 0.35rem 0.85rem; border-radius: 999px; background: ${badgeColor}; color: white; font-size: 0.8rem; font-weight: 600;">${badgeText}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+  panel.innerHTML = rows.join('') || '<p style="color: #94a3b8; text-align: center;">No member status data available.</p>';
+}
+
+function subscribeToMemberStatuses() {
+  if (memberStatusUnsubscribe) {
+    memberStatusUnsubscribe();
+    memberStatusUnsubscribe = null;
   }
-};
 
-// Manual refresh function for testing
-window.refreshProgressReport = function() {
-  console.log('🔄 Manual refresh of progress report triggered');
-  loadProgressReport();
-};
+  memberStatusUnsubscribe = onSnapshot(collection(db, 'userRoles'), (snapshot) => {
+    memberStatusDocs = {};
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data() || {};
+      const normalizedId = normalizeEmail(docSnap.id);
+      memberStatusDocs[normalizedId] = {
+        lastActive: data.lastActive || memberStatusDocs[normalizedId]?.lastActive,
+        isOnline: typeof data.isOnline !== 'undefined' ? data.isOnline : memberStatusDocs[normalizedId]?.isOnline,
+        accessAllowed: typeof data.accessAllowed === 'boolean' ? data.accessAllowed : memberStatusDocs[normalizedId]?.accessAllowed
+      };
+    });
+    renderMemberStatusPanel();
+  }, (error) => {
+    console.warn('Unable to subscribe to member statuses:', error);
+  });
+}
 
-// Update task status in progress report
-window.updateTaskStatus = async function(sectionIndex, itemIndex) {
+async function pollMemberStatuses() {
   try {
-    const statusSelect = document.getElementById(`status-${sectionIndex}-${itemIndex}`);
-    const newStatus = statusSelect.value;
-    
-    const progressReportCollection = "progressReports";
-    const progressReportDocId = "thesisProgress";
-    
-    const docRef = doc(db, progressReportCollection, progressReportDocId);
-    const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists()) return;
-    
-    const sections = docSnap.data().sections || [];
-    
-    // Update the status directly using sectionIndex and itemIndex
-    if (sections[sectionIndex] && sections[sectionIndex].items && sections[sectionIndex].items[itemIndex]) {
-      sections[sectionIndex].items[itemIndex].status = newStatus;
-    }
-    
-    // Save updated sections
-    await setDoc(doc(db, progressReportCollection, progressReportDocId), { sections }, { merge: true });
-    console.log('Task status updated successfully');
+    const snap = await getDocs(collection(db, 'userRoles'));
+    const newDocs = {};
+    snap.forEach(docSnap => {
+      const data = docSnap.data() || {};
+      const normalizedId = normalizeEmail(docSnap.id);
+      newDocs[normalizedId] = {
+        lastActive: data.lastActive || memberStatusDocs[normalizedId]?.lastActive,
+        isOnline: typeof data.isOnline !== 'undefined' ? data.isOnline : memberStatusDocs[normalizedId]?.isOnline,
+        accessAllowed: typeof data.accessAllowed === 'boolean' ? data.accessAllowed : memberStatusDocs[normalizedId]?.accessAllowed
+      };
+    });
+    memberStatusDocs = newDocs;
+    if (typeof renderMemberStatusPanel === 'function') renderMemberStatusPanel();
   } catch (error) {
-    console.error('Error updating task status:', error);
-    alert('Error updating status: ' + error.message);
+    console.warn('Error polling member statuses:', error);
   }
-};
+}
+
+function startMemberStatusPolling(intervalMs = 120000) {
+  // immediate poll
+  void pollMemberStatuses();
+  if (memberStatusPollTimer) clearInterval(memberStatusPollTimer);
+  memberStatusPollTimer = setInterval(() => {
+    void pollMemberStatuses();
+  }, intervalMs);
+}
+
+function stopMemberStatusPolling() {
+  if (memberStatusPollTimer) {
+    clearInterval(memberStatusPollTimer);
+    memberStatusPollTimer = null;
+  }
+}
+
+function getDefaultProgressStructure() {
+  return [];
+}
 
 function getDeadlineWarning(deadlineStr, status) {
   if (status === "done" || status === "pending validation") return { class: "", message: "" };
@@ -407,8 +416,680 @@ function getDeadlineWarning(deadlineStr, status) {
   return { class: "", message: "" };
 }
 
+function showTaskDeadlineModal(warnings) {
+  if (!Array.isArray(warnings) || warnings.length === 0) {
+    return;
+  }
+
+  const existingModal = document.getElementById('deadlineNotificationModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'deadlineNotificationModal';
+  overlay.className = 'deadline-notification-overlay';
+
+  const modal = document.createElement('div');
+  modal.className = 'deadline-notification-modal';
+
+  const title = document.createElement('h2');
+  title.className = 'deadline-notification-title';
+  title.textContent = warnings.some(w => w.status.includes('Overdue')) ? 'Overdue task alert' : 'Due soon task alert';
+
+  const description = document.createElement('p');
+  description.className = 'deadline-notification-description';
+  description.textContent = 'The following task(s) need your attention:';
+
+  const list = document.createElement('ul');
+  list.className = 'deadline-notification-list';
+  warnings.forEach((warning) => {
+    const item = document.createElement('li');
+    item.className = `deadline-notification-list-item ${warning.status.includes('Overdue') ? 'overdue' : 'due-soon'}`;
+    item.innerHTML = `<strong>${warning.title}</strong><br><span>${warning.status}</span><br><span>Deadline: ${warning.deadline || 'Not set'}</span>`;
+    list.appendChild(item);
+  });
+
+  const button = document.createElement('button');
+  button.className = 'deadline-notification-close';
+  button.textContent = 'Dismiss';
+  button.onclick = () => overlay.remove();
+
+  modal.appendChild(title);
+  modal.appendChild(description);
+  modal.appendChild(list);
+  modal.appendChild(button);
+  overlay.appendChild(modal);
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      overlay.remove();
+    }
+  });
+
+  document.body.appendChild(overlay);
+}
+
 function getSafePollOptions(poll) {
   return Array.isArray(poll.options) ? poll.options : [];
+}
+
+function getDismissedInAppNotifications() {
+  // Dismissals are tracked strictly in Firestore via `shownTo` on notifications.
+  // Keep dismissed IDs only in-memory for the current session.
+  return [];
+}
+
+function persistDismissedInAppNotifications() {
+  // No-op: do not persist dismissals to local storage. Use Firestore `shownTo` instead.
+}
+
+function displayNotificationBanner({ title, message, type = 'info', duration = 9000 }) {
+  const bannerContainer = document.getElementById('notificationBanner');
+  if (!bannerContainer) return;
+
+  const notificationId = `notification-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const item = document.createElement('div');
+  item.className = 'notification-item';
+  item.id = notificationId;
+  item.style.position = 'relative';
+
+  const titleEl = document.createElement('strong');
+  titleEl.textContent = title || 'Notification';
+
+  const messageEl = document.createElement('div');
+  messageEl.style.marginBottom = '0.5rem';
+  messageEl.style.whiteSpace = 'pre-wrap';
+  messageEl.style.wordBreak = 'break-word';
+  messageEl.textContent = message || '';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.textContent = '×';
+  closeBtn.onclick = () => item.remove();
+
+  item.appendChild(titleEl);
+  item.appendChild(messageEl);
+  item.appendChild(closeBtn);
+  bannerContainer.style.display = 'flex';
+  bannerContainer.appendChild(item);
+
+  setTimeout(() => {
+    if (item.parentElement) {
+      item.remove();
+    }
+  }, duration);
+}
+
+function showAdminUpdateNotification(title, message) {
+  showLocalNotification(title, message);
+  displayNotificationBanner({ title, message });
+}
+
+async function showInAppNotificationOverlay(notification) {
+  if (!notification || !notification.id) return;
+
+  const notificationId = notification.id;
+  if (shownInAppNotificationIds.has(notificationId) || dismissedInAppNotificationIds.has(notificationId)) {
+    return;
+  }
+
+  if (inAppNotificationDisplaying) {
+    inAppNotificationQueue.push(notification);
+    return;
+  }
+
+  inAppNotificationDisplaying = true;
+  shownInAppNotificationIds.add(notificationId);
+
+  const overlay = document.createElement("div");
+  overlay.id = "inAppNotificationOverlay";
+  overlay.className = "deadline-notification-overlay";
+
+  const modal = document.createElement("div");
+  modal.className = "deadline-notification-modal";
+
+  const title = document.createElement("h2");
+  title.className = "deadline-notification-title";
+  title.textContent = notification.title || "New update";
+
+  const message = document.createElement("p");
+  message.className = "deadline-notification-description";
+  message.style.whiteSpace = "pre-wrap";
+  message.style.wordBreak = "break-word";
+  message.textContent = notification.message || "You have a new update from the admin.";
+
+  const button = document.createElement("button");
+  button.className = "deadline-notification-close";
+  button.textContent = "Dismiss";
+  button.onclick = async () => {
+    dismissedInAppNotificationIds.add(notificationId);
+    persistDismissedInAppNotifications();
+
+    // If displayMode is 'once', record that this user has seen it in Firestore
+    try {
+      const currentEmail = userEmail || await getStoredUserEmail();
+      if (notification.displayMode === 'once' && currentEmail) {
+        const notifRef = doc(db, 'inAppNotifications', notificationId);
+        await updateDoc(notifRef, { shownTo: arrayUnion(currentEmail) });
+      }
+    } catch (err) {
+      console.warn('Failed to persist shownTo for in-app notification:', err);
+    }
+
+    closeInAppNotificationOverlay();
+  };
+
+  modal.appendChild(title);
+  modal.appendChild(message);
+  modal.appendChild(button);
+  overlay.appendChild(modal);
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) {
+      dismissedInAppNotificationIds.add(notificationId);
+      persistDismissedInAppNotifications();
+      closeInAppNotificationOverlay();
+    }
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function closeInAppNotificationOverlay() {
+  const overlay = document.getElementById("inAppNotificationOverlay");
+  if (overlay) overlay.remove();
+  inAppNotificationDisplaying = false;
+  const nextNotification = inAppNotificationQueue.shift();
+  if (nextNotification) {
+    showInAppNotificationOverlay(nextNotification);
+  }
+}
+
+// Maintenance overlay: when admin enables maintenance, show notice and allow only tickets
+function getCurrentStoredUserRole() {
+  try {
+    const raw = localStorage.getItem('authUser');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.role || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function applyRestrictedMemberView(accessAllowed = true, accessReason = '') {
+  const restrictedNotice = document.getElementById('restrictedAccessNotice');
+  const reasonEl = document.getElementById('restrictedAccessReason');
+  if (restrictedNotice) {
+    restrictedNotice.style.display = accessAllowed === false ? 'block' : 'none';
+  }
+  if (reasonEl) {
+    reasonEl.textContent = accessAllowed === false ? (accessReason || 'Please contact the administrator for more information.') : '';
+  }
+
+  const allowedSections = new Set(['submit-ticket', 'ticket-history']);
+
+  document.querySelectorAll('.nav-list .nav-btn').forEach(btn => {
+    try {
+      const onclick = btn.getAttribute('onclick') || '';
+      const matches = onclick.match(/showSection\('\s*([^']+)\s*'\)/);
+      const sectionId = matches ? matches[1] : null;
+      if (accessAllowed === false) {
+        btn.style.display = allowedSections.has(sectionId) ? '' : 'none';
+      } else {
+        btn.style.display = '';
+      }
+    } catch (e) {
+      // ignore
+    }
+  });
+
+  document.querySelectorAll('.content-section').forEach(sec => {
+    if (accessAllowed === false) {
+      if (!allowedSections.has(sec.id)) {
+        sec.style.display = 'none';
+      } else {
+        sec.style.display = '';
+      }
+    } else {
+      sec.style.display = '';
+    }
+  });
+
+  const activeSection = document.querySelector('.content-section.active');
+  if (accessAllowed === false && (!activeSection || !allowedSections.has(activeSection.id))) {
+    if (typeof window.showSection === 'function') {
+      window.showSection('submit-ticket');
+    }
+  }
+
+  if (accessAllowed === false) {
+    const restrictedSections = document.querySelectorAll('.content-section');
+    restrictedSections.forEach(sec => {
+      if (!allowedSections.has(sec.id)) {
+        sec.classList.remove('active');
+      }
+    });
+  }
+}
+
+function persistMemberAccessState(accessAllowed, accessReason) {
+  try {
+    const raw = localStorage.getItem('authUser');
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const updatedUser = {
+      ...parsed,
+      accessAllowed: accessAllowed,
+      accessReason: accessReason || ''
+    };
+    localStorage.setItem('authUser', JSON.stringify(updatedUser));
+  } catch (error) {
+    console.warn('Unable to persist updated member access info:', error);
+  }
+}
+
+function syncMemberAccessState(accessAllowed, accessReason) {
+  persistMemberAccessState(accessAllowed, accessReason);
+  applyRestrictedMemberView(accessAllowed, accessReason);
+  window.__restrictedMemberMode = accessAllowed === false;
+
+  if (typeof renderMemberStatusPanel === 'function') {
+    renderMemberStatusPanel();
+  }
+
+  if (typeof window.renderMemberNavigation === 'function') {
+    window.renderMemberNavigation(accessAllowed === false);
+  }
+
+  if (accessAllowed === false && typeof window.showSection === 'function') {
+    const activeSection = document.querySelector('.content-section.active');
+    if (!activeSection || !['submit-ticket', 'ticket-history'].includes(activeSection.id)) {
+      window.showSection('submit-ticket');
+    }
+  }
+}
+
+function watchMemberAccessState() {
+  if (!userEmail) return;
+
+  if (accessStatusUnsubscribe) {
+    accessStatusUnsubscribe();
+    accessStatusUnsubscribe = null;
+  }
+
+  const normalizedEmail = normalizeEmail(userEmail);
+  const accessRef = doc(db, 'userRoles', normalizedEmail);
+  accessStatusUnsubscribe = onSnapshot(accessRef, (snap) => {
+    const data = snap.exists() ? snap.data() : {};
+    const accessAllowed = typeof data.accessAllowed === 'boolean' ? data.accessAllowed : true;
+    const accessReason = typeof data.accessReason === 'string' ? data.accessReason : '';
+    syncMemberAccessState(accessAllowed, accessReason);
+  }, (error) => {
+    console.warn('Unable to watch member access state:', error);
+  });
+}
+
+async function updateMemberPresence(isOnline = true, options = {}) {
+  if (!userEmail) return;
+
+  const { force = false } = options;
+  const now = Date.now();
+  const shouldSkip = !force && isOnline === presenceState && now - presenceLastUpdatedAt < 10000;
+
+  if (shouldSkip) return;
+
+  const normalizedEmail = normalizeEmail(userEmail);
+
+  try {
+    await setDoc(doc(db, 'userRoles', normalizedEmail), {
+      email: normalizedEmail,
+      lastActive: new Date(),
+      isOnline,
+      updatedAt: new Date()
+    }, { merge: true });
+
+    presenceState = isOnline;
+    presenceLastUpdatedAt = now;
+
+    memberStatusDocs[normalizedEmail] = memberStatusDocs[normalizedEmail] || {};
+    memberStatusDocs[normalizedEmail].lastActive = new Date().toISOString();
+    memberStatusDocs[normalizedEmail].isOnline = isOnline;
+    if (typeof renderMemberStatusPanel === 'function') {
+      renderMemberStatusPanel();
+    }
+  } catch (error) {
+    console.error('Unable to update member presence on server:', error);
+    throw error;
+  }
+}
+
+function startMemberPresenceHeartbeat() {
+  if (presenceTrackingInitialized) return;
+  presenceTrackingInitialized = true;
+
+  const syncPresence = (isOnline, options = {}) => {
+    void updateMemberPresence(isOnline, options);
+  };
+
+  syncPresence(true, { force: true });
+
+  if (presenceHeartbeatTimer) {
+    clearInterval(presenceHeartbeatTimer);
+  }
+
+  presenceHeartbeatTimer = window.setInterval(() => {
+    syncPresence(true, { force: true });
+  }, 20000);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      syncPresence(false, { force: true });
+    } else {
+      syncPresence(true, { force: true });
+    }
+  });
+
+  window.addEventListener('pagehide', () => {
+    syncPresence(false, { force: true, keepalive: true });
+  });
+
+  window.addEventListener('beforeunload', () => {
+    syncPresence(false, { force: true, keepalive: true });
+  });
+
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    import('@capacitor/app').then(({ App }) => {
+      App.addListener('pause', () => {
+        syncPresence(false, { force: true, keepalive: true });
+      });
+      App.addListener('resume', () => {
+        syncPresence(true, { force: true });
+      });
+    }).catch((error) => {
+      console.warn('Unable to initialize Capacitor app lifecycle presence listeners:', error);
+    });
+  }
+
+  window.addEventListener('focus', () => {
+    syncPresence(true, { force: true });
+  });
+
+  window.addEventListener('blur', () => {
+    syncPresence(false, { force: true });
+  });
+
+  window.addEventListener('online', () => {
+    syncPresence(true, { force: true });
+  });
+
+  window.addEventListener('offline', () => {
+    syncPresence(false, { force: true });
+  });
+
+  window.addEventListener('pageshow', () => {
+    syncPresence(true, { force: true });
+  });
+}
+
+function checkMaintenance() {
+  try {
+    const maintenanceRef = doc(db, 'appSettings', 'maintenance');
+    onSnapshot(maintenanceRef, (snap) => {
+      const data = snap.exists() ? snap.data() : { enabled: false };
+      const enabled = !!data.enabled;
+      const message = data.message || 'The site is currently under maintenance. You may submit a support ticket or view ticket status.';
+
+      // Sections and nav allowed during maintenance
+      const allowedSections = new Set(['submit-ticket', 'ticket-history']);
+
+      // Hide/show nav items
+      document.querySelectorAll('.nav-list .nav-btn').forEach(btn => {
+        try {
+          const onclick = btn.getAttribute('onclick') || '';
+          const matches = onclick.match(/showSection\('\s*([^']+)\s*'\)/);
+          const sectionId = matches ? matches[1] : null;
+          if (enabled) {
+            if (!allowedSections.has(sectionId)) {
+              btn.style.display = 'none';
+            } else {
+              btn.style.display = '';
+            }
+          } else {
+            btn.style.display = '';
+          }
+        } catch (e) {
+          // ignore
+        }
+      });
+
+      // Show/hide sections
+      document.querySelectorAll('.content-section').forEach(sec => {
+        if (enabled) {
+          if (!allowedSections.has(sec.id)) {
+            sec.dataset.hiddenByMaintenance = 'true';
+            sec.style.display = 'none';
+          } else {
+            sec.style.display = '';
+            delete sec.dataset.hiddenByMaintenance;
+          }
+        } else {
+          sec.style.display = '';
+          delete sec.dataset.hiddenByMaintenance;
+        }
+      });
+
+      // Ensure current section is allowed
+      // Render maintenance banner into a section card (e.g. submit-ticket, ticket-history)
+      function renderMaintenanceBannerInSection(sectionSelector, msg) {
+        const sectionCard = document.querySelector(sectionSelector);
+        if (!sectionCard) return;
+        let banner = sectionCard.querySelector('.maintenance-banner');
+        if (!banner) {
+          banner = document.createElement('div');
+          banner.className = 'maintenance-banner';
+          banner.style.marginTop = '1rem';
+          banner.style.padding = '1rem';
+          banner.style.background = 'linear-gradient(180deg, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.95))';
+          banner.style.border = '1px solid rgba(59, 130, 246, 0.25)';
+          banner.style.borderRadius = '1rem';
+          banner.style.display = 'flex';
+          banner.style.alignItems = 'center';
+          banner.style.gap = '1rem';
+          banner.style.flexWrap = 'wrap';
+          banner.style.whiteSpace = 'pre-wrap';
+          banner.style.wordBreak = 'break-word';
+          banner.innerHTML = `
+            <div class="maintenance-icon"><i class="fas fa-user-cog"></i></div>
+            <div class="maintenance-text">
+              <div class="maintenance-banner-message"></div>
+            </div>
+          `;
+          const h2 = sectionCard.querySelector('h2');
+          if (h2 && h2.parentNode === sectionCard) {
+            h2.insertAdjacentElement('afterend', banner);
+          } else {
+            sectionCard.insertBefore(banner, sectionCard.firstChild);
+          }
+        }
+        const messageEl = banner.querySelector('.maintenance-banner-message');
+        if (messageEl) {
+          messageEl.textContent = msg || '';
+        }
+        banner.style.display = msg ? '' : 'none';
+      }
+
+      function removeMaintenanceBannerFromSection(sectionSelector) {
+        const sectionCard = document.querySelector(sectionSelector);
+        if (!sectionCard) return;
+        const banner = sectionCard.querySelector('.maintenance-banner');
+        if (banner) banner.remove();
+      }
+
+      // Header banner under page title
+      function renderHeaderMaintenanceBanner(msg) {
+        const header = document.querySelector('.content-header');
+        if (!header) return;
+        let banner = header.querySelector('.maintenance-header-banner');
+        if (!banner) {
+          banner = document.createElement('div');
+          banner.className = 'maintenance-header-banner';
+          banner.style.marginTop = '0.5rem';
+          banner.style.color = '#fee2e2';
+          banner.style.padding = '0.75rem 1rem';
+          banner.style.background = 'linear-gradient(135deg, rgba(185, 28, 43, 0.95), rgba(125, 29, 29, 0.9))';
+          banner.style.borderRadius = '0.5rem';
+          banner.style.fontWeight = '700';
+          banner.style.display = 'flex';
+          banner.style.alignItems = 'center';
+          banner.style.gap = '0.75rem';
+          banner.style.whiteSpace = 'pre-wrap';
+          banner.style.wordBreak = 'break-word';
+          banner.innerHTML = `
+            <div class="maintenance-icon"><i class="fas fa-triangle-exclamation"></i></div>
+            <div class="maintenance-text">
+              <strong>${msg || 'Maintenance mode is enabled.'}</strong>
+            </div>
+          `;
+          header.appendChild(banner);
+        } else {
+          const textEl = banner.querySelector('.maintenance-text strong');
+          if (textEl) textEl.textContent = msg || 'Maintenance mode is enabled.';
+        }
+        banner.style.display = msg ? '' : 'none';
+      }
+
+      function removeHeaderMaintenanceBanner() {
+        document.querySelectorAll('.maintenance-header-banner').forEach(el => el.remove());
+      }
+
+      function renderMaintenanceOverlay(msg) {
+        const overlay = document.getElementById('maintenanceOverlay');
+        const adminMessage = document.getElementById('maintenanceOverlayAdminMessage');
+        if (adminMessage) {
+          adminMessage.textContent = msg || '';
+          adminMessage.style.display = msg ? 'block' : 'none';
+        }
+        if (overlay) {
+          overlay.style.display = 'flex';
+        }
+      }
+
+      function removeMaintenanceOverlay() {
+        const overlay = document.getElementById('maintenanceOverlay');
+        if (overlay) {
+          overlay.style.display = 'none';
+        }
+      }
+
+      if (enabled) {
+        // Render in submit-ticket and ticket-history, plus header banner
+        renderMaintenanceBannerInSection('#submit-ticket .card', message);
+        renderMaintenanceBannerInSection('#ticket-history .card', message);
+        renderHeaderMaintenanceBanner('DOWNTIME ALERT');
+        renderMaintenanceOverlay(message);
+
+        // Monkeypatch showSection to enforce maintenance
+        if (!window._originalShowSection) {
+          window._originalShowSection = window.showSection.bind(window);
+          window.showSection = function(sectionId) {
+            if (!allowedSections.has(sectionId)) {
+              window._originalShowSection('submit-ticket');
+              const submitCard = document.querySelector('#submit-ticket .card');
+              if (submitCard) {
+                let msgEl = submitCard.querySelector('.maintenance-message');
+                if (!msgEl) {
+                  msgEl = document.createElement('div');
+                  msgEl.className = 'maintenance-message';
+                  msgEl.style.marginTop = '1rem';
+                  msgEl.style.color = '#94a3b8';
+                  msgEl.style.padding = '0.75rem';
+                  msgEl.style.background = '#0f172a';
+                  msgEl.style.border = '1px solid #374151';
+                  msgEl.style.borderRadius = '0.5rem';
+                  submitCard.insertBefore(msgEl, submitCard.firstChild.nextSibling);
+                }
+                msgEl.textContent = message;
+              }
+              return;
+            }
+            window._originalShowSection(sectionId);
+          };
+        } else {
+          const submitCard = document.querySelector('#submit-ticket .card');
+          if (submitCard) {
+            let msgEl = submitCard.querySelector('.maintenance-message');
+            if (msgEl) msgEl.textContent = message;
+          }
+        }
+
+        const active = document.querySelector('.content-section.active');
+        if (!active || !allowedSections.has(active.id)) {
+          window._originalShowSection('submit-ticket');
+        }
+        window.maintenanceEnforced = true;
+      } else {
+        removeMaintenanceOverlay();
+        // restore original showSection if present
+        if (window._originalShowSection) {
+          window.showSection = window._originalShowSection;
+          window._originalShowSection = null;
+        }
+        window.maintenanceEnforced = false;
+        // remove any maintenance message elements and banners
+        document.querySelectorAll('.maintenance-message').forEach(el => el.remove());
+        removeMaintenanceBannerFromSection('#submit-ticket .card');
+        removeMaintenanceBannerFromSection('#ticket-history .card');
+        removeHeaderMaintenanceBanner();
+      }
+    }, (error) => {
+      console.error('Maintenance onSnapshot error:', error);
+    });
+  } catch (error) {
+    console.error('Failed to initialize maintenance listener:', error);
+  }
+}
+
+async function loadInAppNotifications() {
+  const currentEmail = userEmail || await getStoredUserEmail();
+  onSnapshot(collection(db, "inAppNotifications"), (snap) => {
+    const docs = [];
+    snap.forEach(docSnap => docs.push({ id: docSnap.id, ...docSnap.data() }));
+    docs.sort((a, b) => {
+      const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+      const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+      return timeB - timeA;
+    });
+
+    docs.forEach((notification) => {
+      if (notification.active === false) return;
+
+      // Skip if 'until' mode expired
+      if (notification.displayMode === 'until' && notification.until) {
+        const untilDate = parseDateValue(notification.until);
+        if (untilDate && Date.now() > untilDate.getTime()) return;
+      }
+
+      // Skip if 'once' and this user already seen it
+      if (notification.displayMode === 'once') {
+        const alreadyShownArray = Array.isArray(notification.shownTo) ? notification.shownTo : [];
+        if (currentEmail && alreadyShownArray.includes(currentEmail)) return;
+        // If no currentEmail (shouldn't happen when signed-in), we cannot enforce 'once' strictly.
+        // In strict Firestore mode we skip showing when we can't determine user identity.
+        if (!currentEmail) return;
+      }
+
+      const targetType = notification.targetType || "everyone";
+      const assignedTo = Array.isArray(notification.assignedTo) ? notification.assignedTo : [];
+      const shouldShow = targetType === "everyone" || assignedTo.includes("everyone") || (currentEmail && assignedTo.includes(currentEmail));
+      if (shouldShow) {
+        showInAppNotificationOverlay(notification);
+      }
+    });
+  }, (error) => {
+    console.error("In-app notifications listener error:", error);
+  });
 }
 
 function getSafePollVotes(poll) {
@@ -416,9 +1097,92 @@ function getSafePollVotes(poll) {
   return typeof votes === 'object' && votes !== null ? votes : {};
 }
 
-function renderMemberProgressReport(sections) {}
+function renderMemberProgressReport(sections) {
+  const container = document.getElementById("progressReport");
+  const emptyState = document.getElementById("progressEmptyState");
 
-function mergeProgressStructures(defaultSections, savedSections) {}
+  if (!container) return;
+  if (!Array.isArray(sections) || sections.length === 0) {
+    container.innerHTML = "";
+    if (emptyState) emptyState.style.display = "block";
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = "none";
+  container.innerHTML = sections.map(section => `
+    <div style="margin-bottom: 1.25rem;">
+      <h3 style="margin: 0 0 0.75rem 0; color: #3b82f6;">${section.title}</h3>
+      ${Array.isArray(section.items) ? section.items.map(item => {
+        const assignedToName = Array.isArray(item.assignedToName) ? item.assignedToName.join(', ') : (item.assignedToName || (item.assignedTo ? getUserName(item.assignedTo) : 'Unassigned'));
+        return `
+          <div style="padding: 0.75rem; background: #111827; border: 1px solid #374151; border-radius: 0.5rem; margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+              <span style="color: #d1d5db;">${item.name}</span>
+              <span style="color: ${item.status === 'Completed' ? '#22c55e' : item.status === 'Pending' ? '#f59e0b' : '#94a3b8'}; font-weight: 600;">${item.status || 'Not Started'}</span>
+            </div>
+            <p style="margin: 0.5rem 0 0 0; color: #60a5fa; font-size: 0.85rem;">Assigned to: ${assignedToName}</p>
+          </div>
+        `;
+      }).join('') : ''}
+    </div>
+  `).join('');
+}
+
+function mergeProgressStructures(defaultSections, savedSections) {
+  // Merge saved data with default structure, preserving edits but adding new items and preserving extra sections.
+  const mergedSections = defaultSections.map((defaultSection) => {
+    const savedSection = savedSections.find(s => s.title === defaultSection.title);
+
+    if (!savedSection) {
+      // Section doesn't exist in saved data, use default
+      return defaultSection;
+    }
+
+    // Merge items within the section
+    const mergedItems = defaultSection.items.map((defaultItem) => {
+      const savedItem = savedSection.items?.find(i => i.name === defaultItem.name);
+
+      if (!savedItem) {
+        // Item doesn't exist in saved data, use default
+        return defaultItem;
+      }
+
+      // Item exists in saved data, preserve status and assignments
+      return {
+        name: defaultItem.name,
+        status: savedItem.status || defaultItem.status,
+        assignedTo: Array.isArray(savedItem.assignedTo) ? savedItem.assignedTo : (savedItem.assignedTo ? [savedItem.assignedTo] : []),
+        assignedToName: Array.isArray(savedItem.assignedToName) ? savedItem.assignedToName : (savedItem.assignedToName ? [savedItem.assignedToName] : [])
+      };
+    });
+
+    return {
+      title: defaultSection.title,
+      items: mergedItems
+    };
+  });
+
+  const defaultTitles = defaultSections.map(section => section.title);
+  const extraSections = savedSections.filter(section => section && typeof section === 'object' && !defaultTitles.includes(section.title));
+
+  return [...mergedSections, ...extraSections];
+}
+
+function loadProgressReport() {
+  const progressRef = doc(db, progressReportCollection, progressReportDocId);
+  saveProgressBackupSections([]);
+  void persistProgressReportSections([]);
+  renderMemberProgressReport([]);
+
+  onSnapshot(progressRef, async (snap) => {
+    const sections = [];
+    saveProgressBackupSections(sections);
+    renderMemberProgressReport(sections);
+  }, (error) => {
+    console.error('Progress report onSnapshot error:', error);
+    renderMemberProgressReport([]);
+  });
+}
 
 window.markDone = async function (id) {
   try {
@@ -446,8 +1210,10 @@ window.submitTicket = async function () {
   }
   window.isSubmittingTicket = true;
 
-  const title = document.getElementById("ticketTitle").value.trim();
-  const description = document.getElementById("ticketDescription").value.trim();
+  const titleElement = document.getElementById("maintenanceTicketTitle") || document.getElementById("ticketTitle");
+  const descriptionElement = document.getElementById("maintenanceTicketDescription") || document.getElementById("ticketDescription");
+  const title = titleElement ? titleElement.value.trim() : "";
+  const description = descriptionElement ? descriptionElement.value.trim() : "";
   console.log('Ticket data - title:', title, 'description:', description);
 
   if (!title || !description) {
@@ -485,8 +1251,8 @@ window.submitTicket = async function () {
     }
 
     // Clear form
-    document.getElementById("ticketTitle").value = "";
-    document.getElementById("ticketDescription").value = "";
+    if (titleElement) titleElement.value = "";
+    if (descriptionElement) descriptionElement.value = "";
 
     alert("✅ Ticket submitted successfully! The admin will review it soon." + 
           (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 
@@ -557,6 +1323,17 @@ function loadPolls() {
     const docs = [];
     snap.forEach(doc => docs.push(doc));
     docs.sort((a, b) => b.data().createdAt.toMillis() - a.data().createdAt.toMillis());
+
+    // Notify on newly created polls after the first snapshot
+    docs.forEach(doc => {
+      const poll = doc.data() || {};
+      const previous = previousPollMap.get(doc.id);
+      if (pollNotificationsInitialized && !previous && poll.question) {
+        showAdminUpdateNotification('New Poll Created', `A new poll has been created: "${poll.question}"`);
+      }
+      previousPollMap.set(doc.id, poll);
+    });
+    pollNotificationsInitialized = true;
 
     docs.forEach(doc => {
       const poll = doc.data() || {};
@@ -699,17 +1476,27 @@ function loadAnnouncements() {
     docs.sort((a, b) => b.data().createdAt.toMillis() - a.data().createdAt.toMillis());
 
     docs.forEach(doc => {
-      const announcement = doc.data();
+      const announcement = doc.data() || {};
+      const previous = previousAnnouncementMap.get(doc.id);
+      if (announcementNotificationsInitialized && !previous && announcement.title) {
+        const assignedTo = Array.isArray(announcement.assignedTo) ? announcement.assignedTo : ["everyone"];
+        const shouldNotify = assignedTo.includes("everyone") || assignedTo.includes(userEmail);
+        if (shouldNotify) {
+          showAdminUpdateNotification('New Announcement', `New announcement: "${announcement.title}"`);
+        }
+      }
+      previousAnnouncementMap.set(doc.id, announcement);
+
       const assignedTo = Array.isArray(announcement.assignedTo) ? announcement.assignedTo : ["everyone"];
       if (!assignedTo.includes("everyone") && !assignedTo.includes(userEmail)) return;
-      
+
       const announcementDate = formatAnnouncementDate(announcement.createdAt);
       const commentsEnabled = announcement.commentsEnabled !== false;
       const commentHtml = renderAnnouncementComments(doc.id, announcement.comments);
       const assignedToNames = Array.isArray(announcement.assignedToNames) ? announcement.assignedToNames : ["Everyone"];
       const assignedToText = assignedToNames.length > 1 ? `Assigned to: ${assignedToNames.join(", ")}` : `Assigned to: ${assignedToNames[0]}`;
       announcementCount++;
-      
+
       announcementsContainer.innerHTML += `
         <div class="announcement-item" style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.5rem; background: #1f2937;">
           <h4 style="margin: 0 0 0.5rem 0; color: #f3f4f6;">${announcement.title}</h4>
@@ -728,6 +1515,7 @@ function loadAnnouncements() {
       `;
     });
 
+    announcementNotificationsInitialized = true;
     announcementsEmptyState.style.display = announcementCount === 0 ? "block" : "none";
   }, (error) => {
     console.error('Announcements onSnapshot error:', error);
@@ -746,23 +1534,14 @@ function loadResources() {
   onSnapshot(collection(db, "resources"), (snap) => {
     console.log('=== MEMBER RESOURCES LISTENER TRIGGERED ===');
     console.log('Resources snapshot received, docs count:', snap.size);
-    
-    // Clear container
     container.innerHTML = "";
 
-    // Show/hide empty state based on whether resources exist
     if (emptyState) {
-      if (snap.empty) {
-        emptyState.style.display = "block";
-        console.log('No resources - showing empty state');
-        return;
-      } else {
-        emptyState.style.display = "none";
-        console.log('Resources found - hiding empty state');
-      }
+      emptyState.style.display = snap.empty ? "block" : "none";
     }
 
     if (snap.empty) {
+      container.innerHTML = "";
       return;
     }
 
@@ -782,7 +1561,7 @@ function loadResources() {
         <div class="card" style="margin-bottom: 1rem;">
           <h4 style="margin-bottom: 0.5rem;">${resource.title}</h4>
           <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.75rem;">Posted: ${createdDate}</p>
-          <p style="margin: 0.5rem 0; line-height: 1.4; color: #d1d5db;">${resource.description}</p>
+          <p style="margin: 0.5rem 0; line-height: 1.4; color: #d1d5db; white-space: pre-wrap; word-break: break-word;">${resource.description}</p>
           <div style="margin-top: 1rem;">
             <a href="${resource.link}" target="_blank" style="background: #10b981; color: white; padding: 0.75rem 1.25rem; border-radius: 0.375rem; text-decoration: none; display: inline-block; font-weight: 500;">🔗 Open Resource</a>
           </div>
@@ -805,33 +1584,23 @@ function loadMeetings() {
     meetingsUnsubscribe();
   }
 
-  try {
-    const meetingsQuery = query(collection(db, 'meetings'), where('assignedTo', 'in', [userEmail, 'everyone']));
-    meetingsUnsubscribe = onSnapshot(meetingsQuery, (snapshot) => {
-      const meetings = [];
-      snapshot.forEach(docSnap => {
-        meetings.push({ id: docSnap.id, ...docSnap.data() });
-      });
-
-      meetings.sort((a, b) => {
-        const aDate = new Date(`${a.date}T${a.time}`);
-        const bDate = new Date(`${b.date}T${b.time}`);
-        return aDate - bDate;
-      });
-
-      renderMeetings(meetings);
-    }, (error) => {
-      console.error('Meetings listener error:', error);
-      // If permission error, show empty state
-      if (error.code === 'permission-denied') {
-        console.log('Meetings collection not yet accessible - showing empty state');
-        renderMeetings([]);
-      }
+  const meetingsQuery = query(collection(db, 'meetings'), where('assignedTo', 'in', [userEmail, 'everyone']));
+  meetingsUnsubscribe = onSnapshot(meetingsQuery, (snapshot) => {
+    const meetings = [];
+    snapshot.forEach(docSnap => {
+      meetings.push({ id: docSnap.id, ...docSnap.data() });
     });
-  } catch (error) {
-    console.error('Error setting up meetings listener:', error);
-    renderMeetings([]);
-  }
+
+    meetings.sort((a, b) => {
+      const aDate = new Date(`${a.date}T${a.time}`);
+      const bDate = new Date(`${b.date}T${b.time}`);
+      return aDate - bDate;
+    });
+
+    renderMeetings(meetings);
+  }, (error) => {
+    console.error('Meetings listener error:', error);
+  });
 }
 
 window.loadMeetings = loadMeetings;
@@ -1034,7 +1803,7 @@ async function createLiveChatRoom(event) {
   const chatRoom = {
     title,
     createdByEmail: currentEmail,
-    createdByName: getUserName(currentEmail),
+    createdByName: await getWelcomeName(currentEmail),
     status: 'Active',
     createdAt: Date.now()
   };
@@ -1065,7 +1834,9 @@ function renderChatRooms(chatRooms) {
     chatRoomsById[room.id] = room;
     const roomDiv = document.createElement('div');
     roomDiv.style.cssText = 'border: 1px solid #374151; background: #1e293b; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;';
-    const createdBy = room.createdByName || getUserName(room.createdByEmail) || 'Unknown';
+    const createdBy = room.createdByName
+      ? getFriendlyName(room.createdByName)
+      : (getUserName(room.createdByEmail) || 'Unknown');
     const statusColor = room.status === 'Closed' ? '#ef4444' : '#10b981';
     const isActive = room.status === 'Active';
 
@@ -1078,7 +1849,7 @@ function renderChatRooms(chatRooms) {
         <span style="background: ${statusColor}; color: white; padding: 0.35rem 0.75rem; border-radius: 9999px; font-size: 0.8rem;">${room.status || 'Active'}</span>
       </div>
       <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-        <button onclick="openChatRoom('${room.id}')" style="background: ${isActive ? '#10b981' : '#6b7280'}; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">${isActive ? 'Open Chat' : 'View Chat'}</button>
+        <button onclick="window.location.href='chat.html?chatId=${room.id}&from=member'" style="background: ${isActive ? '#10b981' : '#6b7280'}; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">${isActive ? 'Open Chat' : 'View Chat'}</button>
       </div>
     `;
 
@@ -1111,7 +1882,7 @@ function renderChatMessages(messages) {
     const replyPreview = msg.replyToId ? `
       <div style="padding: 0.75rem 1rem; margin-bottom: 0.75rem; border-radius: 12px; background: #0f172a; border: 1px solid #374151;">
         <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.25rem;">Replying to ${escapeHtml(msg.replyToSenderName || 'Unknown')}</div>
-        <div style="font-size: 0.9rem; color: #e5e7eb; line-height: 1.4;">${escapeHtml(msg.replyToText || '')}</div>
+        <div style="font-size: 0.9rem; color: #e5e7eb; line-height: 1.4; white-space: pre-wrap; word-break: break-word;">${escapeHtml(msg.replyToText || '')}</div>
       </div>
     ` : '';
     const buttonBaseStyle = 'display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;';
@@ -1125,7 +1896,7 @@ function renderChatMessages(messages) {
         <div style="font-size: 0.85rem; color: #94a3b8;">${escapeHtml(sender)}</div>
         <div style="font-size: 0.75rem; color: #6b7280;">${timestamp}</div>
       </div>
-      <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; margin-bottom: 0.5rem;">${imageMarkup}${renderedText}</div>
+      <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; margin-bottom: 0.5rem; white-space: pre-wrap; word-break: break-word;">${imageMarkup}${renderedText}</div>
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; margin-bottom: ${msg.reactions && Object.keys(msg.reactions).length > 0 ? '0.5rem' : '0'};">
         ${actionButtons ? `<div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">${actionButtons}</div>` : ''}
         <button type="button" class="chat-react-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">😊 React</button>
@@ -1185,61 +1956,15 @@ function renderChatMessages(messages) {
 }
 
 function openChatRoom(chatId) {
-  const chatRoom = chatRoomsById[chatId];
-  if (!chatRoom) return;
-
-  selectedChatId = chatId;
-
-  const panel = document.getElementById('chatRoomPanel');
-  const titleEl = document.getElementById('activeChatTitle');
-  const metaEl = document.getElementById('activeChatMeta');
-  const messageInput = document.getElementById('chatMessageInput');
-  const messageForm = document.getElementById('chatMessageForm');
-
-  if (panel) {
-    panel.style.display = 'block';
-    
-    // Check if mobile (640px or less)
-    if (window.innerWidth <= 640) {
-      panel.classList.add('fullscreen-visible');
-      document.body.classList.add('chat-fullscreen-open');
-      document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-      document.body.style.height = '100vh';
-    }
-  }
-  
-  if (titleEl) titleEl.textContent = chatRoom.title;
-  if (metaEl) metaEl.textContent = `Created by ${chatRoom.createdByName || getUserName(chatRoom.createdByEmail)} • Status: ${chatRoom.status}`;
-  if (messageInput) messageInput.disabled = chatRoom.status !== 'Active';
-  if (messageForm) messageForm.style.opacity = chatRoom.status !== 'Active' ? '0.7' : '1';
-
-  clearReplyToMessage();
-  subscribeChatMessages(chatId);
-  
-  // Scroll to bottom after loading
-  setTimeout(() => {
-    const chatMessages = document.getElementById('chatMessages');
-    if (chatMessages) {
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-  }, 100);
+  window.location.href = `chat.html?chatId=${chatId}&from=member`;
 }
 
 function closeChatRoomPanel() {
   const panel = document.getElementById('chatRoomPanel');
   if (panel) {
     panel.style.display = 'none';
-    panel.classList.remove('fullscreen-visible');
+    panel.classList.remove('open');
   }
-
-  // Remove fullscreen mode
-  document.body.classList.remove('chat-fullscreen-open');
-  document.body.style.overflow = '';
-  document.body.style.position = '';
-  document.body.style.width = '';
-  document.body.style.height = '';
 
   if (chatMessagesUnsubscribe) {
     chatMessagesUnsubscribe();
@@ -1403,7 +2128,7 @@ async function sendChatMessage(event) {
   const currentEmail = userEmail || await getStoredUserEmail();
   const messageData = {
     senderEmail: currentEmail,
-    senderName: getUserName(currentEmail),
+    senderName: await getWelcomeName(currentEmail),
     text: message || '',
     createdAt: Date.now(),
     deleted: false
@@ -1583,33 +2308,47 @@ window.triggerChatImageInput = triggerChatImageInput;
 window.handleChatImageInputChange = handleChatImageInputChange;
 window.clearChatImageSelection = clearChatImageSelection;
 
-// Handle resize for responsive fullscreen chat
-window.addEventListener('resize', () => {
-  const chatPanel = document.getElementById('chatRoomPanel');
-  const isFullscreenOpen = document.body.classList.contains('chat-fullscreen-open');
-  
-  if (!chatPanel || chatPanel.style.display === 'none') return;
-  
-  // If screen is wider than 640px and fullscreen is active, close fullscreen mode
-  if (window.innerWidth > 640 && isFullscreenOpen) {
-    document.body.classList.remove('chat-fullscreen-open');
-    document.body.style.overflow = '';
-    document.body.style.position = '';
-    document.body.style.width = '';
-    document.body.style.height = '';
-    chatPanel.classList.remove('fullscreen-visible');
+async function enforcePasswordChangeIfNeeded() {
+  if (!userEmail) return false;
+
+  try {
+    const requiresChange = await getPasswordChangeRequired(userEmail);
+    if (!requiresChange) return false;
+
+    const currentPassword = await getAccountPasswordHint(userEmail);
+    const message = currentPassword
+      ? `For your security, please change your password before continuing. Your current password is: ${currentPassword}`
+      : 'For your security, please change your password before continuing.';
+
+    const newPassword = window.prompt(`${message}\n\nEnter a new password (at least 6 characters):`);
+    if (!newPassword) {
+      window.alert('A new password is required before continuing.');
+      return true;
+    }
+
+    const confirmPassword = window.prompt('Please confirm your new password:');
+    if (!confirmPassword) {
+      window.alert('Password confirmation is required.');
+      return true;
+    }
+
+    if (newPassword !== confirmPassword) {
+      window.alert('The new passwords do not match.');
+      return true;
+    }
+
+    await updateAccountPassword(userEmail, newPassword);
+    const storedUser = JSON.parse(localStorage.getItem('authUser') || '{}');
+    storedUser.passwordChangeRequired = false;
+    localStorage.setItem('authUser', JSON.stringify(storedUser));
+    window.alert('Password updated successfully.');
+    return false;
+  } catch (error) {
+    console.error('Unable to enforce password change:', error);
+    window.alert('Unable to update your password right now. Please try again.');
+    return true;
   }
-  
-  // If screen becomes mobile again while chat is open, restore fullscreen
-  if (window.innerWidth <= 640 && !isFullscreenOpen && chatPanel.style.display !== 'none') {
-    document.body.classList.add('chat-fullscreen-open');
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
-    document.body.style.height = '100vh';
-    chatPanel.classList.add('fullscreen-visible');
-  }
-});
+}
 
 // Attach the chat form handler after DOM is ready
 const createChatFormElement = document.getElementById('createChatForm');
@@ -1660,18 +2399,41 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     if (emptyState) emptyState.style.display = "none";
     if (welcomeEl) welcomeEl.style.display = "none";
   } else {
+    const requiresPasswordChange = await enforcePasswordChangeIfNeeded();
+    if (requiresPasswordChange) {
+      console.log('Password change required; stopping member dashboard initialization.');
+      return;
+    }
     console.log('User authenticated, setting up dashboard for:', userEmail);
     if (!auth.currentUser) {
       console.log('Auth not ready, signing in anonymously...');
       await signInAnonymously(auth);
       console.log('Auth ready');
     }
-    if (welcomeEl) welcomeEl.textContent = `Welcome, ${getUserName(userEmail)}`;
+    if (welcomeEl) {
+      const welcomeName = await getWelcomeName(userEmail);
+      welcomeEl.textContent = `Welcome, ${welcomeName}`;
+    }
     console.log('User logged in as:', userEmail);
     console.log('Starting to load data from Firestore...');
     
     // Initialize notifications
     initializeNotifications();
+
+    watchMemberAccessState();
+    startMemberPresenceHeartbeat();
+    subscribeToMemberStatuses();
+    // Start periodic polling of userRoles from Firestore every 2 minutes
+    startMemberStatusPolling(120000);
+
+    const storedUser = JSON.parse(localStorage.getItem('authUser') || '{}');
+    applyRestrictedMemberView(storedUser.accessAllowed !== false, storedUser.accessReason || '');
+
+    if (window.__restrictedMemberMode) {
+      if (typeof window.showSection === 'function') {
+        window.showSection('submit-ticket');
+      }
+    }
     
     // Update date and time every second
     updateDateTime();
@@ -1686,36 +2448,141 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
       console.log('Tasks snapshot received, docs count:', snap.size);
       container.innerHTML = "";
       let taskCount = 0;
+      let hiddenDoneCount = 0;
+      const deadlineWarnings = [];
 
       const docs = [];
       snap.forEach(doc => docs.push(doc));
-      docs.sort((a, b) => b.data().createdAt - a.data().createdAt);
+      // Sort tasks: high-priority statuses (pending, overdue, needs action, pending validation) first,
+      // then others, with 'done'/'completed' at the bottom. Within same priority, newest first.
+      function statusPriority(status) {
+        const s = String(status || '').toLowerCase().trim();
+        if (s === 'done' || s === 'completed') return 2;
+        if (s === 'pending' || s === 'overdue' || s === 'needs action' || s === 'needs_action' || s === 'pending validation' || s === 'pending_validation') return 0;
+        return 1;
+      }
+      function createdAtMillis(val) {
+        if (!val) return 0;
+        if (typeof val === 'number') return val;
+        if (val && typeof val.toMillis === 'function') return val.toMillis();
+        const parsed = Date.parse(String(val));
+        return isNaN(parsed) ? 0 : parsed;
+      }
+
+      docs.sort((a, b) => {
+        const ta = a.data();
+        const tb = b.data();
+        const pa = statusPriority(ta.status);
+        const pb = statusPriority(tb.status);
+        if (pa !== pb) return pa - pb;
+        const ca = createdAtMillis(ta.createdAt);
+        const cb = createdAtMillis(tb.createdAt);
+        return cb - ca;
+      });
+
+      const activeTasks = [];
+      const completedTasks = [];
 
       docs.forEach(doc => {
         const t = doc.data();
         console.log('Processing task:', t.title, 'assigned to:', t.assignedTo, 'current user:', userEmail);
         if (t.assignedTo !== "everyone" && t.assignedTo !== userEmail) return;
 
-        taskCount++;
+        const status = String(t.status || '').toLowerCase().trim();
+        const isDoneStatus = status === 'done' || status === 'completed';
+
+        const previousTask = previousTaskMap.get(doc.id);
+        const taskUpdated = previousTask && previousTask.status !== t.status;
+        const feedbackUpdated = previousTask && Array.isArray(t.feedbacks) && Array.isArray(previousTask.feedbacks) && t.feedbacks.length > previousTask.feedbacks.length;
+        const taskCreated = !previousTask;
+
+        if (taskNotificationsInitialized && taskCreated) {
+          showAdminUpdateNotification('New Task Assigned', `A new task has been assigned: "${t.title}"`);
+        }
+
+        if (taskNotificationsInitialized && taskUpdated) {
+          showAdminUpdateNotification('Task Status Updated', `Task "${t.title}" status changed to ${t.status}.`);
+        }
+
+        if (taskNotificationsInitialized && feedbackUpdated) {
+          showAdminUpdateNotification('New Task Feedback', `New feedback was added for task: "${t.title}"`);
+        }
+
+        previousTaskMap.set(doc.id, t);
+
         const warning = getDeadlineWarning(t.deadline, t.status);
-        container.innerHTML += `
+        const taskHtml = `
           <div class="task-item ${warning.class} ${t.status === "needs action" ? "task-needs-action" : ""}">
             <div class="task-header">
               <h3 class="task-title">${t.title}</h3>
               <span class="task-status ${t.status === "done" ? "status-completed" : t.status === "pending validation" ? "status-validation" : t.status === "needs action" ? "status-needs-action" : "status-pending"}">${t.status === "needs action" ? "Needs Action" : t.status}</span>
               ${warning.message ? `<span class="task-warning">${warning.message}</span>` : ""}
             </div>
-            ${t.description ? `<p style="color: #cbd5e1; margin: 0.75rem 0;">${t.description}</p>` : ""}
+            ${t.description ? `<p style="color: #cbd5e1; margin: 0.75rem 0; white-space: pre-wrap; word-break: break-word;">${t.description}</p>` : ""}
             ${t.status === "needs action" ? `<p style="color: #f59e0b; margin: 0.5rem 0; font-weight: bold;">⚠️ This task needs your immediate action from the admin.</p>` : ""}
             <div class="task-meta">
               <span>📅 ${t.deadline}</span>
             </div>
             ${t.linkURL ? `<a href="${t.linkURL}" target="_blank" style="display: inline-block; margin-top: 0.5rem;">🔗 Open Link</a>` : ""}
             ${t.status === "pending" || t.status === "needs action" ? `<button onclick="markDone('${doc.id}')" class="btn-submit">Already Submitted</button>` : ""}
+            <div style="margin-top:0.75rem;">
+              <h4 style="margin:0 0 0.5rem 0; color:#f3f4f6;">Feedback</h4>
+              <div id="member-feedback-list-${doc.id}">
+                ${Array.isArray(t.feedbacks) && t.feedbacks.length > 0 ? t.feedbacks.map(f => {
+                  const time = f.createdAt && f.createdAt.toDate ? f.createdAt.toDate().toLocaleString() : (f.createdAt ? new Date(f.createdAt).toLocaleString() : '');
+                  const authorName = getUserName(f.author) || 'Admin';
+                  return `<div style="padding:0.5rem; border:1px solid #334155; border-radius:6px; margin-bottom:0.5rem; background:#041024;"><div style="font-weight:600; color:#f3f4f6;">${authorName} <span style="font-weight:400; color:#94a3b8; font-size:0.85rem; margin-left:0.5rem;">${time}</span></div><div style="color:#cbd5e1; margin-top:0.25rem; white-space: pre-wrap; word-break: break-word;">${f.message}</div></div>`;
+                }).join('') : '<p style="color:#94a3b8;">No feedback yet.</p>'}
+              </div>
+            </div>
           </div>
         `;
+
+        if (isDoneStatus) {
+          hiddenDoneCount++;
+          completedTasks.push(taskHtml);
+        } else {
+          activeTasks.push(taskHtml);
+          taskCount++;
+          if (warning.message) {
+            deadlineWarnings.push({
+              id: doc.id,
+              title: t.title,
+              deadline: t.deadline,
+              status: warning.message
+            });
+          }
+        }
       });
 
+      if (deadlineWarnings.length > 0) {
+        const newDeadlineWarnings = deadlineWarnings.filter(warning => !shownDeadlineTaskIds.has(warning.id));
+        if (newDeadlineWarnings.length > 0) {
+          showTaskDeadlineModal(newDeadlineWarnings);
+          newDeadlineWarnings.forEach(warning => shownDeadlineTaskIds.add(warning.id));
+        }
+      }
+
+      if (completedTasks.length > 0) {
+        if (completedTasksSection) {
+          completedTasksSection.style.display = '';
+        }
+        if (completedTasksToggleBtn) {
+          completedTasksToggleBtn.textContent = completedTasksCollapsed
+            ? `Show completed tasks (${completedTasks.length})`
+            : `Hide completed tasks (${completedTasks.length})`;
+        }
+        if (completedTasksList) {
+          completedTasksList.innerHTML = completedTasks.join('');
+          completedTasksList.style.display = completedTasksCollapsed ? 'none' : 'block';
+        }
+      } else {
+        if (completedTasksSection) {
+          completedTasksSection.style.display = 'none';
+        }
+      }
+
+      container.innerHTML = activeTasks.join('');
       if (emptyState) {
         emptyState.style.display = taskCount === 0 ? "block" : "none";
       }
@@ -1727,20 +2594,13 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
       console.error('Tasks onSnapshot error:', error);
     });
     
-    // Load polls and announcements
+    // Load polls, announcements, and in-app notifications
     loadPolls();
     loadAnnouncements();
+    loadInAppNotifications();
+    checkMaintenance();
+    loadProgressReport();
     loadResources();
-    
-    // Load members and progress with real-time listener
-    console.log('🔄 Initializing members listener...');
-    initializeMembersListener();
-    
-    console.log('🔄 Initializing progress report listener...');
-    initializeProgressReportListener();
-    
-    console.log('🔄 Loading progress report data...');
-    window.loadProgressReport();
 
     // Always ensure chat room list stays synced after refresh
     loadChatRooms();
@@ -1785,11 +2645,11 @@ function ensureTicketHistorySection() {
   }
 }
 
-function loadTicketHistory() {
-  console.log('=== loadTicketHistory CALLED - STARTING ===');
+function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticketHistoryEmptyState") {
+  console.log('=== loadTicketHistory CALLED - STARTING ===', containerId, emptyStateId);
 
-  const container = document.getElementById("ticketHistory");
-  const emptyState = document.getElementById("ticketHistoryEmptyState");
+  const container = document.getElementById(containerId);
+  const emptyState = document.getElementById(emptyStateId);
   const ticketCard = container?.closest('.card');
 
   if (!container) {
@@ -1809,11 +2669,10 @@ function loadTicketHistory() {
 
   // Optional: Still try to load from Firebase in background
   if (userEmail) {
-    // Use real-time listener like admin
-    const unsubscribe = onSnapshot(collection(db, "tickets"), (snapshot) => {
-      console.log('=== TICKETS SNAPSHOT RECEIVED ===');
-      console.log('Found', snapshot.size, 'tickets');
-
+      // Use real-time listener like admin
+      const unsubscribe = onSnapshot(collection(db, "tickets"), (snapshot) => {
+        console.log('=== TICKETS SNAPSHOT RECEIVED ===');
+        console.log('Found', snapshot.size, 'tickets');
       let ticketHtml = '';
       let ticketCount = 0;
 
@@ -1838,7 +2697,17 @@ function loadTicketHistory() {
           return;
         }
 
+        const previousTicket = previousTicketMap.get(doc.id);
         ticketCount++;
+
+        if (ticketNotificationsInitialized && !previousTicket) {
+          const recipientEmail = ticket.assignedTo || ticket.submittedBy;
+          const shouldNotify = recipientEmail === userEmail;
+          if (shouldNotify) {
+            showAdminUpdateNotification('Ticket Created', `A new ticket has been created: "${ticket.title}"`);
+          }
+        }
+        previousTicketMap.set(doc.id, ticket);
 
         const createdDate = ticket.createdAt?.toDate?.() ? ticket.createdAt.toDate().toLocaleDateString() : "Unknown date";
         const status = ticket.status || "open";
@@ -1848,7 +2717,7 @@ function loadTicketHistory() {
         const responseHtml = responses.length > 0 ?
           responses.map(response => `
             <div style="margin-bottom: 0.5rem; padding: 0.5rem; border: 1px solid #4b5563; border-radius: 0.25rem; background: #1f2937;">
-              <strong>${response.author || 'Admin'}:</strong> ${response.content}
+              <strong>${response.author || 'Admin'}:</strong> <span style="white-space: pre-wrap; word-break: break-word;">${response.content}</span>
             </div>
           `).join('') : '<p style="color: #9ca3af; margin: 0;">No admin feedback yet.</p>';
 
@@ -1859,7 +2728,7 @@ function loadTicketHistory() {
               <span style="padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; font-weight: 600; background: ${status === 'open' ? '#ef4444' : status === 'pending validation' ? '#f59e0b' : '#10b981'}; color: white;">${statusLabel}</span>
             </div>
             <p style="margin: 0 0 0.5rem 0; color: #94a3b8; font-size: 0.8rem;">Assigned: ${createdDate}</p>
-            <p style="margin: 0 0 0.5rem 0; color: #d1d5db;">${ticket.description}</p>
+            <p style="margin: 0 0 0.5rem 0; color: #d1d5db; white-space: pre-wrap; word-break: break-word;">${ticket.description}</p>
             <div style="padding: 0.5rem; background: #0f172a; border-radius: 0.25rem;">
               <h5 style="margin: 0 0 0.5rem 0; color: #f3f4f6; font-size: 0.9rem;">Admin Feedback</h5>
               ${responseHtml}
@@ -1874,6 +2743,7 @@ function loadTicketHistory() {
         // Keep the static message if no tickets
         container.innerHTML = '<div style="padding: 1rem; border: 1px solid #374151; border-radius: 0.5rem; background: #1e293b; margin-bottom: 1rem;"><h4 style="margin: 0 0 0.5rem 0; color: #f3f4f6;">Ticket History Section</h4><p style="margin: 0; color: #d1d5db;">No tickets found.</p></div>';
       }
+      ticketNotificationsInitialized = true;
     }, (error) => {
       console.error('Error loading tickets:', error);
       // Keep the static message on error
@@ -1883,6 +2753,18 @@ function loadTicketHistory() {
     window.ticketHistoryUnsubscribe = unsubscribe;
   }
 }
+
+window.toggleCompletedTasks = function() {
+  completedTasksCollapsed = !completedTasksCollapsed;
+  if (!completedTasksToggleBtn || !completedTasksList) return;
+
+  const completedCount = completedTasksList.children.length;
+  completedTasksToggleBtn.textContent = completedTasksCollapsed
+    ? `Show completed tasks (${completedCount})`
+    : `Hide completed tasks (${completedCount})`;
+  completedTasksList.style.display = completedTasksCollapsed ? 'none' : 'block';
+  localStorage.setItem('completedTasksCollapsed', completedTasksCollapsed ? 'true' : 'false');
+};
 
 // Make loadTicketHistory available globally
 window.loadTicketHistory = loadTicketHistory;

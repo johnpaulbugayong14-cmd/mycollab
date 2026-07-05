@@ -86,12 +86,11 @@ import {
   getDocs,
   arrayUnion,
   query,
-  where,
   orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 import { db } from "./firebase.js";
-import { signOutUser, getStoredUserEmail, getStoredUserRole } from "./auth.js";
+import { signOutUser, getStoredUserEmail, getStoredUserRole, setUserRole, setUserAccess, createMemberAccount, deleteMemberAccount, approvePasswordReset } from "./auth.js";
 import { sendNotificationToUsers, showLocalNotification, initializeNotifications } from "./notifications.js";
 
 window.signOutUser = signOutUser;
@@ -123,11 +122,161 @@ window.lastAnalyticsTasks = lastAnalyticsTasks;
 const progressReportCollection = "progressReports";
 const progressReportDocId = "thesisProgress";
 const progressStatuses = ["Not Started", "Pending", "Completed"];
-const membersCollection = "members";
+const progressStorageKey = "thesisProgressReportBackup";
+
+function getProgressBackupSections() {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return null;
+    const cached = window.localStorage.getItem(progressStorageKey);
+    if (!cached) return null;
+    const parsed = JSON.parse(cached);
+    if (Array.isArray(parsed?.sections)) return parsed.sections;
+    if (Array.isArray(parsed)) return parsed;
+  } catch (error) {
+    console.warn("Unable to read cached progress report:", error);
+  }
+  return null;
+}
+
+function saveProgressBackupSections(sections) {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      window.localStorage.setItem(progressStorageKey, JSON.stringify({ sections, updatedAt: new Date().toISOString() }));
+    }
+  } catch (error) {
+    console.warn("Unable to cache progress report locally:", error);
+  }
+}
+
+function normalizeProgressSections(sections, defaultSections = getDefaultProgressStructure()) {
+  if (!Array.isArray(sections)) return null;
+
+  const defaultTitles = defaultSections.map(section => section.title);
+  const normalizedDefault = defaultSections.map((defaultSection) => {
+    const savedSection = sections.find(section => section.title === defaultSection.title) || {};
+    const items = Array.isArray(savedSection.items) ? savedSection.items : [];
+
+    return {
+      title: defaultSection.title,
+      items: defaultSection.items.map((defaultItem) => {
+        const savedItem = items.find(item => item.name === defaultItem.name) || {};
+        return {
+          name: defaultItem.name,
+          status: savedItem.status || defaultItem.status || "Not Started",
+          assignedTo: Array.isArray(savedItem.assignedTo) ? savedItem.assignedTo : (savedItem.assignedTo ? [savedItem.assignedTo] : []),
+          assignedToName: Array.isArray(savedItem.assignedToName) ? savedItem.assignedToName : (savedItem.assignedToName ? [savedItem.assignedToName] : [])
+        };
+      })
+    };
+  });
+
+  const extraSections = sections
+    .filter(section => section && typeof section === 'object' && !defaultTitles.includes(section.title))
+    .map((section, index) => ({
+      title: section.title || `Additional Section ${normalizedDefault.length + index + 1}`,
+      items: Array.isArray(section.items) ? section.items.map((item) => ({
+        name: item.name || 'New Item',
+        status: item.status || 'Not Started',
+        assignedTo: Array.isArray(item.assignedTo) ? item.assignedTo : (item.assignedTo ? [item.assignedTo] : []),
+        assignedToName: Array.isArray(item.assignedToName) ? item.assignedToName : (item.assignedToName ? [item.assignedToName] : [])
+      })) : []
+    }));
+
+  return [...normalizedDefault, ...extraSections];
+}
+
+async function persistProgressReportSections(sections) {
+  const progressRef = doc(db, progressReportCollection, progressReportDocId);
+  try {
+    await setDoc(progressRef, { sections, updatedAt: new Date().toISOString() }, { merge: true });
+    saveProgressBackupSections(sections);
+    return true;
+  } catch (error) {
+    console.error("Firestore progress save failed, falling back to local storage:", error);
+    saveProgressBackupSections(sections);
+    return false;
+  }
+}
 
 let members = [
   { uid: "everyone", name: "Everyone" }
 ];
+
+const memberRoles = {
+  member: {
+    label: 'Member',
+    privileges: []
+  },
+  'limited-admin': {
+    label: 'Limited Admin',
+    privileges: [
+      'manage task created',
+      'manage progress report section',
+      'create task',
+      'manage chat',
+      'manage ticket submitted',
+      'create announcement',
+      'create poll',
+      'create resource',
+      'task analytics'
+    ]
+  },
+  admin: {
+    label: 'Admin',
+    privileges: [
+      'manage task created',
+      'manage progress report section',
+      'create task',
+      'manage chat',
+      'manage ticket submitted',
+      'create announcement',
+      'create poll',
+      'create resource',
+      'manage in-app notifications',
+      'manage polls',
+      'manage announcements',
+      'manage resources',
+      'manage members',
+      'maintenance',
+      'task analytics',
+      'video conference'
+    ]
+  }
+};
+
+const adminRoleAllowedSections = {
+  member: [],
+  'limited-admin': [
+    'create-task',
+    'create-poll',
+    'create-announcement',
+    'create-resource',
+    'support-tickets',
+    'progress-report',
+    'task-analytics',
+    'all-tasks',
+    'live-chat'
+  ],
+  admin: [
+    'create-task',
+    'create-poll',
+    'create-announcement',
+    'create-in-app-notification',
+    'create-resource',
+    'manage-in-app-notifications',
+    'manage-polls',
+    'manage-announcements',
+    'support-tickets',
+    'maintenance',
+    'manage-resources',
+    'manage-members',
+    'progress-report',
+    'task-analytics',
+    'all-tasks',
+    'video-conference',
+    'live-chat'
+  ]
+};
 
 const mentionUsers = [];
 
@@ -135,256 +284,76 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function isHiddenMember(memberOrEmail) {
+  const normalized = normalizeEmail(memberOrEmail?.uid || memberOrEmail);
+  return normalized === 'everyone' || normalized === 'johnpaulbugayong@gmail.com';
+}
+
+function ensureMemberEntry(email, fallbackName = null) {
+  const normalized = normalizeEmail(email);
+  if (!normalized || isHiddenMember(normalized)) return null;
+
+  let member = members.find(m => normalizeEmail(m.uid) === normalized);
+  if (!member) {
+    member = { uid: normalized, name: fallbackName || normalized.split('@')[0] || normalized };
+    members.push(member);
+  }
+
+  if (!mentionUsers.find(user => normalizeEmail(user.uid) === normalized)) {
+    mentionUsers.push(member);
+  }
+
+  return member;
+}
+
+function syncMentionUsers() {
+  mentionUsers.splice(0, mentionUsers.length, ...members.filter(member => !isHiddenMember(member)));
+}
+
+function resetMemberCatalog() {
+  members.splice(0, members.length, { uid: 'everyone', name: 'Everyone' });
+  mentionUsers.splice(0, mentionUsers.length);
+}
+
+function isTrackedAuthMember(data = {}) {
+  return data.hasAuthAccount === true || data.authAccount === true || data.authProvider === 'password' || data.authProvider === 'firebase' || data.authProvider === 'firestore' || data.createdByAdmin === true || data.createdViaAuth === true || data.authTracked === true || data.createdViaAdmin === true || data.displayName || data.name;
+}
+
+async function refreshMentionMembers() {
+  try {
+    const snapshot = await getDocs(collection(db, 'userRoles'));
+    resetMemberCatalog();
+
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() || {};
+      if (!isTrackedAuthMember(data)) return;
+
+      const docId = normalizeEmail(docSnap.id);
+      if (!docId) return;
+      const displayName = typeof data.displayName === 'string' && data.displayName.trim()
+        ? data.displayName.trim()
+        : (typeof data.name === 'string' && data.name.trim() ? data.name.trim() : (typeof data.email === 'string' && data.email.trim() ? data.email.trim() : docId));
+      ensureMemberEntry(docId, displayName);
+    });
+
+    if (adminEmail) {
+      ensureMemberEntry(adminEmail, adminEmail);
+    }
+
+    syncMentionUsers();
+  } catch (error) {
+    console.warn('Unable to refresh admin member list:', error);
+  }
+}
+
 function getUserName(email) {
   const normalized = normalizeEmail(email);
   const member = members.find(m => normalizeEmail(m.uid) === normalized);
-  return member ? member.name : email;
+  if (member) return member.name;
+
+  const created = ensureMemberEntry(email, email);
+  return created ? created.name : email;
 }
-
-// Load members from Firestore
-async function loadMembersFromFirestore() {
-  try {
-    const querySnapshot = await getDocs(collection(db, membersCollection));
-    const firestoreMembers = [];
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      firestoreMembers.push({
-        uid: data.email,
-        name: data.name,
-        email: data.email,
-        role: data.role,
-        gmailAddress: data.gmailAddress || null
-      });
-    });
-    
-    // Update members array, keeping "Everyone" at the beginning
-    members = [
-      { uid: "everyone", name: "Everyone" },
-      ...firestoreMembers
-    ];
-    
-    // Update mention users to exclude "Everyone"
-    mentionUsers.length = 0;
-    members.filter(m => m.uid !== 'everyone').forEach(m => {
-      mentionUsers.push({ uid: m.uid, name: m.name });
-    });
-    
-    // Reload UI elements that depend on members
-    loadMembers();
-    loadAnnouncementAssignTo();
-    
-    console.log('Members loaded from Firestore:', members);
-  } catch (error) {
-    console.error('Error loading members from Firestore:', error);
-  }
-}
-
-// Load members into "Assign To" dropdown for task creation
-function loadMembers() {
-  const select = document.getElementById("assignedTo");
-  if (!select) return;
-  
-  select.innerHTML = '<option value="">Select a member</option>';
-
-  members.forEach(m => {
-    if (m.uid !== 'everyone') {
-      select.innerHTML += `<option value="${m.uid}">${m.name}</option>`;
-    }
-  });
-}
-
-// Load members into announcement assignment checkboxes
-function loadAnnouncementAssignTo() {
-  const container = document.getElementById("announcementAssignTo");
-  if (!container) return;
-  container.innerHTML = "";
-
-  members.forEach(m => {
-    container.innerHTML += `
-      <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.9rem;">
-        <input type="checkbox" value="${m.uid}" class="announcement-assign-checkbox">
-        ${m.name}
-      </label>
-    `;
-  });
-}
-
-// Real-time listener for members - updates UI automatically when members change
-let membersUnsubscribe = null;
-function initializeMembersListener() {
-  if (membersUnsubscribe) {
-    membersUnsubscribe(); // Unsubscribe from previous listener if exists
-  }
-  
-  membersUnsubscribe = onSnapshot(collection(db, membersCollection), (snapshot) => {
-    const firestoreMembers = [];
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      firestoreMembers.push({
-        uid: data.email,
-        name: data.name,
-        email: data.email,
-        role: data.role,
-        gmailAddress: data.gmailAddress || null
-      });
-    });
-    
-    // Update members array, keeping "Everyone" at the beginning
-    members = [
-      { uid: "everyone", name: "Everyone" },
-      ...firestoreMembers
-    ];
-    
-    // Update mention users to exclude "Everyone"
-    mentionUsers.length = 0;
-    members.filter(m => m.uid !== 'everyone').forEach(m => {
-      mentionUsers.push({ uid: m.uid, name: m.name });
-    });
-    
-    // Reload UI elements that depend on members
-    loadMembers();
-    loadAnnouncementAssignTo();
-    populateProgressReportAssignedTo();
-    renderMembersList();
-    loadProgressReport();
-    
-    console.log('Members updated from Firestore (real-time):', members);
-  }, (error) => {
-    console.error('Error listening to members:', error);
-  });
-}
-
-// Real-time listener for progress reports - updates when members change status
-let progressReportUnsubscribe = null;
-function initializeProgressReportListener() {
-  console.log('=== INITIALIZE PROGRESS REPORT LISTENER ===');
-  if (progressReportUnsubscribe) {
-    console.log('Unsubscribing from previous listener');
-    progressReportUnsubscribe();
-  }
-  
-  progressReportUnsubscribe = onSnapshot(doc(db, progressReportCollection, progressReportDocId), (docSnap) => {
-    console.log('📡 Progress report listener triggered');
-    console.log('Document exists:', docSnap.exists());
-    
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      console.log('Document data:', data);
-      const sections = data.sections || [];
-      console.log('Sections in listener:', sections.length);
-      renderAdminProgressReport(sections);
-    } else {
-      console.log('Progress report document does not exist yet');
-    }
-  }, (error) => {
-    console.error('❌ Error listening to progress report:', error);
-  });
-  
-  console.log('✅ Real-time listener initialized');
-}
-
-window.initializeProgressReportListener = initializeProgressReportListener;
-
-// Create new member account
-window.createMemberAccount = async function() {
-  const name = document.getElementById("memberName").value.trim();
-  const email = document.getElementById("memberEmail").value.trim().toLowerCase();
-  const password = document.getElementById("memberPassword").value;
-  const gmailAddress = document.getElementById("memberGmail").value.trim().toLowerCase();
-  
-  if (!name || !email || !password) {
-    alert("Please fill in all required fields");
-    return;
-  }
-  
-  try {
-    // Add member to Firestore
-    const docRef = await addDoc(collection(db, membersCollection), {
-      name: name,
-      email: email,
-      gmailAddress: gmailAddress || null,
-      role: "member",
-      createdAt: new Date(),
-      password: password // Note: In production, never store plain passwords - use proper backend authentication
-    });
-    
-    alert(`Member account created successfully for ${name}`);
-    
-    // Clear form
-    document.getElementById("memberName").value = '';
-    document.getElementById("memberEmail").value = '';
-    document.getElementById("memberPassword").value = '';
-    document.getElementById("memberGmail").value = '';
-    
-    // Reload members
-    loadMembersFromFirestore();
-  } catch (error) {
-    console.error('Error creating member account:', error);
-    alert(`Error creating member account: ${error.message}`);
-  }
-};
-
-// Generate random password
-window.generatePassword = function() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
-  let password = '';
-  for (let i = 0; i < 12; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  document.getElementById("memberPassword").value = password;
-};
-
-// Delete member
-window.deleteMember = async function(email) {
-  if (!confirm(`Are you sure you want to delete this member? This action cannot be undone.`)) {
-    return;
-  }
-  
-  try {
-    // Delete from Firestore
-    const q = query(collection(db, membersCollection), where("email", "==", email));
-    const querySnapshot = await getDocs(q);
-    
-    // Wait for all deletions to complete
-    const deletePromises = [];
-    querySnapshot.forEach((doc) => {
-      deletePromises.push(deleteDoc(doc.ref));
-    });
-    await Promise.all(deletePromises);
-    
-    alert("Member deleted successfully");
-    loadMembersFromFirestore();
-  } catch (error) {
-    console.error('Error deleting member:', error);
-    alert(`Error deleting member: ${error.message}`);
-  }
-};
-
-// Render members list in manage-members section
-async function renderMembersList() {
-  const membersList = document.getElementById('membersList');
-  if (!membersList) return;
-  
-  if (members.length <= 1) {
-    membersList.innerHTML = '<p style="color: #94a3b8; text-align: center;">No members yet. Create one using the form above.</p>';
-    return;
-  }
-  
-  membersList.innerHTML = members
-    .filter(m => m.uid !== 'everyone')
-    .map(m => `
-      <div style="padding: 1rem; background: #111827; border: 1px solid #374151; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
-        <div>
-          <div style="color: #f8fafc; font-weight: 500;">${m.name}</div>
-          <div style="color: #94a3b8; font-size: 0.9rem;">🔐 Login: ${m.email}</div>
-          ${m.gmailAddress ? `<div style="color: #94a3b8; font-size: 0.9rem;">📧 Gmail: ${m.gmailAddress}</div>` : '<div style="color: #7c3aed; font-size: 0.9rem;">⚠️ No Gmail set</div>'}
-        </div>
-        <button onclick="deleteMember('${m.email}')" class="btn-delete" style="padding: 0.5rem 1rem; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer;">Delete</button>
-      </div>
-    `).join('');
-}
-
-window.renderMembersList = renderMembersList;
 
 let adminEmail = null;
 let adminRole = null;
@@ -396,6 +365,51 @@ let adminChatMessagesById = {};
 let adminReplyToMessage = null;
 let selectedAdminChatImageData = null;
 let selectedAdminChatImageName = null;
+let userRolesUnsubscribe = null;
+let adminProgressSections = [];
+
+function parseDateValue(value) {
+  if (!value) return null;
+  if (value && typeof value.toDate === 'function') {
+    return value.toDate();
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  return null;
+}
+
+function formatDateTime(value) {
+  const date = parseDateValue(value);
+  if (!date) return 'Unknown';
+  return date.toLocaleString();
+}
+
+function getTimeAgo(value) {
+  const date = parseDateValue(value);
+  if (!date) return '';
+  const diffMs = Date.now() - date.getTime();
+  const seconds = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days >= 1) return days === 1 ? '1 day ago' : `${days} days ago`;
+  if (hours >= 1) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  if (minutes >= 1) return minutes === 1 ? '1 minute ago' : `${minutes} minutes ago`;
+  return 'just now';
+}
+
+function isMemberCurrentlyActive(member) {
+  if (!member || !member.lastActive) return false;
+  const lastActiveDate = parseDateValue(member.lastActive);
+  if (!lastActiveDate) return false;
+  const ageSeconds = (Date.now() - lastActiveDate.getTime()) / 1000;
+  return ageSeconds < 120 && member.isOnline !== false;
+}
 
 (async () => {
   // Retry getting admin credentials if first attempt fails (to handle timing issues)
@@ -412,7 +426,9 @@ let selectedAdminChatImageName = null;
     }
   }
 
-// This function is no longer used - admins create custom sections dynamically
+function getDefaultProgressStructure() {
+  return [];
+}
 
 function renderAdminProgressReport(sections) {
   console.log('=== RENDER ADMIN PROGRESS REPORT CALLED ===');
@@ -425,115 +441,600 @@ function renderAdminProgressReport(sections) {
     return;
   }
 
+  adminProgressSections = Array.isArray(sections) ? sections : [];
+
   if (!Array.isArray(sections) || sections.length === 0) {
     console.log('No sections to render');
-    container.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No items added yet. Create items to get started.</p>';
+    container.innerHTML = '<p style="color: #94a3b8; text-align: center;">No progress report data yet.</p>';
     return;
   }
 
   console.log('Rendering', sections.length, 'sections');
-  
-  // Flatten all items from all sections into a single list
-  let allItems = [];
-  sections.forEach((section, sectionIndex) => {
-    console.log(`Processing section "${section.title}" with ${section.items?.length || 0} items`);
-    if (Array.isArray(section.items)) {
-      section.items.forEach((item, itemIndex) => {
-        console.log(`  Adding item: "${item.name}"`);
-        allItems.push({
-          name: item.name,
-          section: section.title,
-          status: item.status,
-          assignedTo: item.assignedTo,
-          sectionIndex,
-          itemIndex
-        });
-      });
-    }
-  });
-  
-  console.log('✅ Total items flattened:', allItems.length);
-  
-  if (allItems.length === 0) {
-    console.log('⚠️ No items to display');
-    container.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">No items added yet. Create items to get started.</p>';
-    return;
-  }
-  
-  // Render as a table
-  const tableHTML = `
-    <table style="width: 100%; border-collapse: collapse; background: #111827; border: 1px solid #374151; border-radius: 0.5rem; overflow: hidden;">
-      <thead>
-        <tr style="background: #0f172a; border-bottom: 1px solid #4b5563;">
-          <th style="padding: 0.75rem 1rem; text-align: left; color: #cbd5e1; font-weight: 600;">Task Name</th>
-          <th style="padding: 0.75rem 1rem; text-align: left; color: #cbd5e1; font-weight: 600;">Assigned To</th>
-          <th style="padding: 0.75rem 1rem; text-align: left; color: #cbd5e1; font-weight: 600;">Status</th>
-          <th style="padding: 0.75rem 1rem; text-align: center; color: #cbd5e1; font-weight: 600; width: 60px;">Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${allItems.map((item) => {
-          const assignedToNames = Array.isArray(item.assignedTo) ? item.assignedTo.map(email => {
-            const member = members.find(m => m.uid === email);
-            return member ? member.name : email;
-          }).join(', ') : 'Unassigned';
-          
-          return `
-            <tr style="border-bottom: 1px solid #374151; hover: background: #1a1f2e;">
-              <td style="padding: 0.75rem 1rem; color: #d1d5db; font-weight: 500;">${item.name}</td>
-              <td style="padding: 0.75rem 1rem; color: #94a3b8; font-size: 0.9rem;">${assignedToNames}</td>
-              <td style="padding: 0.75rem 1rem;">
-                <select id="progress-${item.sectionIndex}-${item.itemIndex}" style="background: #0f172a; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.4rem 0.5rem; font-size: 0.85rem; width: 100%;">
-                  <option value="Not Started" ${item.status === 'Not Started' || !item.status ? 'selected' : ''}>Not Started</option>
-                  <option value="Pending" ${item.status === 'Pending' ? 'selected' : ''}>Pending</option>
-                  <option value="Completed" ${item.status === 'Completed' ? 'selected' : ''}>Completed</option>
-                </select>
-              </td>
-              <td style="padding: 0.75rem 1rem; text-align: center;">
-                <button onclick="editProgressItem(${item.sectionIndex}, ${item.itemIndex})" style="padding: 0.4rem 0.6rem; background: #3b82f6; color: white; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.85rem;"><i class="fas fa-edit"></i></button>
-              </td>
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    </table>
-  `;
-  
-  console.log('📋 Table HTML generated, setting innerHTML...');
-  container.innerHTML = tableHTML;
-  console.log('✅ Table rendered in DOM');
+  container.innerHTML = sections.map((section, sectionIndex) => `
+    <div style="margin-bottom: 1.25rem;">
+      <h3 style="margin: 0 0 0.75rem 0; color: #0ea5e9;">${section.title}</h3>
+      ${Array.isArray(section.items) ? section.items.map((item, itemIndex) => {
+        const assignedToValue = Array.isArray(item.assignedTo) ? item.assignedTo : (item.assignedTo ? [item.assignedTo] : []);
+        return `
+          <div style="display: grid; gap: 0.75rem; margin-bottom: 0.65rem; padding: 0.75rem; background: #111827; border: 1px solid #374151; border-radius: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+              ${item.isNewItem ? `<input id="itemName-${sectionIndex}-${itemIndex}" type="text" value="${escapeHtml(item.name || '')}" placeholder="Item name" style="flex:1 1 auto; min-width:0; width:auto; background:#0f172a; color:#f8fafc; border:1px solid #4b5563; border-radius:0.375rem; padding:0.5rem; font-size:0.95rem;" />` : `<span style="color: #d1d5db;">${escapeHtml(item.name || '')}</span>`}
+              <select id="progress-${sectionIndex}-${itemIndex}" style="background: #0f172a; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.875rem;">
+                <option value="Not Started" ${item.status === 'Not Started' || !item.status ? 'selected' : ''}>Not Started</option>
+                <option value="Pending" ${item.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                <option value="Completed" ${item.status === 'Completed' ? 'selected' : ''}>Completed</option>
+              </select>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
+              <label style="color: #cbd5e1; font-size: 0.9rem; min-width: 120px;">Assign to:</label>
+              <select id="assignedTo-${sectionIndex}-${itemIndex}" multiple style="background: #0f172a; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.45rem 0.6rem; min-width: 180px; min-height: 40px;">
+                <option value="" ${Array.isArray(assignedToValue) ? (!assignedToValue.includes('') && assignedToValue.length === 0) : assignedToValue === '' ? 'selected' : ''}>Unassigned</option>
+                ${members.filter(member => !isHiddenMember(member)).map(member => `
+                  <option value="${member.uid}" ${Array.isArray(assignedToValue) ? (assignedToValue.includes(member.uid) ? 'selected' : '') : (member.uid === assignedToValue ? 'selected' : '')}>${member.name}</option>
+                `).join('')}
+              </select>
+            </div>
+          </div>
+        `;
+      }).join('') : ''}
+    </div>
+  `).join('');
 }
 
-window.renderAdminProgressReport = renderAdminProgressReport;
+function addAdminProgressSection() {
+  if (!Array.isArray(adminProgressSections) || !adminProgressSections.length) {
+    adminProgressSections = getDefaultProgressStructure();
+  }
 
-// Wrapper function for loading progress report in admin (called when section is shown)
-window.loadProgressReport = function() {
-  console.log('Admin loadProgressReport called');
-  // The real-time listener is already active and will render the report
-  // This function is just a placeholder for consistency
-};
+  const newSectionIndex = adminProgressSections.length + 1;
+  adminProgressSections.push({
+    title: `New Section ${newSectionIndex}`,
+    items: [
+      {
+        name: 'New Item',
+        status: 'Not Started',
+        assignedTo: [],
+        assignedToName: [],
+        isNewItem: true
+      }
+    ]
+  });
+
+  saveProgressBackupSections(adminProgressSections);
+  renderAdminProgressReport(adminProgressSections);
+}
 
 function getProgressFormValues() {
-  // Since changes are saved immediately via modal, just return empty
-  // The sections are already up to date in Firestore
-  return [];
+  const sections = Array.isArray(adminProgressSections) && adminProgressSections.length ? adminProgressSections : getDefaultProgressStructure();
+  return sections.map((section, sectionIndex) => ({
+    title: section.title,
+    items: section.items.map((item, itemIndex) => {
+      const itemNameInput = document.getElementById(`itemName-${sectionIndex}-${itemIndex}`);
+      const statusSelect = document.getElementById(`progress-${sectionIndex}-${itemIndex}`);
+      const assignedSelect = document.getElementById(`assignedTo-${sectionIndex}-${itemIndex}`);
+      const assignedTo = assignedSelect ? Array.from(assignedSelect.selectedOptions).map(option => option.value).filter(v => v !== '') : (Array.isArray(item.assignedTo) ? item.assignedTo : []);
+      const assignedToName = assignedSelect ? Array.from(assignedSelect.selectedOptions).map(option => members.find(m => m.uid === option.value)?.name).filter(Boolean) : (Array.isArray(item.assignedToName) ? item.assignedToName : []);
+      return {
+        name: itemNameInput ? itemNameInput.value.trim() || item.name : item.name,
+        status: statusSelect ? statusSelect.value : item.status,
+        assignedTo,
+        assignedToName
+      };
+    })
+  }));
 }
 
 window.saveProgressReport = async function() {
   try {
-    // Just confirm that the latest data is in Firestore
-    alert("Task report is already saved! All changes are saved automatically when you click 'Save' in the edit modal.");
+    const sections = getProgressFormValues();
+    const savedToFirestore = await persistProgressReportSections(sections);
+    if (savedToFirestore) {
+      alert("My Collab progress saved successfully!");
+    } else {
+      alert("My Collab progress was saved locally because Firestore was unavailable. Please refresh once the connection is restored.");
+    }
   } catch (error) {
     console.error("Error saving progress report:", error);
-    alert("Failed to save task report. Please try again.");
+    alert("Failed to save My Collab progress. Please try again.");
   }
 };
 
-// Load members from Firestore on startup with real-time listener
-initializeMembersListener();
+function loadMembers() {
+  const select = document.getElementById("assignedTo");
+  if (!select) return;
+  select.innerHTML = "";
 
-// Initialize progress report real-time listener on startup
-initializeProgressReportListener();
+  members.forEach(m => {
+    select.innerHTML += `<option value="${m.uid}">${m.name}</option>`;
+  });
+  if (select.options.length === 0) {
+    select.innerHTML = '<option value="">No members available</option>';
+  }
+}
+
+function loadAnnouncementAssignTo() {
+  const container = document.getElementById("announcementAssignTo");
+  if (!container) return;
+  container.innerHTML = "";
+
+  members.forEach(m => {
+    container.innerHTML += `
+      <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.9rem;">
+        <input type="checkbox" value="${m.uid}" class="announcement-assign-checkbox">
+        ${m.name}
+      </label>
+    `;
+  });
+}
+
+function loadInAppNotificationRecipients() {
+  const container = document.getElementById("inAppNotificationRecipients");
+  if (!container) return;
+  container.innerHTML = "";
+
+  members.forEach(m => {
+    container.innerHTML += `
+      <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.9rem;">
+        <input type="checkbox" value="${m.uid}" class="in-app-notification-recipient-checkbox">
+        ${m.name}
+      </label>
+    `;
+  });
+}
+
+async function loadMemberRoles() {
+  try {
+    const snapshot = await getDocs(collection(db, "userRoles"));
+    const seen = new Set();
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() || {};
+      const docId = normalizeEmail(docSnap.id);
+      if (!docId) return;
+      seen.add(docId);
+
+      let member = members.find(m => normalizeEmail(m.uid) === docId);
+      if (!member) {
+        member = { uid: docId, name: data.displayName || data.name || data.email || docId };
+        members.push(member);
+      }
+
+      if (typeof data.role === 'string' && data.role) member.role = data.role;
+      member.accessAllowed = typeof data.accessAllowed === 'boolean' ? data.accessAllowed : member.accessAllowed;
+      member.accessReason = typeof data.accessReason === 'string' ? data.accessReason : member.accessReason;
+      member.lastActive = parseDateValue(data.lastActive) || member.lastActive;
+      member.isOnline = typeof data.isOnline !== 'undefined' ? data.isOnline : member.isOnline;
+      member.name = data.displayName || data.name || member.name || docId;
+    });
+
+    members.forEach((member) => {
+      if (member.uid === 'everyone') return;
+      if (!seen.has(normalizeEmail(member.uid))) {
+        member.accessAllowed = member.accessAllowed;
+      }
+    });
+  } catch (error) {
+    console.warn("Could not load member roles from Firestore:", error);
+  }
+}
+
+function subscribeToMemberRoles() {
+  if (userRolesUnsubscribe) {
+    userRolesUnsubscribe();
+    userRolesUnsubscribe = null;
+  }
+
+  userRolesUnsubscribe = onSnapshot(collection(db, "userRoles"), (snapshot) => {
+    const seen = new Set();
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() || {};
+      const docId = normalizeEmail(docSnap.id);
+      if (!docId) return;
+      seen.add(docId);
+
+      let member = members.find(m => normalizeEmail(m.uid) === docId);
+      if (!member) {
+        member = { uid: docId, name: data.displayName || data.name || data.email || docId };
+        members.push(member);
+      }
+
+      if (typeof data.role === 'string' && data.role) member.role = data.role;
+      member.accessAllowed = typeof data.accessAllowed === 'boolean' ? data.accessAllowed : member.accessAllowed;
+      member.accessReason = typeof data.accessReason === 'string' ? data.accessReason : member.accessReason;
+      member.lastActive = parseDateValue(data.lastActive) || member.lastActive;
+      member.isOnline = typeof data.isOnline !== 'undefined' ? data.isOnline : member.isOnline;
+      member.name = data.displayName || data.name || member.name || docId;
+    });
+
+    loadMembers();
+    loadAnnouncementAssignTo();
+    loadInAppNotificationRecipients();
+    renderMemberManagementPanel();
+  }, (error) => {
+    console.error('Member roles subscription failed:', error);
+  });
+}
+
+function getPrivilegeList(role) {
+  const roleData = memberRoles[role] || memberRoles.member;
+  return roleData.privileges.map(privilege => `<li style="margin: 0.25rem 0; color: #d1d5db;">${privilege}</li>`).join('');
+}
+
+function getAllowedSections(role) {
+  return adminRoleAllowedSections[role] || [];
+}
+
+function applyAdminRoleRestrictions() {
+  const allowedSections = getAllowedSections(adminRole);
+  const navButtons = document.querySelectorAll('.nav-btn');
+  navButtons.forEach(btn => {
+    const onclickValue = btn.getAttribute('onclick') || '';
+    const match = onclickValue.match(/showSection\('([^']+)'\)/);
+    if (!match) return;
+    const sectionId = match[1];
+    btn.style.display = allowedSections.includes(sectionId) ? '' : 'none';
+  });
+
+  const sections = document.querySelectorAll('.content-section');
+  sections.forEach(section => {
+    section.style.display = allowedSections.includes(section.id) ? '' : 'none';
+    section.classList.remove('active');
+  });
+
+  const firstAllowed = allowedSections.find(id => document.getElementById(id));
+  if (firstAllowed) {
+    showSection(firstAllowed);
+  }
+}
+
+function waitForAdminRole() {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const interval = setInterval(() => {
+      if (adminRole !== null || Date.now() - start > 3000) {
+        clearInterval(interval);
+        resolve();
+      }
+    }, 100);
+  });
+}
+
+async function applyAdminRoleRestrictionsWhenReady() {
+  await waitForAdminRole();
+  applyAdminRoleRestrictions();
+}
+
+function renderMemberManagementPanel() {
+  const container = document.getElementById('memberManagementPanel');
+  if (!container) return;
+
+  container.innerHTML = members
+    .filter(member => !isHiddenMember(member))
+    .map(member => {
+      const role = member.role || 'member';
+      const privileges = getPrivilegeList(role);
+      const accessAllowed = member.accessAllowed !== false;
+      const actionLabel = role === 'limited-admin' ? 'Demote to Member' : (role === 'admin' ? 'Demote to Member' : 'Grant Limited Admin');
+      const actionFn = role === 'limited-admin' || role === 'admin' ? 'demoteMemberToMember' : 'promoteMemberToLimitedAdmin';
+      const badgeColor = role === 'limited-admin' ? '#7c3aed' : (role === 'admin' ? '#10b981' : '#64748b');
+      const accessBadgeColor = accessAllowed ? '#10b981' : '#ef4444';
+      const accessBadgeText = accessAllowed ? 'ACCESS ACTIVE' : 'ACCESS RESTRICTED';
+      const accessButtonLabel = member.uid === adminEmail ? 'Current Admin' : (accessAllowed ? 'Restrict Access' : 'Allow Access');
+      const accessButtonFn = member.uid === adminEmail ? '' : (accessAllowed ? `restrictMemberAccess('${member.uid}', document.getElementById('restriction-reason-${member.uid.replace(/[^a-zA-Z0-9]/g, '')}').value)` : `allowMemberAccess('${member.uid}', document.getElementById('restriction-reason-${member.uid.replace(/[^a-zA-Z0-9]/g, '')}').value)`);
+      const accessButtonDisabled = member.uid === adminEmail ? 'disabled' : '';
+      const sanitizedId = member.uid.replace(/[^a-zA-Z0-9]/g, '');
+      const isActive = isMemberCurrentlyActive(member);
+      const statusBadgeColor = isActive ? '#10b981' : '#6b7280';
+      const statusText = isActive ? 'ACTIVE' : 'OFFLINE';
+      const lastSeenActiveDisplay = formatDateTime(member.lastActive);
+      const offlineMessage = isActive ? `Last activity ${getTimeAgo(member.lastActive)}` : `Last seen active ${member.lastActive ? getTimeAgo(member.lastActive) : 'unknown'}`;
+
+      return `
+      <div style="border: 1px solid #374151; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem; background: #111827;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+          <div>
+            <h3 style="margin: 0 0 0.5rem 0; color: #f8fafc;">${member.name}</h3>
+            <p style="margin: 0 0.5rem 0 0; color: #94a3b8; font-size: 0.9rem;">${member.uid}</p>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
+              <span style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; background: ${badgeColor}; color: white; font-size: 0.8rem;">${role.toUpperCase()}</span>
+              <span style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; background: ${accessBadgeColor}; color: white; font-size: 0.8rem;">${accessBadgeText}</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button onclick="${actionFn}('${member.uid}')" style="background: ${role === 'limited-admin' || role === 'admin' ? '#ef4444' : '#10b981'}; color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer;">${actionLabel}</button>
+            <button onclick="${accessButtonFn}" ${accessButtonDisabled} style="background: ${accessAllowed ? '#f59e0b' : '#3b82f6'}; color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer; opacity: ${member.uid === adminEmail ? 0.7 : 1};">${accessButtonLabel}</button>
+            <button onclick="deleteMemberAccountFromAdmin('${member.uid}')" ${member.uid === adminEmail ? 'disabled' : ''} style="background: #dc2626; color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer; opacity: ${member.uid === adminEmail ? 0.7 : 1};">Delete Account</button>
+          </div>
+        </div>
+        <div style="margin-top: 1rem; display: grid; gap: 0.4rem;">
+          <span style="display: inline-flex; align-items: center; padding: 0.35rem 0.75rem; border-radius: 999px; background: ${statusBadgeColor}; color: white; font-size: 0.8rem; width: fit-content;">${statusText}</span>
+          <p style="margin: 0; color: #cbd5e1; font-size: 0.9rem;">${offlineMessage}</p>
+          <p style="margin: 0; color: #94a3b8; font-size: 0.8rem;">Last seen active: ${lastSeenActiveDisplay}</p>
+        </div>
+        <div style="margin-top: 1rem;">
+          <label style="display:block; color:#cbd5e1; font-size:0.9rem; margin-bottom:0.35rem;">Restriction reason</label>
+          <textarea id="restriction-reason-${sanitizedId}" rows="3" style="width:100%; box-sizing:border-box; background:#0f172a; color:#f8fafc; border:1px solid #4b5563; border-radius:0.5rem; padding:0.6rem;">${(member.accessReason || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+        </div>
+        <div style="margin-top: 1rem;">
+          <strong style="color: #f8fafc;">Privileges:</strong>
+          <ul style="margin: 0.75rem 0 0 1.25rem; padding: 0; list-style: disc;">${privileges}</ul>
+        </div>
+      </div>
+    `;
+    }).join('');
+}
+
+async function createMemberAccountFromAdmin() {
+  const emailInput = document.getElementById('newMemberEmail');
+  const nameInput = document.getElementById('newMemberName');
+  const passwordInput = document.getElementById('newMemberPassword');
+  const roleSelect = document.getElementById('newMemberRole');
+  const messageBox = document.getElementById('newMemberAccountMessage');
+
+  const email = emailInput?.value?.trim();
+  const displayName = nameInput?.value?.trim() || '';
+  const password = passwordInput?.value || '';
+  const role = roleSelect?.value || 'member';
+
+  if (!email || !password) {
+    if (messageBox) {
+      messageBox.textContent = 'Please enter both an email address and password.';
+      messageBox.style.color = '#fda4af';
+    }
+    return;
+  }
+
+  if (messageBox) {
+    messageBox.textContent = 'Creating account...';
+    messageBox.style.color = '#fbbf24';
+  }
+
+  try {
+    const result = await createMemberAccount(email, password, role, displayName);
+    if (messageBox) {
+      const friendlyLabel = displayName || result.email;
+      messageBox.textContent = `Account created for ${friendlyLabel} with role ${result.role}.`;
+      messageBox.style.color = '#86efac';
+    }
+    if (emailInput) emailInput.value = '';
+    if (nameInput) nameInput.value = '';
+    if (passwordInput) passwordInput.value = '';
+    await refreshMentionMembers();
+    loadMembers();
+    loadAnnouncementAssignTo();
+    loadInAppNotificationRecipients();
+    await loadMemberRoles();
+    renderMemberManagementPanel();
+  } catch (error) {
+    console.error('Failed to create member account:', error);
+    if (messageBox) {
+      messageBox.textContent = error?.message || 'Could not create account. Please try again.';
+      messageBox.style.color = '#fda4af';
+    }
+  }
+}
+
+window.createMemberAccountFromAdmin = createMemberAccountFromAdmin;
+
+async function setMemberRole(email, role) {
+  if (!email || !role) return;
+  const confirmMessage = role === 'limited-admin'
+    ? 'Grant limited admin privileges to this member?'
+    : (role === 'admin'
+      ? 'Grant full admin privileges to this member?'
+      : 'Revoke admin privileges and return this member to a standard member role?');
+
+  if (!confirm(confirmMessage)) return;
+
+  try {
+    await setUserRole(email, role);
+    const member = members.find(m => m.uid === email);
+    if (member) member.role = role;
+    await refreshMentionMembers();
+    loadMembers();
+    loadAnnouncementAssignTo();
+    loadInAppNotificationRecipients();
+    await loadMemberRoles();
+    renderMemberManagementPanel();
+    await applyAdminRoleRestrictionsWhenReady();
+    alert(`Role updated to ${role.toUpperCase()}. The user will reflect this role on next login.`);
+  } catch (error) {
+    console.error('Failed to update member role:', error);
+    alert('Could not update role. Check console for details.');
+  }
+}
+
+async function promoteMemberToLimitedAdmin(email) {
+  await setMemberRole(email, 'limited-admin');
+}
+
+async function demoteMemberToMember(email) {
+  await setMemberRole(email, 'member');
+}
+
+async function setMemberAccess(email, isAccessAllowed, reason = '') {
+  if (!email) return;
+  if (email === adminEmail && !isAccessAllowed) {
+    alert('You cannot restrict your own account.');
+    return;
+  }
+
+  const confirmMessage = isAccessAllowed
+    ? 'Allow this member to sign in again?'
+    : 'Restrict this member from signing in to their account?';
+
+  if (!confirm(confirmMessage)) return;
+
+  try {
+    await setUserAccess(email, isAccessAllowed, reason);
+    const member = members.find(m => m.uid === email);
+    if (member) {
+      member.accessAllowed = isAccessAllowed;
+      member.accessReason = reason;
+    }
+    await refreshMentionMembers();
+    loadMembers();
+    loadAnnouncementAssignTo();
+    loadInAppNotificationRecipients();
+    await loadMemberRoles();
+    renderMemberManagementPanel();
+    alert(isAccessAllowed ? 'Access restored for this member.' : 'Access restricted for this member.');
+  } catch (error) {
+    console.error('Failed to update member access:', error);
+    alert('Could not update access. Check console for details.');
+  }
+}
+
+async function restrictMemberAccess(email, reason = '') {
+  await setMemberAccess(email, false, reason);
+}
+
+async function allowMemberAccess(email, reason = '') {
+  await setMemberAccess(email, true, reason);
+}
+
+async function deleteMemberAccountFromAdmin(email) {
+  if (!email) return;
+  if (normalizeEmail(email) === normalizeEmail(adminEmail)) {
+    alert('You cannot delete your own admin account.');
+    return;
+  }
+
+  const member = members.find(m => normalizeEmail(m.uid) === normalizeEmail(email));
+  const label = member?.name || email;
+  if (!confirm(`Delete account for ${label}? This will remove their access and member record.`)) {
+    return;
+  }
+
+  try {
+    await deleteMemberAccount(email);
+    members = members.filter(m => normalizeEmail(m.uid) !== normalizeEmail(email));
+    await refreshMentionMembers();
+    loadMembers();
+    loadAnnouncementAssignTo();
+    loadInAppNotificationRecipients();
+    await loadMemberRoles();
+    renderMemberManagementPanel();
+    alert('Account deleted successfully.');
+  } catch (error) {
+    console.error('Failed to delete member account:', error);
+    alert('Could not delete account. Check console for details.');
+  }
+}
+
+window.promoteMemberToLimitedAdmin = promoteMemberToLimitedAdmin;
+window.promoteMemberToAdmin = promoteMemberToLimitedAdmin;
+window.demoteMemberToMember = demoteMemberToMember;
+window.restrictMemberAccess = restrictMemberAccess;
+window.allowMemberAccess = allowMemberAccess;
+window.deleteMemberAccountFromAdmin = deleteMemberAccountFromAdmin;
+window.renderMemberManagementPanel = renderMemberManagementPanel;
+
+function formatInAppNotificationDate(dateValue) {
+  if (!dateValue) return "Unknown date";
+  if (dateValue.toDate) return dateValue.toDate().toLocaleString();
+  if (dateValue instanceof Date) return dateValue.toLocaleString();
+  return new Date(dateValue).toLocaleString();
+}
+
+function loadInAppNotificationsList() {
+  const container = document.getElementById("inAppNotificationsList");
+  if (!container) return;
+
+  onSnapshot(collection(db, "inAppNotifications"), (snap) => {
+    const docs = [];
+    snap.forEach(docSnap => docs.push({ id: docSnap.id, ...docSnap.data() }));
+    docs.sort((a, b) => {
+      const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+      const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+      return timeB - timeA;
+    });
+
+    if (docs.length === 0) {
+      container.innerHTML = '<p style="color: #94a3b8; text-align: center;">No in-app notices created yet.</p>';
+      return;
+    }
+
+    container.innerHTML = docs.map((notification) => {
+      const recipientsText = Array.isArray(notification.assignedToNames) && notification.assignedToNames.length > 0
+        ? notification.assignedToNames.join(", ")
+        : (notification.targetType === "everyone" ? "Everyone" : "No recipients");
+
+      let displayText = 'Unknown';
+      if (notification.displayMode === 'always') displayText = 'Always';
+      else if (notification.displayMode === 'once') displayText = 'Once';
+      else if (notification.displayMode === 'until') displayText = notification.until ? formatInAppNotificationDate(notification.until) : 'Until (no date set)';
+
+      return `
+        <div style="border: 1px solid #374151; border-radius: 0.5rem; padding: 1rem; margin-bottom: 0.75rem; background: #111827;">
+          <div style="display: flex; justify-content: space-between; gap: 1rem; align-items: start; margin-bottom: 0.5rem;">
+            <div>
+              <h4 style="margin: 0 0 0.25rem 0; color: #f3f4f6;">${notification.title || "Untitled notice"}</h4>
+              <p style="margin: 0; color: #9ca3af; font-size: 0.875rem;">${formatInAppNotificationDate(notification.createdAt)}</p>
+            </div>
+            <button onclick="deleteInAppNotification('${notification.id}')" style="background: #ef4444; color: white; border: none; padding: 0.45rem 0.75rem; border-radius: 0.375rem; cursor: pointer;">Delete</button>
+          </div>
+          <p style="margin: 0 0 0.5rem 0; color: #d1d5db; white-space: pre-wrap;">${notification.message || ""}</p>
+          <p style="margin: 0; color: #60a5fa; font-size: 0.85rem;">Target: ${notification.targetType === "everyone" ? "Everyone" : recipientsText}</p>
+          <p style="margin: 0.35rem 0 0 0; color: #94a3b8; font-size: 0.8rem;">Display: ${displayText}</p>
+        </div>
+      `;
+    }).join('');
+  }, (error) => {
+    console.error("In-app notices list listener error:", error);
+    container.innerHTML = '<p style="color: #ef4444; text-align: center;">Unable to load in-app notices right now.</p>';
+  });
+}
+
+window.deleteInAppNotification = async function (id) {
+  if (!id) return;
+  if (!confirm("Delete this in-app notification? Members will stop seeing it.")) {
+    return;
+  }
+
+  try {
+    await deleteDoc(doc(db, "inAppNotifications", id));
+    alert("In-app notification deleted successfully.");
+  } catch (error) {
+    console.error("Error deleting in-app notification:", error);
+    alert(`Failed to delete in-app notification: ${error.message}`);
+  }
+};
+
+// Only run loaders when their target elements are present to avoid null DOM errors
+if (document.getElementById('assignedTo')) loadMembers();
+if (document.getElementById('announcementAssignTo')) loadAnnouncementAssignTo();
+if (document.getElementById('inAppNotificationRecipients')) loadInAppNotificationRecipients();
+if (document.getElementById('inAppNotificationsList')) loadInAppNotificationsList();
+
+// Wire up display mode controls for in-app notifications (show/hide until-date)
+function initInAppDisplayModeControls() {
+  const radios = document.querySelectorAll('input[name="inAppDisplayMode"]');
+  const untilInput = document.getElementById('inAppDisplayUntilDate');
+  if (!radios || !untilInput) return;
+
+  function updateVisibility() {
+    const selected = document.querySelector('input[name="inAppDisplayMode"]:checked');
+    if (!selected) return;
+    untilInput.style.display = selected.value === 'until' ? '' : 'none';
+  }
+
+  radios.forEach(r => r.addEventListener('change', updateVisibility));
+  // initial state
+  setTimeout(updateVisibility, 50);
+}
+
+initInAppDisplayModeControls();
+
+loadMemberRoles().then(() => {
+  subscribeToMemberRoles();
+  renderMemberManagementPanel();
+  applyAdminRoleRestrictionsWhenReady();
+}).catch((error) => {
+  console.warn('Unable to load member roles before rendering management panel:', error);
+  subscribeToMemberRoles();
+  renderMemberManagementPanel();
+  applyAdminRoleRestrictionsWhenReady();
+});
 
 // Load live chat room list immediately so refresh always restores the list
 loadLiveChatRooms();
@@ -573,6 +1074,66 @@ loadLiveChatRooms();
   // Set up listeners after authentication
   console.log('=== SETTING UP ADMIN LISTENERS ===');
   console.log('Admin authenticated, email:', adminEmail, 'role:', adminRole);
+
+  // Maintenance settings
+  async function loadMaintenanceSettings() {
+    try {
+      const maintenanceRef = doc(db, 'appSettings', 'maintenance');
+      onSnapshot(maintenanceRef, (snap) => {
+        const enabledEl = document.getElementById('maintenanceEnabled');
+        const messageEl = document.getElementById('maintenanceMessage');
+        const statusEl = document.getElementById('maintenanceStatus');
+
+        if (!enabledEl || !messageEl || !statusEl) return;
+
+        if (!snap.exists()) {
+          enabledEl.checked = false;
+          messageEl.value = '';
+          statusEl.textContent = 'No maintenance settings configured.';
+          return;
+        }
+
+        const data = snap.data();
+        enabledEl.checked = !!data.enabled;
+        messageEl.value = data.message || '';
+        statusEl.textContent = data.enabled ? `Enabled — last updated: ${data.updatedAt || ''}` : 'Disabled';
+      });
+    } catch (error) {
+      console.error('Failed to load maintenance settings:', error);
+    }
+  }
+
+  window.toggleMaintenance = async function () {
+    const enabledEl = document.getElementById('maintenanceEnabled');
+    const messageEl = document.getElementById('maintenanceMessage');
+    const statusEl = document.getElementById('maintenanceStatus');
+    if (!enabledEl || !messageEl || !statusEl) return;
+
+    const maintenanceRef = doc(db, 'appSettings', 'maintenance');
+    try {
+      await setDoc(maintenanceRef, {
+        enabled: !!enabledEl.checked,
+        message: messageEl.value || '',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      statusEl.textContent = 'Saved successfully.';
+    } catch (error) {
+      console.error('Failed to save maintenance settings:', error);
+      statusEl.textContent = 'Failed to save. See console.';
+    }
+  };
+
+  // Wire up save button
+  setTimeout(() => {
+    const saveBtn = document.getElementById('saveMaintenanceBtn');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        window.toggleMaintenance();
+      });
+    }
+  }, 200);
+
+  loadMaintenanceSettings();
 
   /* LOAD TICKETS */
   onSnapshot(collection(db, "tickets"), (snap) => {
@@ -637,7 +1198,7 @@ loadLiveChatRooms();
             </div>
           </div>
           
-          <p style="margin: 0 0 1rem 0; color: #d1d5db; white-space: pre-wrap;">${ticket.description}</p>
+<p style="margin: 0 0 1rem 0; color: #d1d5db; white-space: pre-wrap; word-break: break-word;">${ticket.description}</p>
           
           ${responseHtml ? `
             <div style="margin-bottom: 1rem;">
@@ -690,7 +1251,7 @@ loadLiveChatRooms();
         <div class="card" style="margin-bottom: 1rem;">
           <h4 style="margin-bottom: 0.5rem;">${resource.title}</h4>
           <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.75rem;">Posted: ${createdDate}</p>
-          <p style="margin: 0.5rem 0; line-height: 1.4; color: #d1d5db;">${resource.description}</p>
+          <p style="margin: 0.5rem 0; line-height: 1.4; color: #d1d5db; white-space: pre-wrap; word-break: break-word;">${resource.description}</p>
           <div style="margin-top: 1rem;">
             <a href="${resource.link}" target="_blank" style="background: #10b981; color: white; padding: 0.5rem 1rem; border-radius: 0.375rem; text-decoration: none; display: inline-block;">🔗 Open Resource</a>
             <button onclick="window.deleteResource('${docSnap.id}')" class="btn-danger" style="margin-left: 0.5rem; padding: 0.5rem 1rem;">🗑️ Delete</button>
@@ -700,339 +1261,77 @@ loadLiveChatRooms();
     });
   });
 
-// Deprecated: No longer using default sections - admins create custom sections from scratch
-// function mergeProgressStructures(defaultSections, savedSections) {...}
+function mergeProgressStructures(defaultSections, savedSections) {
+  // Merge saved data with default structure, preserving edits but adding new items
+  return defaultSections.map((defaultSection) => {
+    const savedSection = savedSections.find(s => s.title === defaultSection.title);
+    
+    if (!savedSection) {
+      // Section doesn't exist in saved data, use default
+      return defaultSection;
+    }
+    
+    // Merge items within the section
+    const mergedItems = defaultSection.items.map((defaultItem) => {
+      const savedItem = savedSection.items?.find(i => i.name === defaultItem.name);
+      
+      if (!savedItem) {
+        // Item doesn't exist in saved data, use default
+        return defaultItem;
+      }
+      
+      // Item exists in saved data, preserve status and assignments
+      return {
+        name: defaultItem.name,
+        status: savedItem.status || defaultItem.status,
+        assignedTo: Array.isArray(savedItem.assignedTo) ? savedItem.assignedTo : (savedItem.assignedTo ? [savedItem.assignedTo] : []),
+        assignedToName: Array.isArray(savedItem.assignedToName) ? savedItem.assignedToName : (savedItem.assignedToName ? [savedItem.assignedToName] : [])
+      };
+    });
+    
+    return {
+      title: defaultSection.title,
+      items: mergedItems
+    };
+  });
+}
 
 function loadProgressReport() {
   console.log('=== LOAD PROGRESS REPORT CALLED ===');
   const container = document.getElementById("progressReportPanel");
   console.log('Progress report container element:', container);
 
+  if (!container) {
+    console.warn('Skipping progress report load because progressReportPanel is not present.');
+    return;
+  }
+
   const progressRef = doc(db, progressReportCollection, progressReportDocId);
   console.log('Progress report reference:', progressRef);
 
-  onSnapshot(progressRef, (snap) => {
+  saveProgressBackupSections([]);
+  void persistProgressReportSections([]);
+  renderAdminProgressReport([]);
+
+  onSnapshot(progressRef, async (snap) => {
     console.log('Progress report snapshot received:', snap.exists());
-    let sections = [];
-    
-    if (snap.exists()) {
-      const data = snap.data();
-      console.log('Progress report data:', data);
-      if (Array.isArray(data.sections)) {
-        sections = data.sections;
-      }
-    }
-    
+    const sections = [];
+    saveProgressBackupSections(sections);
     renderAdminProgressReport(sections);
+  }, (error) => {
+    console.error('Progress report onSnapshot error:', error);
+    renderAdminProgressReport([]);
   });
 }
 
-window.loadProgressReport = loadProgressReport;
-
-// Populate members dropdown in create form
-function populateProgressReportAssignedTo() {
-  const select = document.getElementById("reportItemAssignedTo");
-  if (!select) {
-    console.warn('Progress report select element not found');
-    return;
+function getTaskRecipients(assignedTo) {
+  if (assignedTo === "everyone") {
+    return members.filter(member => !isHiddenMember(member));
   }
-  
-  console.log('Populating progress report members dropdown. Members count:', members.length);
-  select.innerHTML = '<option value="">-- Select Members --</option>';
-  members.forEach(m => {
-    if (m.uid !== 'everyone') {
-      select.innerHTML += `<option value="${m.uid}">${m.name}</option>`;
-    }
-  });
-  console.log('Progress report members dropdown populated successfully');
+
+  const selectedMember = members.find(member => member.uid === assignedTo);
+  return selectedMember ? [selectedMember] : [];
 }
-
-window.populateProgressReportAssignedTo = populateProgressReportAssignedTo;
-
-// Create new progress report item from form
-window.createProgressReportItem = async function() {
-  console.log('=== CREATE PROGRESS REPORT ITEM CALLED ===');
-  
-  const itemName = document.getElementById("reportItemName").value.trim();
-  const assignedSelect = document.getElementById("reportItemAssignedTo");
-  const assignedTo = Array.from(assignedSelect.selectedOptions).map(opt => opt.value).filter(v => v !== '');
-  const status = document.getElementById("reportItemStatus").value;
-  
-  console.log('Form values:', { itemName, assignedTo, status });
-  
-  if (!itemName) {
-    alert("Please enter an item name");
-    return;
-  }
-  
-  try {
-    const progressRef = doc(db, progressReportCollection, progressReportDocId);
-    console.log('Progress ref:', progressReportCollection, progressReportDocId);
-    
-    const docSnap = await getDoc(progressRef);
-    console.log('Document exists:', docSnap.exists());
-    
-    let sections = (docSnap.exists() && Array.isArray(docSnap.data().sections)) ? docSnap.data().sections : [];
-    console.log('Current sections:', sections);
-    
-    // Create default "Tasks" section if it doesn't exist
-    const defaultSectionName = "Tasks";
-    let sectionIndex = sections.findIndex(s => s.title === defaultSectionName);
-    if (sectionIndex === -1) {
-      console.log('Creating new Tasks section');
-      sections.push({
-        title: defaultSectionName,
-        items: []
-      });
-      sectionIndex = sections.length - 1;
-    }
-    
-    // Add item to section
-    if (!Array.isArray(sections[sectionIndex].items)) {
-      sections[sectionIndex].items = [];
-    }
-    
-    const newItem = {
-      name: itemName,
-      status: status,
-      assignedTo: assignedTo
-    };
-    
-    console.log('New item to add:', newItem);
-    sections[sectionIndex].items.push(newItem);
-    
-    console.log('Sections after adding item:', sections);
-    console.log('Saving to Firestore...');
-    
-    await setDoc(progressRef, { sections }, { merge: true });
-    
-    console.log('✅ Progress report item saved successfully');
-    
-    // Clear form
-    document.getElementById("reportItemName").value = '';
-    document.getElementById("reportItemStatus").value = 'Not Started';
-    
-    // Clear multi-select options
-    const options = assignedSelect.options;
-    for (let i = 0; i < options.length; i++) {
-      options[i].selected = false;
-    }
-    
-    alert('✅ Progress report item created successfully!');
-  } catch (error) {
-    console.error('❌ Error creating progress report item:', error);
-    console.error('Error stack:', error.stack);
-    alert('Error creating item: ' + error.message);
-  }
-};
-
-// Add new section to progress report
-window.addProgressSection = async function() {
-  const sectionName = document.getElementById("newSectionName").value.trim();
-  if (!sectionName) {
-    alert("Please enter a section name");
-    return;
-  }
-  
-  try {
-    const progressRef = doc(db, progressReportCollection, progressReportDocId);
-    const docSnap = await getDoc(progressRef);
-    
-    const sections = docSnap.exists() && Array.isArray(docSnap.data().sections) ? docSnap.data().sections : [];
-    
-    // Check if section already exists
-    if (sections.find(s => s.title.toLowerCase() === sectionName.toLowerCase())) {
-      alert("This section already exists");
-      return;
-    }
-    
-    // Add new section
-    sections.push({
-      title: sectionName,
-      items: []
-    });
-    
-    await setDoc(progressRef, { sections }, { merge: true });
-    document.getElementById("newSectionName").value = "";
-    console.log('Section added successfully');
-  } catch (error) {
-    console.error('Error adding section:', error);
-    alert('Error adding section: ' + error.message);
-  }
-};
-
-// Add new item to a section
-window.addProgressItem = async function(sectionIndex) {
-  const itemName = prompt("Enter item name:");
-  if (!itemName || !itemName.trim()) return;
-  
-  try {
-    const progressRef = doc(db, progressReportCollection, progressReportDocId);
-    const docSnap = await getDoc(progressRef);
-    
-    if (!docSnap.exists()) {
-      alert("Progress report not found");
-      return;
-    }
-    
-    const sections = docSnap.data().sections || [];
-    if (!sections[sectionIndex]) {
-      alert("Section not found");
-      return;
-    }
-    
-    // Add new item to section
-    if (!Array.isArray(sections[sectionIndex].items)) {
-      sections[sectionIndex].items = [];
-    }
-    
-    sections[sectionIndex].items.push({
-      name: itemName.trim(),
-      status: "Not Started",
-      assignedTo: []
-    });
-    
-    await setDoc(progressRef, { sections }, { merge: true });
-    console.log('Item added successfully');
-  } catch (error) {
-    console.error('Error adding item:', error);
-    alert('Error adding item: ' + error.message);
-  }
-};
-
-// Edit progress item (open modal)
-window.editProgressItem = async function(sectionIndex, itemIndex) {
-  const progressRef = doc(db, progressReportCollection, progressReportDocId);
-  const docSnap = await getDoc(progressRef);
-  
-  if (!docSnap.exists()) return;
-  
-  const sections = docSnap.data().sections || [];
-  const item = sections[sectionIndex]?.items[itemIndex];
-  const section = sections[sectionIndex];
-  
-  if (!item || !section) return;
-  
-  const assignedToValue = Array.isArray(item.assignedTo) ? item.assignedTo : (item.assignedTo ? [item.assignedTo] : []);
-  
-  const modalHTML = `
-    <div id="editModal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000;">
-      <div style="background: #0f172a; border: 1px solid #374151; border-radius: 0.5rem; padding: 2rem; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;">
-        <h3 style="color: #0ea5e9; margin-top: 0; margin-bottom: 1.5rem;">Edit Task</h3>
-        
-        <div style="margin-bottom: 1rem;">
-          <label style="color: #cbd5e1; display: block; margin-bottom: 0.5rem; font-weight: 500;">Task Name</label>
-          <p style="color: #d1d5db; margin: 0; padding: 0.75rem; background: #111827; border: 1px solid #374151; border-radius: 0.375rem;">${item.name}</p>
-        </div>
-        
-        <div style="margin-bottom: 1rem;">
-          <label style="color: #cbd5e1; display: block; margin-bottom: 0.5rem; font-weight: 500;">Status</label>
-          <select id="modalStatus" style="width: 100%; background: #111827; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.75rem;">
-            <option value="Not Started" ${item.status === 'Not Started' || !item.status ? 'selected' : ''}>Not Started</option>
-            <option value="Pending" ${item.status === 'Pending' ? 'selected' : ''}>Pending</option>
-            <option value="Completed" ${item.status === 'Completed' ? 'selected' : ''}>Completed</option>
-          </select>
-        </div>
-        
-        <div style="margin-bottom: 1.5rem;">
-          <label style="color: #cbd5e1; display: block; margin-bottom: 0.5rem; font-weight: 500;">Assign To (Select multiple)</label>
-          <select id="modalAssignedTo" multiple style="width: 100%; background: #111827; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.5rem; min-height: 120px;">
-            <option value="">Unassigned</option>
-            ${members.filter(member => member.uid !== 'everyone').map(member => `
-              <option value="${member.uid}" ${assignedToValue.includes(member.uid) ? 'selected' : ''}>${member.name}</option>
-            `).join('')}
-          </select>
-        </div>
-        
-        <div style="display: flex; gap: 1rem;">
-          <button onclick="saveEditProgressItem(${sectionIndex}, ${itemIndex})" style="flex: 1; background: #10b981; color: white; border: none; border-radius: 0.375rem; padding: 0.75rem; cursor: pointer; font-weight: 500; font-size: 0.95rem;">Save</button>
-          <button onclick="closeEditModal()" style="flex: 1; background: #6b7280; color: white; border: none; border-radius: 0.375rem; padding: 0.75rem; cursor: pointer; font-weight: 500; font-size: 0.95rem;">Cancel</button>
-          <button onclick="deleteProgressItem(${sectionIndex}, ${itemIndex}); closeEditModal();" style="flex: 1; background: #dc2626; color: white; border: none; border-radius: 0.375rem; padding: 0.75rem; cursor: pointer; font-weight: 500; font-size: 0.95rem;">Delete</button>
-        </div>
-      </div>
-    </div>
-  `;
-  
-  document.body.insertAdjacentHTML('beforeend', modalHTML);
-};
-
-window.closeEditModal = function() {
-  const modal = document.getElementById('editModal');
-  if (modal) modal.remove();
-};
-
-window.saveEditProgressItem = async function(sectionIndex, itemIndex) {
-  try {
-    const progressRef = doc(db, progressReportCollection, progressReportDocId);
-    const docSnap = await getDoc(progressRef);
-    
-    if (!docSnap.exists()) return;
-    
-    const sections = docSnap.data().sections || [];
-    const newStatus = document.getElementById('modalStatus').value;
-    const assignedSelect = document.getElementById('modalAssignedTo');
-    const assignedTo = Array.from(assignedSelect.selectedOptions).map(option => option.value).filter(v => v !== '');
-    
-    // Update item
-    sections[sectionIndex].items[itemIndex].status = newStatus;
-    sections[sectionIndex].items[itemIndex].assignedTo = assignedTo;
-    
-    await setDoc(progressRef, { sections }, { merge: true });
-    closeEditModal();
-    console.log('Item updated successfully');
-  } catch (error) {
-    console.error('Error updating item:', error);
-    alert('Error updating item: ' + error.message);
-  }
-};
-
-// Delete item from section
-window.deleteProgressItem = async function(sectionIndex, itemIndex) {
-  if (!confirm("Are you sure you want to delete this item?")) return;
-  
-  try {
-    const progressRef = doc(db, progressReportCollection, progressReportDocId);
-    const docSnap = await getDoc(progressRef);
-    
-    if (!docSnap.exists()) {
-      alert("Progress report not found");
-      return;
-    }
-    
-    const sections = docSnap.data().sections || [];
-    if (!sections[sectionIndex] || !Array.isArray(sections[sectionIndex].items)) {
-      alert("Item not found");
-      return;
-    }
-    
-    // Remove item
-    sections[sectionIndex].items.splice(itemIndex, 1);
-    
-    await setDoc(progressRef, { sections }, { merge: true });
-    console.log('Item deleted successfully');
-  } catch (error) {
-    console.error('Error deleting item:', error);
-    alert('Error deleting item: ' + error.message);
-  }
-};
-
-// Clear all sections from progress report
-window.clearAllProgressSections = async function() {
-  if (!confirm("This will delete ALL sections and items. Are you sure?")) return;
-  
-  try {
-    const progressRef = doc(db, progressReportCollection, progressReportDocId);
-    
-    // Set sections to empty array
-    await setDoc(progressRef, { sections: [] }, { merge: true });
-    
-    console.log('All sections cleared successfully');
-    alert('All sections have been cleared!');
-  } catch (error) {
-    console.error('Error clearing sections:', error);
-    alert('Error clearing sections: ' + error.message);
-  }
-};
 
 /* CREATE TASK */
 window.createTask = async function () {
@@ -1048,27 +1347,31 @@ window.createTask = async function () {
   }
 
   try {
-    const member = members.find(m => m.uid === assignedTo) || members[0];
+    const recipients = getTaskRecipients(assignedTo);
 
-    const taskData = {
-      title,
-      description: description || "",
-      deadline,
-      assignedTo,
-      assignedToName: member.name,
-      linkURL: link || null,
-      status: "pending",
-      emailNotificationSent: false,
-      createdAt: Date.now()
-    };
+    if (recipients.length === 0) {
+      alert("Please select a valid recipient.");
+      return;
+    }
 
-    await addDoc(collection(db, "tasks"), taskData);
+    for (const recipient of recipients) {
+      const taskData = {
+        title,
+        description: description || "",
+        deadline,
+        assignedTo: recipient.uid,
+        assignedToName: recipient.name,
+        linkURL: link || null,
+        status: "pending",
+        emailNotificationSent: false,
+        createdAt: Date.now()
+      };
 
-    // Send notification to assigned user
-    if (assignedTo !== "everyone") {
+      await addDoc(collection(db, "tasks"), taskData);
+
       const notificationTitle = "New Task Assigned";
       const notificationBody = `You have been assigned a new task: "${title}"`;
-      await sendNotificationToUsers([assignedTo], notificationTitle, notificationBody, 'task');
+      await sendNotificationToUsers([recipient.uid], notificationTitle, notificationBody, 'task');
       showLocalNotification(notificationTitle, notificationBody);
     }
 
@@ -1078,7 +1381,8 @@ window.createTask = async function () {
     document.getElementById("assignedTo").value = "";
     document.getElementById("linkInput").value = "";
 
-    alert("Task created successfully!");
+    const recipientLabel = assignedTo === "everyone" ? `${recipients.length} members` : recipients[0].name;
+    alert(`Task created successfully for ${recipientLabel}!`);
   } catch (error) {
     console.error("Error creating task:", error);
     alert(`Failed to create task: ${error.message}`);
@@ -1174,7 +1478,32 @@ onSnapshot(collection(db, "tasks"), (snap) => {
 
   const docs = [];
   snap.forEach(docSnap => docs.push(docSnap));
-  docs.sort((a, b) => b.data().createdAt - a.data().createdAt);
+  // Sort tasks: high-priority statuses (pending, overdue, needs action, pending validation) first,
+  // then others, with 'done'/'completed' at the bottom. Within same priority, newest first.
+  function statusPriority(status) {
+    const s = String(status || '').toLowerCase().trim();
+    if (s === 'done' || s === 'completed') return 2;
+    if (s === 'pending' || s === 'overdue' || s === 'needs action' || s === 'needs_action' || s === 'pending validation' || s === 'pending_validation') return 0;
+    return 1;
+  }
+  function createdAtMillis(val) {
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    if (val && typeof val.toMillis === 'function') return val.toMillis();
+    const parsed = Date.parse(String(val));
+    return isNaN(parsed) ? 0 : parsed;
+  }
+
+  docs.sort((a, b) => {
+    const ta = a.data();
+    const tb = b.data();
+    const pa = statusPriority(ta.status);
+    const pb = statusPriority(tb.status);
+    if (pa !== pb) return pa - pb; // lower priority value = higher display priority
+    const ca = createdAtMillis(ta.createdAt);
+    const cb = createdAtMillis(tb.createdAt);
+    return cb - ca; // newest first
+  });
 
   // Track progress by member for analytics
   const memberProgress = {};
@@ -1219,24 +1548,111 @@ onSnapshot(collection(db, "tasks"), (snap) => {
     let html = "";
     docs.forEach(docSnap => {
       const t = docSnap.data();
+      // Render existing feedbacks
+      const feedbackHtml = Array.isArray(t.feedbacks) && t.feedbacks.length > 0 ? t.feedbacks.map((f, idx) => {
+        const time = f.createdAt && f.createdAt.toDate ? f.createdAt.toDate().toLocaleString() : (f.createdAt ? new Date(f.createdAt).toLocaleString() : '');
+        const authorName = getUserName(f.author) || 'Admin';
+        const showDelete = normalizeEmail(f.author) === normalizeEmail(adminEmail || '');
+        const deleteButton = showDelete ? `<button onclick="removeTaskFeedback('${docSnap.id}', ${idx})" style=\"background:#ef4444; color:white; border:none; padding:0.25rem 0.5rem; border-radius:6px; margin-left:0.5rem;\">Delete</button>` : '';
+        return `<div style="padding:0.5rem; border:1px solid #334155; border-radius:6px; margin-bottom:0.5rem; background:#041024;"><div style=\"display:flex; align-items:center; justify-content:space-between; gap:0.5rem;\"><div style=\\"font-weight:600; color:#f3f4f6;\\">${authorName} <span style=\\"font-weight:400; color:#94a3b8; font-size:0.85rem; margin-left:0.5rem;\\">${time}</span></div><div>${deleteButton}</div></div><div style=\"color:#cbd5e1; margin-top:0.25rem; white-space: pre-wrap; word-break: break-word;\">${f.message}</div></div>`;
+      }).join('') : '<p style="color:#94a3b8;">No feedback yet.</p>';
+
       html += `
         <div class="card" style="${t.status === 'pending validation' ? 'border: 2px solid #f59e0b; background: rgba(245, 158, 11, 0.1);' : ''}">
           <h3>${t.title}</h3>
           <p>Assigned To: ${t.assignedToName}</p>
           <p>Deadline: ${t.deadline}</p>
-          ${t.description ? `<p><strong>Description:</strong> ${t.description}</p>` : ""}  
+          ${t.description ? `<p><strong>Description:</strong> <span style="white-space: pre-wrap; word-break: break-word;">${t.description}</span></p>` : ""}  
           ${t.linkURL ? `<a href="${t.linkURL}" target="_blank">🔗 Open Link</a>` : ""}
           <p>Status: <span style="${t.status === 'pending validation' ? 'color: #f59e0b; font-weight: bold;' : ''}">${t.status}</span></p>
           ${t.status === 'pending validation' ? '<p style="color: #f59e0b; font-weight: bold;">⚠️ Member has submitted this task for validation!</p>' : ''}
           <button onclick="markDone('${docSnap.id}')">Mark Done</button>
           ${(t.status === "pending" || t.status === "overdue" || t.status === "pending validation") ? `<button onclick="needAction('${docSnap.id}')" class="btn-warning" style="margin-top: 0.5rem;">Need an Action</button>` : ""}
           <button onclick="deleteTask('${docSnap.id}')" class="btn-danger" style="margin-top: 0.5rem;">Delete</button>
+
+          <div style="margin-top:1rem;">
+            <h4 style=\"margin:0 0 0.5rem 0; color:#f3f4f6;\">Feedback</h4>
+            <div id=\"feedback-list-${docSnap.id}\">${feedbackHtml}</div>
+            <textarea id=\"feedback-input-${docSnap.id}\" placeholder=\"Add feedback for this task...\" style=\"width:100%; margin-top:0.5rem; min-height:70px; background:#020617; color:#f3f4f6; border:1px solid #334155; padding:0.5rem;\"></textarea>
+            <div style=\"display:flex; gap:0.5rem; margin-top:0.5rem;\">
+              <button onclick=\"addTaskFeedback('${docSnap.id}')\" style=\"background:#3b82f6; color:white; border:none; padding:0.5rem 0.75rem; border-radius:6px;\">Add Feedback</button>
+            </div>
+          </div>
         </div>
       `;
     });
     container.innerHTML = html;
   }
 });
+
+// Add feedback to a task (admin)
+window.addTaskFeedback = async function(taskId) {
+  try {
+    const input = document.getElementById(`feedback-input-${taskId}`);
+    if (!input) return;
+    const msg = input.value.trim();
+    if (!msg) {
+      alert('Please enter feedback before submitting.');
+      return;
+    }
+
+    const feedback = {
+      author: adminEmail || 'Admin',
+      message: msg,
+      createdAt: new Date()
+    };
+
+    const taskRef = doc(db, 'tasks', taskId);
+    await updateDoc(taskRef, {
+      feedbacks: arrayUnion(feedback),
+      latestFeedback: feedback
+    });
+
+    input.value = '';
+    const list = document.getElementById(`feedback-list-${taskId}`);
+    if (list) {
+      const item = document.createElement('div');
+      item.style.cssText = 'padding:0.5rem; border:1px solid #334155; border-radius:6px; margin-bottom:0.5rem; background:#041024;';
+      const time = new Date(feedback.createdAt).toLocaleString();
+      item.innerHTML = `<div style="font-weight:600; color:#f3f4f6;">${feedback.author} <span style=\"font-weight:400; color:#94a3b8; font-size:0.85rem; margin-left:0.5rem;\">${time}</span></div><div style=\"color:#cbd5e1; margin-top:0.25rem; white-space: pre-wrap; word-break: break-word;\">${feedback.message}</div>`;
+      list.insertBefore(item, list.firstChild);
+    }
+  } catch (error) {
+    console.error('Failed to add feedback:', error);
+    alert('Failed to add feedback. See console for details.');
+  }
+};
+
+// Remove a specific feedback from a task (admin only) - uses array index at render time
+window.removeTaskFeedback = async function(taskId, feedbackIndex) {
+  if (!confirm('Delete this feedback? This action cannot be undone.')) return;
+  try {
+    const taskRef = doc(db, 'tasks', taskId);
+    const snap = await getDoc(taskRef);
+    if (!snap.exists()) {
+      alert('Task not found');
+      return;
+    }
+    const data = snap.data();
+    const feedbacks = Array.isArray(data.feedbacks) ? data.feedbacks.slice() : [];
+    if (feedbackIndex < 0 || feedbackIndex >= feedbacks.length) {
+      alert('Feedback not found');
+      return;
+    }
+    const target = feedbacks[feedbackIndex];
+    // Only allow admin to remove their own feedback
+    if (normalizeEmail(target.author) !== normalizeEmail(adminEmail || '')) {
+      alert('You can only delete your own feedback');
+      return;
+    }
+    feedbacks.splice(feedbackIndex, 1);
+    await updateDoc(taskRef, { feedbacks });
+    alert('Feedback deleted');
+  } catch (error) {
+    console.error('Failed to remove feedback:', error);
+    alert('Failed to remove feedback. See console for details.');
+  }
+};
 
 // Update chart only when analytics is visible and data changed
 function updateChartIfNeeded() {
@@ -1415,6 +1831,8 @@ function showMemberTaskDetails(memberName) {
     description.style.margin = '0';
     description.style.color = '#94a3b8';
     description.style.fontSize = '0.92rem';
+    description.style.whiteSpace = 'pre-wrap';
+    description.style.wordBreak = 'break-word';
 
     item.appendChild(title);
     item.appendChild(status);
@@ -1591,6 +2009,77 @@ window.addAnnouncementComment = async function(announcementId) {
   }
 };
 
+/* CREATE IN-APP NOTIFICATION */
+window.createInAppNotification = async function () {
+  const title = document.getElementById("inAppNotificationTitle").value.trim();
+  const message = document.getElementById("inAppNotificationMessage").value.trim();
+  const checkedBoxes = document.querySelectorAll(".in-app-notification-recipient-checkbox:checked");
+  const selectedRecipients = Array.from(checkedBoxes).map(cb => cb.value);
+
+  if (!title || !message) {
+    alert("Please fill all fields.");
+    return;
+  }
+
+  try {
+    const normalizedRecipients = selectedRecipients.includes("everyone") ? ["everyone"] : (selectedRecipients.length > 0 ? selectedRecipients : ["everyone"]);
+    const targetType = normalizedRecipients.includes("everyone") ? "everyone" : "specific";
+    const assignedToNames = normalizedRecipients.map(uid => {
+      const member = members.find(m => m.uid === uid);
+      return member ? member.name : uid;
+    });
+
+    const notificationData = {
+      title,
+      message,
+      targetType,
+      assignedTo: normalizedRecipients,
+      assignedToNames,
+      createdAt: new Date(),
+      active: true,
+      // displayMode: 'once' | 'until' | 'always'
+      displayMode: 'once',
+      until: null,
+      shownTo: [],
+      createdBy: adminEmail || "admin"
+    };
+
+    // Read display frequency controls
+    try {
+      const selectedModeEl = document.querySelector('input[name="inAppDisplayMode"]:checked');
+      if (selectedModeEl) {
+        const mode = selectedModeEl.value;
+        notificationData.displayMode = mode;
+        if (mode === 'until') {
+          const untilInput = document.getElementById('inAppDisplayUntilDate');
+          if (untilInput && untilInput.value) {
+            const untilDate = new Date(untilInput.value);
+            if (!isNaN(untilDate.getTime())) {
+              notificationData.until = untilDate;
+            }
+          }
+        }
+        if (mode === 'once') {
+          notificationData.timesShown = 0;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to read display frequency controls:', err);
+    }
+
+    await addDoc(collection(db, "inAppNotifications"), notificationData);
+
+    document.getElementById("inAppNotificationTitle").value = "";
+    document.getElementById("inAppNotificationMessage").value = "";
+    document.querySelectorAll(".in-app-notification-recipient-checkbox").forEach(cb => cb.checked = false);
+
+    alert("In-app notification created successfully!");
+  } catch (error) {
+    console.error("Error creating in-app notification:", error);
+    alert(`Failed to create in-app notification: ${error.message}`);
+  }
+};
+
 /* CREATE ANNOUNCEMENT */
 window.createAnnouncement = async function () {
   const title = document.getElementById("announcementTitle").value.trim();
@@ -1673,7 +2162,7 @@ window.createResource = async function () {
     try {
       const notificationTitle = "New Resource Added";
       const notificationBody = `New resource: "${title}"`;
-      const allMemberEmails = members.map(m => m.uid).filter(email => email !== "everyone");
+      const allMemberEmails = members.map(m => m.uid).filter(email => !isHiddenMember(email));
       console.log('Sending notification to members:', allMemberEmails);
       await sendNotificationToUsers(allMemberEmails, notificationTitle, notificationBody, 'resource');
       showLocalNotification(notificationTitle, notificationBody);
@@ -1722,7 +2211,10 @@ window.deleteAnnouncement = async function (id) {
 /* LOAD POLLS */
 onSnapshot(collection(db, "polls"), (snap) => {
   const container = document.getElementById("pollsList");
-  if (!container) return;
+  if (!container) {
+    console.warn('Skipping polls render because pollsList is not present.');
+    return;
+  }
   container.innerHTML = "";
 
   if (snap.empty) {
@@ -1765,6 +2257,10 @@ onSnapshot(collection(db, "polls"), (snap) => {
 /* LOAD ANNOUNCEMENTS */
 onSnapshot(collection(db, "announcements"), (snap) => {
   const container = document.getElementById("announcementsList");
+  if (!container) {
+    console.warn('Skipping announcements render because announcementsList is not present.');
+    return;
+  }
   container.innerHTML = "";
 
   if (snap.empty) {
@@ -1805,7 +2301,7 @@ onSnapshot(collection(db, "announcements"), (snap) => {
         <h4>${announcement.title}</h4>
         <p style="color: #94a3b8; font-size: 0.8rem;">Created: ${createdDate}</p>
         <p style="color: #60a5fa; font-size: 0.85rem; margin: 0.25rem 0;">${assignedToText}</p>
-        <p style="margin: 0.5rem 0; line-height: 1.4;">${announcement.content}</p>
+        <p style="margin: 0.5rem 0; line-height: 1.4; white-space: pre-wrap; word-break: break-word;">${announcement.content}</p>
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
           <button onclick="toggleAnnouncementComments('${docSnap.id}', ${commentsEnabled})" class="btn-secondary" style="padding: 0.3rem 0.65rem; font-size: 0.75rem; min-width: auto;">${commentsEnabled ? 'Disable Comments' : 'Enable Comments'}</button>
           <span style="align-self: center; color: ${commentsEnabled ? '#10b981' : '#f59e0b'}; font-size: 0.85rem;">Comments ${commentsEnabled ? 'Enabled' : 'Disabled'}</span>
@@ -1825,6 +2321,9 @@ onSnapshot(collection(db, "announcements"), (snap) => {
 });
 
 loadProgressReport();
+if (document.getElementById('addProgressSectionButton')) {
+  document.getElementById('addProgressSectionButton').addEventListener('click', addAdminProgressSection);
+}
 
 async function getNextLiveChatTitle() {
   const snapshot = await getDocs(collection(db, 'liveChats'));
@@ -1898,60 +2397,15 @@ function renderAdminChatRooms(rooms) {
 }
 
 function openAdminChatRoom(chatId) {
-  const room = liveChatRoomsById[chatId];
-  if (!room) return;
-
-  selectedLiveChatId = chatId;
-  const panel = document.getElementById('adminChatRoomPanel');
-  const titleEl = document.getElementById('adminActiveChatTitle');
-  const metaEl = document.getElementById('adminActiveChatMeta');
-  const messageInput = document.getElementById('adminChatMessageInput');
-  const messageForm = document.getElementById('adminChatMessageForm');
-
-  if (panel) {
-    panel.style.display = 'block';
-    
-    // Check if mobile (640px or less)
-    if (window.innerWidth <= 640) {
-      panel.classList.add('fullscreen-visible');
-      document.body.classList.add('chat-fullscreen-open');
-      document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-      document.body.style.height = '100vh';
-    }
-  }
-  
-  if (titleEl) titleEl.textContent = room.title;
-  if (metaEl) metaEl.textContent = `Created by ${room.createdByName || getUserName(room.createdByEmail)} • Status: ${room.status}`;
-  if (messageInput) messageInput.disabled = room.status !== 'Active';
-  if (messageForm) messageForm.style.opacity = room.status !== 'Active' ? '0.7' : '1';
-
-  clearAdminReplyToMessage();
-  subscribeAdminChatMessages(chatId);
-  
-  // Scroll to bottom after loading
-  setTimeout(() => {
-    const adminChatMessages = document.getElementById('adminChatMessages');
-    if (adminChatMessages) {
-      adminChatMessages.scrollTop = adminChatMessages.scrollHeight;
-    }
-  }, 100);
+  window.location.href = `chat.html?chatId=${chatId}&from=admin`;
 }
 
 function closeAdminChatPanel() {
   const panel = document.getElementById('adminChatRoomPanel');
   if (panel) {
     panel.style.display = 'none';
-    panel.classList.remove('fullscreen-visible');
+    panel.classList.remove('open');
   }
-
-  // Remove fullscreen mode
-  document.body.classList.remove('chat-fullscreen-open');
-  document.body.style.overflow = '';
-  document.body.style.position = '';
-  document.body.style.width = '';
-  document.body.style.height = '';
 
   if (liveChatMessagesUnsubscribe) {
     liveChatMessagesUnsubscribe();
@@ -2162,7 +2616,7 @@ function renderAdminChatMessages(messages) {
   container.innerHTML = '';
   messages.forEach((msg) => {
     adminChatMessagesById[msg.id] = msg;
-    const isOwn = msg.senderEmail === adminEmail;
+    const isOwn = normalizeEmail(msg.senderEmail) === normalizeEmail(adminEmail);
     const messageText = msg.deleted ? 'This message was unsent.' : msg.text;
     const safeText = escapeHtml(messageText);
     const renderedText = msg.deleted ? safeText : formatMessageWithMentions(safeText);
@@ -2170,7 +2624,7 @@ function renderAdminChatMessages(messages) {
     const replyPreview = msg.replyToId ? `
       <div style="padding: 0.75rem 1rem; margin-bottom: 0.75rem; border-radius: 12px; background: #0f172a; border: 1px solid #374151;">
         <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.25rem;">Replying to ${escapeHtml(msg.replyToSenderName || 'Unknown')}</div>
-        <div style="font-size: 0.9rem; color: #e5e7eb; line-height: 1.4;">${escapeHtml(msg.replyToText || '')}</div>
+        <div style="font-size: 0.9rem; color: #e5e7eb; line-height: 1.4; white-space: pre-wrap; word-break: break-word;">${escapeHtml(msg.replyToText || '')}</div>
       </div>
     ` : '';
     const buttonBaseStyle = 'display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;';
@@ -2186,7 +2640,7 @@ function renderAdminChatMessages(messages) {
         <div style="font-size: 0.85rem; color: #94a3b8;">${escapeHtml(msg.senderName || getUserName(msg.senderEmail) || 'Guest')}</div>
         <div style="font-size: 0.75rem; color: #6b7280;">${msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</div>
       </div>
-      <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; margin-bottom: 0.5rem;">${imageMarkup}${renderedText}</div>
+      <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; margin-bottom: 0.5rem; white-space: pre-wrap; word-break: break-word;">${imageMarkup}${renderedText}</div>
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; margin-bottom: ${msg.reactions && Object.keys(msg.reactions).length > 0 ? '0.5rem' : '0'};">
         ${actionButtons ? `<div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">${actionButtons}</div>` : ''}
         <button type="button" class="admin-react-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">😊 React</button>
@@ -2430,20 +2884,20 @@ async function toggleAdminMessageReaction(messageId, emoji) {
   if (!messageSnap.exists()) return;
 
   const reactions = messageSnap.data().reactions || {};
-  const currentUserEmail = adminEmail;
+  const normalizedCurrentUserEmail = normalizeEmail(adminEmail);
 
   if (!reactions[emoji]) {
     reactions[emoji] = [];
   }
 
-  const userIndex = reactions[emoji].indexOf(currentUserEmail);
+  const userIndex = reactions[emoji].findIndex(user => normalizeEmail(user) === normalizedCurrentUserEmail);
   if (userIndex > -1) {
     reactions[emoji].splice(userIndex, 1);
     if (reactions[emoji].length === 0) {
       delete reactions[emoji];
     }
   } else {
-    reactions[emoji].push(currentUserEmail);
+    reactions[emoji].push(adminEmail);
   }
 
   try {
@@ -2493,34 +2947,6 @@ window.triggerAdminChatImageInput = triggerAdminChatImageInput;
 window.handleAdminChatImageInputChange = handleAdminChatImageInputChange;
 window.clearAdminChatImageSelection = clearAdminChatImageSelection;
 window.deleteLiveChatRoom = deleteLiveChatRoom;
-
-// Handle resize for responsive fullscreen chat
-window.addEventListener('resize', () => {
-  const chatPanel = document.getElementById('adminChatRoomPanel');
-  const isFullscreenOpen = document.body.classList.contains('chat-fullscreen-open');
-  
-  if (!chatPanel || chatPanel.style.display === 'none') return;
-  
-  // If screen is wider than 640px and fullscreen is active, close fullscreen mode
-  if (window.innerWidth > 640 && isFullscreenOpen) {
-    document.body.classList.remove('chat-fullscreen-open');
-    document.body.style.overflow = '';
-    document.body.style.position = '';
-    document.body.style.width = '';
-    document.body.style.height = '';
-    chatPanel.classList.remove('fullscreen-visible');
-  }
-  
-  // If screen becomes mobile again while chat is open, restore fullscreen
-  if (window.innerWidth <= 640 && !isFullscreenOpen && chatPanel.style.display !== 'none') {
-    document.body.classList.add('chat-fullscreen-open');
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
-    document.body.style.height = '100vh';
-    chatPanel.classList.add('fullscreen-visible');
-  }
-});
 
 const adminCreateChatForm = document.getElementById('adminCreateChatForm');
 if (adminCreateChatForm) {
@@ -2608,6 +3034,10 @@ window.changeTicketStatus = async function(ticketId, newStatus) {
       memberNotificationMessage: notificationBody,
       memberNotificationAt: new Date()
     });
+
+    if (ticket.ticketType === 'password-reset' && newStatus === 'approved') {
+      await approvePasswordReset(recipientEmail, ticketId);
+    }
 
     if (recipientEmail) {
       await sendNotificationToUsers([recipientEmail], notificationTitle, notificationBody, 'ticket');

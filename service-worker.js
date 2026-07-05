@@ -17,19 +17,20 @@ const urlsToCache = [
 ];
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBJt3bCDYaqzLe_vGiFqvCMehJedZFvSJs",
-  authDomain: "task-edd4d.firebaseapp.com",
-  projectId: "task-edd4d",
-  storageBucket: "task-edd4d.firebasestorage.app",
-  messagingSenderId: "372695845973",
-  appId: "1:372695845973:web:23b25b0de8ca2b72dfd8dc"
+  apiKey: "AIzaSyDwaMDGG7ke7fwM0wYsywSfPPZ2qZGPZLc",
+  authDomain: "mycollab-89c11.firebaseapp.com",
+  projectId: "mycollab-89c11",
+  storageBucket: "mycollab-89c11.firebasestorage.app",
+  messagingSenderId: "1089766419760",
+  appId: "1:1089766419760:web:26b4307d2fd78fd067acf5",
+  measurementId: "G-N0JF8FKPHP"
 };
 
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(function(payload) {
-  const title = payload.notification?.title || payload.data?.title || 'My Thesis Hub';
+  const title = payload.notification?.title || payload.data?.title || 'My Collab';
   const body = payload.notification?.body || payload.data?.body || 'You have a new notification';
   const options = {
     body,
@@ -61,30 +62,37 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('fetch', event => {
+  const requestUrl = new URL(event.request.url);
+
+  // Only intercept same-origin GET/HEAD requests for app shell caching.
+  if (event.request.method !== 'GET' && event.request.method !== 'HEAD') {
+    return;
+  }
+
+  if (requestUrl.origin !== location.origin) {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then(response => {
-        // Only cache GET and HEAD requests
-        if (event.request.method === 'GET' || event.request.method === 'HEAD') {
-          if (response && response.ok) {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              try {
-                cache.put(event.request, responseClone);
-              } catch (e) {
-                console.warn('Failed to cache response:', e);
-              }
-            }).catch(err => console.warn('Failed to open cache:', err));
-          }
+        if (response && response.ok) {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            try {
+              cache.put(event.request, responseClone);
+            } catch (e) {
+              console.warn('Failed to cache response:', e);
+            }
+          }).catch(err => console.warn('Failed to open cache:', err));
         }
         return response;
       })
       .catch(() => {
-        // Try to return cached response on network error
-        if (event.request.method === 'GET' || event.request.method === 'HEAD') {
-          return caches.match(event.request);
-        }
-        throw new Error('Network request failed');
+        return caches.match(event.request).then(cachedResponse => {
+          if (cachedResponse) return cachedResponse;
+          return Response.error();
+        });
       })
   );
 });

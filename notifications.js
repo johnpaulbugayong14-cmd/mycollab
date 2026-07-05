@@ -1,5 +1,5 @@
 /**
- * Notification System for My Thesis Hub
+ * Notification System for My Collab
  *
  * SETUP INSTRUCTIONS:
  * 1. Go to Firebase Console > Project Settings > Cloud Messaging
@@ -170,7 +170,7 @@ export async function initializeNotifications() {
 
   onMessage(messaging, (payload) => {
     console.log('Foreground FCM message received:', payload);
-    const title = payload.notification?.title || payload.data?.title || 'My Thesis Hub';
+    const title = payload.notification?.title || payload.data?.title || 'My Collab';
     const body = payload.notification?.body || payload.data?.body || 'You have a new message';
     showLocalNotification(title, body);
   });
