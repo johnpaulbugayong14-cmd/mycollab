@@ -23,7 +23,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { email, name, type, title } = req.body || {};
+    const { email, name, type, title, meetingDate, meetingTime } = req.body || {};
 
     if (!email || !name || !type || !title) {
       return res.status(400).json({
@@ -37,7 +37,7 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'Invalid email format' });
     }
 
-    const validTypes = ['task', 'announcement', 'poll', 'ticket', 'thesisProgress'];
+    const validTypes = ['task', 'announcement', 'poll', 'ticket', 'thesisProgress', 'meeting'];
     if (!validTypes.includes(type)) {
       return res.status(400).json({
         success: false,
@@ -53,6 +53,20 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ success: false, error: 'GitHub configuration is missing on the server' });
     }
 
+    if (type === 'meeting' && (!meetingDate || !meetingTime)) {
+      return res.status(400).json({
+        success: false,
+        error: 'meetingDate and meetingTime are required for meeting type'
+      });
+    }
+
+    const clientPayload = { email, name, type, title };
+    if (type === 'meeting') {
+      clientPayload.meetingDate = meetingDate;
+      clientPayload.meetingTime = meetingTime;
+      clientPayload.meetingTitle = title;
+    }
+
     const response = await fetch(
       `https://api.github.com/repos/${repoOwner}/${repoName}/dispatches`,
       {
@@ -64,8 +78,8 @@ module.exports = async function handler(req, res) {
           'User-Agent': 'MyCollab-Email-Backend'
         },
         body: JSON.stringify({
-          event_type: 'send-email',
-          client_payload: { email, name, type, title }
+          event_type: type === 'meeting' ? 'meeting-created' : 'send-email',
+          client_payload: clientPayload
         })
       }
     );
