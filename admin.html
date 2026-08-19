@@ -14,9 +14,15 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="style.css?v=1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    body.admin-loading .nav-btn,
+    body.admin-loading .content-section {
+      display: none !important;
+    }
+  </style>
   <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
 </head>
-<body>
+<body class="admin-loading">
 
 <!-- Mobile Navigation Toggle -->
 <button class="mobile-nav-toggle" onclick="toggleMobileSidebar()"><i class="fas fa-bars"></i></button>
@@ -57,7 +63,13 @@
     <div class="content-header">
       <h1 id="page-title"><i class="fas fa-chart-bar"></i> Admin Dashboard</h1>
       <div class="header-actions">
-        <div id="welcome" class="welcome-header">welcome, boss pi!</div>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div id="adminHeaderProfilePicture" onclick="document.getElementById('adminProfileInputHeader').click()" style="width: 40px; height: 40px; border-radius: 50%; background: #1f2937; border: 2px solid #4b5563; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
+            <i class="fas fa-user" style="color: #9ca3af; font-size: 1rem;"></i>
+          </div>
+          <div id="welcome" class="welcome-header">welcome, boss pi!</div>
+          <input type="file" id="adminProfileInputHeader" accept="image/*" style="display: none;" onchange="handleAdminProfileUpload(event)" />
+        </div>
         <button onclick="signOutUser()" class="logout-btn header-logout">Logout</button>
       </div>
     </div>
@@ -559,7 +571,7 @@ function closeMobileSidebar() {
   import { requireAuth } from "./auth.js?v=7";
   await requireAuth(['admin']);
 </script>
-<script type="module" src="admin.js?v=3"></script>
+<script type="module" src="admin.js?v=4"></script>
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js");
@@ -973,6 +985,14 @@ function renderMeetings(meetings) {
 
 // Initialize Jitsi when video conference section becomes active
 function showSection(sectionId) {
+  if (document.body.classList.contains('admin-loading')) {
+    return;
+  }
+
+  if (typeof window.hasValidAdminRole === 'function' && typeof adminRole !== 'undefined' && !window.hasValidAdminRole(adminRole)) {
+    return;
+  }
+
   // Hide all sections
   const sections = document.querySelectorAll('.content-section');
   sections.forEach(section => section.classList.remove('active'));

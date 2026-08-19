@@ -10,6 +10,8 @@ let userEmail = null;
 let meetingsUnsubscribe = null;
 let chatRoomsUnsubscribe = null;
 let chatMessagesUnsubscribe = null;
+let archivedPollsCollapsed = localStorage.getItem('archivedPollsCollapsed') !== 'false';
+let archivedAnnouncementsCollapsed = localStorage.getItem('archivedAnnouncementsCollapsed') !== 'false';
 let selectedChatId = null;
 let chatRoomsById = {};
 let chatMessagesById = {};
@@ -23,6 +25,7 @@ let inAppNotificationQueue = [];
 let inAppNotificationDisplaying = false;
 let accessStatusUnsubscribe = null;
 let memberStatusUnsubscribe = null;
+let memberRosterUnsubscribe = null;
 let memberStatusDocs = {};
 let previousTaskMap = new Map();
 let previousPollMap = new Map();
@@ -40,6 +43,13 @@ let presenceLastUpdatedAt = 0;
 let presenceAuthToken = null;
 let presenceAuthTokenLastRefreshed = 0;
 let completedTasksCollapsed = localStorage.getItem('completedTasksCollapsed') !== 'false';
+let homeFlashcardTimer = null;
+let homeFlashcardItems = [];
+let homeFlashcardSetContent = null;
+let homeChatMessageListeners = [];
+let homeChatRoomNames = {};
+let homeFlashcardIndex = 0;
+let homeFlashcardListeners = [];
 const FIREBASE_PROJECT_ID = "mycollab-89c11";
 const FIRESTORE_REST_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 const container = document.getElementById("tasks");
@@ -131,9 +141,184 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+async function compressImage(file, maxWidth = 400, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Unable to create canvas context for image compression.'));
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('Unable to load the selected image.'));
+      img.src = event.target.result;
+    };
+    reader.onerror = () => reject(new Error('Unable to read the selected image file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function saveProfilePictureForEmail(email, imageBase64) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return false;
+
+  try {
+    await setDoc(doc(db, 'userRoles', normalizedEmail), {
+      profilePicture: imageBase64,
+      profilePictureUpdatedAt: new Date().toISOString()
+    }, { merge: true });
+    return true;
+  } catch (error) {
+    console.error('Error saving profile picture to Firestore:', error);
+    return false;
+  }
+}
+
+async function loadProfilePictureForEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  try {
+    const snap = await getDoc(doc(db, 'userRoles', normalizedEmail));
+    if (snap.exists()) {
+      return snap.data()?.profilePicture || null;
+    }
+    return null;
+  } catch (error) {
+    console.warn('Error loading profile picture for member:', error);
+    return null;
+  }
+}
+
+function getInitialsFromEmail(email) {
+  const source = String(email || '').trim();
+  if (!source) return '?';
+
+  const cleaned = source.includes('@') ? source.split('@')[0] : source;
+  const parts = cleaned.split(/[._\s-]+/).filter(Boolean).slice(0, 2);
+  if (parts.length === 0) return '?';
+  return parts.map(part => part.charAt(0).toUpperCase()).join('').slice(0, 2);
+}
+
+function renderUserAvatarMarkup(email, size = 28) {
+  const normalized = normalizeEmail(email);
+  const initials = getInitialsFromEmail(email || 'Member');
+  const safeSize = Math.max(20, Number(size) || 28);
+  return `
+    <div data-profile-email="${escapeHtml(normalized || '')}" style="width:${safeSize}px; height:${safeSize}px; border-radius:50%; background:#1f2937; border:1px solid #4b5563; overflow:hidden; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 0 0 1px rgba(148,163,184,0.15);">
+      <span style="color:#e5e7eb; font-size:${Math.max(9, safeSize * 0.38)}px; font-weight:700; letter-spacing:0.04em;">${escapeHtml(initials)}</span>
+    </div>
+  `;
+}
+
+async function hydrateProfileAvatars() {
+  const avatarNodes = [...document.querySelectorAll('[data-profile-email]')];
+  if (!avatarNodes.length) return;
+
+  const uniqueEmails = [...new Set(avatarNodes.map(node => normalizeEmail(node.getAttribute('data-profile-email'))).filter(Boolean))];
+  if (!uniqueEmails.length) return;
+
+  const results = await Promise.all(uniqueEmails.map(async (email) => {
+    const memberPicture = await loadProfilePictureForEmail(email).catch(() => null);
+    return memberPicture ? { email, picture: memberPicture } : { email, picture: null };
+  }));
+
+  const byEmail = new Map(results.filter(item => item && item.email).map(item => [item.email, item.picture]));
+
+  avatarNodes.forEach((node) => {
+    const email = normalizeEmail(node.getAttribute('data-profile-email'));
+    const picture = byEmail.get(email);
+    if (!picture) return;
+    node.innerHTML = `<img src="${picture}" alt="Profile" style="width:100%; height:100%; object-fit:cover; display:block;" />`;
+  });
+}
+
+async function displayMemberProfilePicture(email) {
+  const profilePictureDiv = document.getElementById('memberHeaderProfilePicture');
+  if (!profilePictureDiv) return;
+
+  const normalizedEmail = normalizeEmail(email);
+  const profilePicture = normalizedEmail ? await loadProfilePictureForEmail(normalizedEmail).catch(() => null) : null;
+
+  if (profilePicture) {
+    profilePictureDiv.innerHTML = `<img src="${profilePicture}" style="width: 100%; height: 100%; object-fit: cover; display: block;" alt="Profile picture" />`;
+    return;
+  }
+
+  profilePictureDiv.innerHTML = `<span style="color: #e5e7eb; font-size: 0.9rem; font-weight: 700;">${escapeHtml(getInitialsFromEmail(normalizedEmail || 'Member'))}</span>`;
+}
+
+window.handleMemberProfileUpload = async function(event) {
+  const file = event?.target?.files?.[0];
+  if (!file || !userEmail) {
+    return;
+  }
+
+  try {
+    const compressed = await compressImage(file, 400, 0.7);
+    const saved = await saveProfilePictureForEmail(userEmail, compressed);
+
+    if (saved) {
+      await displayMemberProfilePicture(userEmail);
+      await hydrateProfileAvatars();
+      alert('Profile picture updated successfully!');
+    } else {
+      alert('Profile picture could not be saved. Please try again.');
+    }
+  } catch (error) {
+    console.error('Failed to upload profile picture:', error);
+    alert('Failed to upload profile picture. Please try again.');
+  } finally {
+    if (event?.target) {
+      event.target.value = '';
+    }
+  }
+};
+
+function matchesAnnouncementTarget(assignedTo, assignedToNames = [], currentEmail, currentName = '') {
+  const values = [
+    ...(Array.isArray(assignedTo) ? assignedTo : (assignedTo ? [assignedTo] : [])),
+    ...(Array.isArray(assignedToNames) ? assignedToNames : (assignedToNames ? [assignedToNames] : []))
+  ];
+
+  if (values.length === 0) {
+    return true;
+  }
+
+  const normalizedCurrentEmail = normalizeEmail(currentEmail);
+  const normalizedCurrentName = normalizeEmail(currentName);
+
+  return values.some((value) => {
+    const normalizedValue = normalizeEmail(value);
+    return !normalizedValue
+      || normalizedValue === 'everyone'
+      || normalizedValue === 'all'
+      || normalizedValue === normalizedCurrentEmail
+      || normalizedValue === normalizedCurrentName;
+  });
+}
+
 function isHiddenMember(memberOrEmail) {
   const normalized = normalizeEmail(memberOrEmail?.uid || memberOrEmail);
-  return normalized === 'everyone' || normalized === 'johnpaulbugayong@gmail.com';
+  return normalized === 'everyone';
 }
 
 function ensureMemberEntry(email, fallbackName = null) {
@@ -222,6 +407,21 @@ async function getWelcomeName(email) {
   const normalized = normalizeEmail(email);
   if (!normalized) return 'Member';
 
+  try {
+    const storedUserRaw = localStorage.getItem('authUser');
+    if (storedUserRaw) {
+      const storedUser = JSON.parse(storedUserRaw);
+      const storedName = typeof storedUser?.displayName === 'string' && storedUser.displayName.trim()
+        ? storedUser.displayName.trim()
+        : (typeof storedUser?.name === 'string' && storedUser.name.trim() ? storedUser.name.trim() : '');
+      if (storedName && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(storedName)) {
+        return storedName;
+      }
+    }
+  } catch (error) {
+    console.warn('Unable to read stored display name for welcome text:', error);
+  }
+
   const member = members.find(m => normalizeEmail(m.uid) === normalized);
   if (member?.name && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(member.name)) {
     return member.name;
@@ -247,7 +447,8 @@ async function getWelcomeName(email) {
     return fallbackName;
   }
 
-  return formatDisplayNameFromEmail(email);
+  const emailName = formatDisplayNameFromEmail(email);
+  return emailName && emailName !== 'Member' ? emailName : 'User';
 }
 
 function parseDateValue(value) {
@@ -258,13 +459,789 @@ function parseDateValue(value) {
     const parsed = new Date(value);
     return isNaN(parsed.getTime()) ? null : parsed;
   }
+
   if (value && typeof value.toDate === 'function') {
     return value.toDate();
   }
-  if (value && typeof value.toMillis === 'function') {
-    return new Date(value.toMillis());
-  }
+
   return null;
+}
+
+function getAnnouncementValidityMs() {
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function getHomeGreeting(name) {
+  const safeName = String(name || 'Member').trim() || 'Member';
+  return `Hello there, ${safeName}!`;
+}
+
+function getAnnouncementValidityState(announcement) {
+  if (!announcement || !announcement.title) {
+    return { valid: false, reason: 'missing-title' };
+  }
+
+  const createdAtValue = announcement.createdAt || announcement.date || announcement.timestamp || announcement.postedAt;
+  if (!createdAtValue) {
+    return { valid: true, reason: 'missing-date-assume-fresh', ageMs: 0, createdAt: new Date().toISOString() };
+  }
+
+  const createdAt = parseDateValue(createdAtValue);
+  if (!createdAt) {
+    return { valid: true, reason: 'invalid-date-assume-fresh', ageMs: 0, createdAt: new Date().toISOString() };
+  }
+
+  const ageMs = Date.now() - createdAt.getTime();
+  return {
+    valid: ageMs <= getAnnouncementValidityMs(),
+    ageMs,
+    createdAt: createdAt.toISOString()
+  };
+}
+
+function renderHomeFlashcard(items = []) {
+  const flashcard = document.getElementById('home-flashcard');
+  if (!flashcard) return;
+
+  homeFlashcardItems = items;
+
+  if (homeFlashcardTimer) {
+    clearInterval(homeFlashcardTimer);
+    homeFlashcardTimer = null;
+  }
+
+  flashcard.innerHTML = '';
+
+  const flashHeader = document.createElement('div');
+  flashHeader.className = 'flash-header';
+  flashcard.appendChild(flashHeader);
+
+  const flashText = document.createElement('div');
+  flashText.className = 'flash-text visible';
+  flashcard.appendChild(flashText);
+
+  const setFlashContent = (item) => {
+    if (!item) {
+      flashHeader.textContent = 'Overview';
+      flashText.textContent = 'No new updates for today.';
+      return;
+    }
+
+    flashHeader.textContent = item.title;
+
+    const values = Array.isArray(item.detail) ? item.detail : [item.detail];
+    const cleaned = values.filter((entry) => {
+      if (entry && typeof entry === 'object') {
+        return String(entry.progressName || entry.memberName || entry.resourceTitle || entry.roomName || '').trim() !== '';
+      }
+      return entry !== null && entry !== undefined && String(entry).trim() !== '';
+    });
+
+    if (!cleaned.length) {
+      flashText.textContent = 'No new updates for today.';
+      return;
+    }
+
+    if (item.title === 'Member Status') {
+      flashText.innerHTML = cleaned.map((entry) => {
+        const member = typeof entry === 'object'
+          ? entry
+          : { memberName: entry, status: 'OFFLINE', lastSeen: 'Unknown' };
+        return `
+          <div class="flash-item flash-member-status">
+            ${member.memberUid ? renderUserAvatarMarkup(member.memberUid, 32) : ''}
+            <div class="flash-member-status-details">
+              <div><strong>Member:</strong> ${escapeHtml(member.memberName || 'Unknown')}</div>
+              <div><strong>Status:</strong> ${escapeHtml(member.status || 'OFFLINE')}</div>
+              <div><strong>Last seen:</strong> ${escapeHtml(member.lastSeen || 'Unknown')}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      void hydrateProfileAvatars();
+      return;
+    }
+
+    if (item.title === 'Resources') {
+      flashText.innerHTML = cleaned.map((entry) => {
+        const resource = typeof entry === 'object'
+          ? entry
+          : { resourceTitle: entry, description: 'No description provided.', link: '' };
+        return `
+          <div class="flash-item flash-resource">
+            <div><strong>Resource:</strong> ${escapeHtml(resource.resourceTitle || 'Untitled resource')}</div>
+            <div><strong>Description:</strong> ${escapeHtml(resource.description || 'No description provided.')}</div>
+            ${resource.link ? `<div><strong>Link:</strong> ${escapeHtml(resource.link)}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+      return;
+    }
+
+    if (item.title === 'Chat') {
+      flashText.innerHTML = cleaned.map((entry) => {
+        const chat = typeof entry === 'object'
+          ? entry
+          : { roomName: 'Live chat', senderName: 'Member', messageText: entry };
+        return `
+          <div class="flash-item flash-chat">
+            <div><strong>Room:</strong> ${escapeHtml(chat.roomName || 'Live chat')}</div>
+            <div><strong>From:</strong> ${escapeHtml(getFriendlyName(chat.senderName || 'Member'))}</div>
+            <div><strong>Message:</strong> ${escapeHtml(chat.messageText || '[Image]')}</div>
+          </div>
+        `;
+      }).join('');
+      return;
+    }
+
+    if (cleaned.length === 1 && typeof cleaned[0] === 'object') {
+      const entry = cleaned[0];
+      if (entry.type === 'memberStatus') {
+        flashText.innerHTML = `
+          <div class="flash-item">
+            <div><strong>Member:</strong> ${escapeHtml(entry.memberName)}</div>
+            <div><strong>Status:</strong> ${escapeHtml(entry.status)}</div>
+            <div><strong>Last seen:</strong> ${escapeHtml(entry.lastSeen)}</div>
+          </div>
+        `;
+        return;
+      }
+
+      flashText.innerHTML = `
+        <div class="flash-item">
+          <div><strong>Progress:</strong> ${escapeHtml(entry.progressName)}</div>
+          <div><strong>Assigned:</strong> ${escapeHtml(entry.assigned)}</div>
+          <div><strong>Status:</strong> ${escapeHtml(entry.status)}</div>
+        </div>
+      `;
+      return;
+    }
+
+    if (cleaned.length === 1) {
+      flashText.innerHTML = `<div class="flash-item">${escapeHtml(String(cleaned[0]).trim())}</div>`;
+      return;
+    }
+
+    flashText.innerHTML = cleaned
+      .map((entry) => {
+        if (entry && typeof entry === 'object') {
+          if (entry.type === 'memberStatus') {
+            return `
+              <div class="flash-item">
+                <div><strong>Member:</strong> ${escapeHtml(entry.memberName)}</div>
+                <div><strong>Status:</strong> ${escapeHtml(entry.status)}</div>
+                <div><strong>Last seen:</strong> ${escapeHtml(entry.lastSeen)}</div>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="flash-item">
+              <div><strong>Progress:</strong> ${escapeHtml(entry.progressName)}</div>
+              <div><strong>Assigned:</strong> ${escapeHtml(entry.assigned)}</div>
+              <div><strong>Status:</strong> ${escapeHtml(entry.status)}</div>
+            </div>
+          `;
+        }
+        return `<div class="flash-item">• ${escapeHtml(String(entry).trim())}</div>`;
+      })
+      .join('');
+  };
+
+  homeFlashcardSetContent = setFlashContent;
+
+  if (!items.length) {
+    setFlashContent(null);
+    return;
+  }
+
+  homeFlashcardIndex = 0;
+  setFlashContent(items[0]);
+
+  homeFlashcardTimer = setInterval(() => {
+    homeFlashcardIndex = (homeFlashcardIndex + 1) % items.length;
+    flashText.classList.remove('visible');
+    void flashText.offsetWidth;
+    setFlashContent(items[homeFlashcardIndex]);
+    flashText.classList.add('visible');
+  }, 4200);
+}
+
+
+function isTaskDeadlineUrgent(task = {}) {
+  const status = String(task.status || '').trim().toLowerCase();
+  if (!status || status === 'done' || status === 'completed' || status === 'pending validation') {
+    return false;
+  }
+
+  const deadline = task.deadline || task.dueDate;
+  if (!deadline) return false;
+
+  const date = parseDateValue(deadline);
+  if (!date) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueDate = new Date(date);
+  dueDate.setHours(0, 0, 0, 0);
+
+  const diffDays = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  return diffDays <= 3;
+}
+
+function getHomeFlashcardKey(sectionKey, item) {
+  const documentId = item?.id ?? item?.docId ?? item?.documentId ?? item?.uid;
+  const timestampValue = item?.createdAt ?? item?.updatedAt ?? item?.date ?? item?.postedAt ?? item?.deadline ?? item?.startDate ?? item?.endDate ?? item?.time ?? item?.meetingDate ?? item?.meetingTime;
+  const timestampMs = parseDateValue(timestampValue)
+    ? parseDateValue(timestampValue).getTime()
+    : (typeof timestampValue === 'number' ? timestampValue : null);
+
+  const baseKey = documentId
+    ?? item?.title
+    ?? item?.question
+    ?? item?.name
+    ?? item?.roomName
+    ?? item?.content
+    ?? item?.description
+    ?? JSON.stringify(item || {});
+
+  const timestampText = Number.isFinite(timestampMs) ? String(timestampMs) : 'no-timestamp';
+  return `${sectionKey}:${String(baseKey)}:${timestampText}`;
+}
+
+function isSectionItemClosed(sectionKey, item) {
+  const statusValue = item?.status || item?.state || item?.currentStatus;
+  const normalized = String(statusValue || '').trim().toLowerCase();
+  const closedStatuses = ['closed', 'resolved', 'completed', 'done', 'cancelled', 'archived'];
+
+  if (item?.isClosed === true || item?.closed === true) {
+    return true;
+  }
+
+  if (sectionKey === 'polls' && normalized === 'closed') {
+    return true;
+  }
+
+  if (sectionKey === 'tickets' && closedStatuses.includes(normalized)) {
+    return true;
+  }
+
+  return false;
+}
+
+function isHomeFlashcardItemFresh(sectionKey, item) {
+  if (sectionKey === 'polls' || sectionKey === 'tickets') {
+    return !isSectionItemClosed(sectionKey, item);
+  }
+
+  if (sectionKey === 'tasks' && isTaskDeadlineUrgent(item)) {
+    return true;
+  }
+
+  return true;
+}
+
+function shouldShowHomeFlashcardItem(sectionKey, item) {
+  if (sectionKey === 'polls' || sectionKey === 'tickets') {
+    return !isSectionItemClosed(sectionKey, item);
+  }
+
+  return isHomeFlashcardItemFresh(sectionKey, item);
+}
+
+function markHomeFlashcardItemShown(sectionKey, item) {
+  return;
+}
+
+function getChatRoomDisplayName(room = {}, roomId = '') {
+  const roomName = room.title || room.name || room.roomName || room.chatName || room.chatTitle || room.subject;
+  return String(roomName || '').trim() || (roomId ? `Livechat ${roomId.slice(0, 8)}` : 'Live chat');
+}
+
+function getMemberStatusFlashcardItems() {
+  const adminEmail = 'johnpaulbugayong@gmail.com';
+  const adminEntry = { uid: adminEmail, name: 'Admin' };
+  const seenStatusMembers = new Set();
+
+  return [...members, adminEntry].reduce((statusItems, member) => {
+    if (!member || !member.uid || member.uid === 'everyone') return statusItems;
+    const normalizedId = normalizeEmail(member.uid);
+    if (!normalizedId || seenStatusMembers.has(normalizedId)) return statusItems;
+    seenStatusMembers.add(normalizedId);
+
+    const statusData = memberStatusDocs[normalizedId] || {};
+    statusItems.push({
+      memberUid: member.uid,
+      memberName: normalizedId === normalizeEmail(adminEmail) ? 'Admin' : (member.name || member.uid),
+      status: isMemberCurrentlyActive(statusData) ? 'ACTIVE' : 'OFFLINE',
+      lastSeen: statusData.lastActive ? getTimeAgo(statusData.lastActive) : 'Unknown'
+    });
+    return statusItems;
+  }, []);
+}
+
+function refreshMemberStatusFlashcard() {
+  const statusItem = homeFlashcardItems.find((item) => item.title === 'Member Status');
+  if (!statusItem) return;
+
+  statusItem.detail = getMemberStatusFlashcardItems();
+  if (homeFlashcardItems[homeFlashcardIndex] === statusItem && homeFlashcardSetContent) {
+    homeFlashcardSetContent(statusItem);
+  }
+}
+
+function updateChatUnreadFlashcard(unreadMessages = []) {
+  const chatItem = homeFlashcardItems.find((item) => item.title === 'Chat');
+  if (!chatItem) return;
+
+  chatItem.detail = unreadMessages.length
+    ? unreadMessages.slice(0, 4)
+    : ['No unread messages.'];
+
+  if (homeFlashcardItems[homeFlashcardIndex] === chatItem && homeFlashcardSetContent) {
+    homeFlashcardSetContent(chatItem);
+  }
+}
+
+function getUnreadChatMessages(roomId, messages) {
+  const lastReadKey = `chatLastRead:${userEmail}:${roomId}`;
+  const lastRead = Number(localStorage.getItem(lastReadKey) || 0);
+  return messages
+    .filter((message) => {
+      const parsedCreatedAt = parseDateValue(message.createdAt);
+      const createdAt = parsedCreatedAt ? parsedCreatedAt.getTime() : Number(message.createdAt || 0);
+      const sender = normalizeEmail(message.senderEmail);
+      return !message.deleted && sender !== normalizeEmail(userEmail) && createdAt > lastRead;
+    })
+    .map((message) => ({
+      type: 'chat',
+      roomName: homeChatRoomNames[roomId] || getChatRoomDisplayName({}, roomId),
+      senderName: normalizeEmail(message.senderEmail) === 'johnpaulbugayong@gmail.com'
+        ? 'Admin'
+        : getFriendlyName(message.senderName || getUserName(message.senderEmail) || 'Member'),
+      messageText: message.text || (message.imageData ? '[Image]' : '[Message]')
+    }));
+}
+
+function stopHomeChatMessageListeners() {
+  homeChatMessageListeners.forEach((unsubscribe) => {
+    if (typeof unsubscribe === 'function') unsubscribe();
+  });
+  homeChatMessageListeners = [];
+}
+
+function subscribeHomeChatMessageListeners(rooms = []) {
+  stopHomeChatMessageListeners();
+  homeChatRoomNames = {};
+  const unreadByRoom = {};
+
+  rooms.forEach((room) => {
+    if (!room?.id) return;
+    homeChatRoomNames[room.id] = getChatRoomDisplayName(room, room.id);
+    const messagesRef = collection(db, 'liveChats', room.id, 'messages');
+    const unsubscribe = onSnapshot(messagesRef, (snapshot) => {
+      const messages = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      unreadByRoom[room.id] = getUnreadChatMessages(room.id, messages);
+      updateChatUnreadFlashcard(Object.values(unreadByRoom).flat());
+    }, (error) => console.warn('Home flashcard chat message listener error:', error));
+    homeChatMessageListeners.push(unsubscribe);
+  });
+}
+
+function getLatestHomeDashboardItems(taskItems, announcementItems, pollItems, ticketItems, resourceItems, progressItems, chatItems, meetingItems, memberStatusItems) {
+  const formatList = (items, mapper, emptyMessage) => {
+    const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
+    const mapped = safeItems.slice(0, 4).map(mapper).filter((value) => value && String(value).trim());
+    return mapped.length ? mapped : [emptyMessage];
+  };
+
+  const items = [
+    {
+      title: 'My Tasks',
+      detail: formatList(taskItems, (task) => `${task.title || task.name || 'Untitled task'}`, 'No pending tasks for today.')
+    },
+    {
+      title: 'Announcements',
+      detail: formatList(announcementItems, (item) => {
+        const text = item.content || item.description || item.title || 'New update';
+        const dateText = formatAnnouncementDate(item.createdAt || item.date || item.timestamp || item.postedAt);
+        return `Announcement: ${dateText} — ${text}`;
+      }, 'No new announcements.')
+    },
+    {
+      title: 'Polls',
+      detail: formatList(pollItems, (poll) => poll.question || poll.title || 'Open poll', 'No open polls right now.')
+    },
+    {
+      title: 'Tickets',
+      detail: formatList(ticketItems, (ticket) => ticket.title || ticket.name || 'Support request', 'No active tickets awaiting review.')
+    },
+    {
+      title: 'Resources',
+      detail: formatList(resourceItems, (resource) => ({
+        type: 'resource',
+        resourceTitle: resource.title || resource.name || 'Untitled resource',
+        description: resource.description || 'No description provided.',
+        link: resource.link || ''
+      }), 'No new resources available.')
+    },
+    {
+      title: 'Progress',
+      detail: formatList(progressItems, (progressItem) => {
+        const progressName = progressItem.name || progressItem.title || 'Untitled progress report';
+        const assignedNames = Array.isArray(progressItem.assignedToName)
+          ? progressItem.assignedToName.filter(Boolean)
+          : (progressItem.assignedToName ? [progressItem.assignedToName] : []);
+        const assignedValues = Array.isArray(progressItem.assignedTo)
+          ? progressItem.assignedTo.filter(Boolean)
+          : (progressItem.assignedTo ? [progressItem.assignedTo] : []);
+        const assigned = assignedNames.length
+          ? assignedNames.join(', ')
+          : (assignedValues.length ? assignedValues.join(', ') : 'None');
+        const status = progressItem.status || progressItem.state || progressItem.currentStatus || 'Not Started';
+
+        return {
+          type: 'progress',
+          progressName,
+          assigned,
+          status
+        };
+      }, 'No active progress updates.')
+    },
+    {
+      title: 'Chat',
+      detail: formatList(chatItems, (chatItem) => ({
+        type: 'chat',
+        roomName: getChatRoomDisplayName(chatItem, chatItem.id),
+        senderName: chatItem.senderName || 'Member',
+        messageText: chatItem.messageText || '[Image]'
+      }), 'No unread messages.')
+    },
+    {
+      title: 'Video Conference',
+      detail: formatList(meetingItems, (meeting) => {
+        const meetingDate = meeting.date;
+        const meetingTime = meeting.time;
+        const meetingDateTime = meetingDate && meetingTime ? new Date(`${meetingDate}T${meetingTime}`) : null;
+        const now = new Date();
+        const isOngoing = meetingDateTime && !isNaN(meetingDateTime.getTime())
+          && meetingDateTime.toDateString() === now.toDateString()
+          && now.getTime() >= meetingDateTime.getTime()
+          && now.getTime() <= meetingDateTime.getTime() + (2 * 60 * 60 * 1000);
+        const isUpcoming = meetingDateTime && !isNaN(meetingDateTime.getTime()) && meetingDateTime.getTime() > now.getTime();
+
+        if (isOngoing) {
+          return `Ongoing: ${meeting.title || 'Team meeting'} is in progress now.`;
+        }
+
+        if (isUpcoming) {
+          return `Upcoming: ${meeting.title || 'Team meeting'} is scheduled for ${meetingDateTime.toLocaleDateString()} at ${meetingDateTime.toLocaleTimeString()}.`;
+        }
+
+        return `${meeting.title || 'Team meeting'} is planned for ${meetingDateTime ? meetingDateTime.toLocaleDateString() + ' at ' + meetingDateTime.toLocaleTimeString() : 'a future time'}.`;
+      }, 'No upcoming video conference for now.')
+    },
+    {
+      title: 'Member Status',
+      detail: formatList(memberStatusItems, (memberStatus) => ({
+        type: 'memberStatus',
+        memberUid: memberStatus.memberUid,
+        memberName: memberStatus.memberName,
+        status: memberStatus.status,
+        lastSeen: memberStatus.lastSeen
+      }), 'No member status data available.')
+    }
+  ];
+
+  return items;
+}
+
+async function refreshHomeDashboard() {
+  const homeGreeting = document.getElementById('home-greeting');
+  const currentName = userEmail ? await getWelcomeName(userEmail) : 'User';
+  if (homeGreeting) {
+    homeGreeting.textContent = getHomeGreeting(currentName);
+  }
+
+  const taskRefs = [];
+  const announcementRefs = [];
+  const pollRefs = [];
+  const ticketRefs = [];
+  const resourceRefs = [];
+  const progressRefs = [];
+  const chatRefs = [];
+  const meetingRefs = [];
+  const memberStatusRefs = [];
+
+  const eligibleTaskRefs = [];
+  const eligibleAnnouncementRefs = [];
+  const eligiblePollRefs = [];
+  const eligibleTicketRefs = [];
+  const eligibleResourceRefs = [];
+  const eligibleProgressRefs = [];
+  const eligibleChatRefs = [];
+  const eligibleMeetingRefs = [];
+
+  try {
+    const taskSnap = await getDocs(query(collection(db, 'tasks'), where('assignedTo', 'in', [userEmail, 'everyone'])));
+    taskSnap.forEach(docSnap => {
+      const task = { id: docSnap.id, ...docSnap.data() };
+      const status = String(task.status || '').trim().toLowerCase();
+      if (status !== 'done' && status !== 'completed') {
+        taskRefs.push(task);
+      }
+    });
+  } catch (error) {
+    console.warn('Unable to load tasks for home dashboard:', error);
+  }
+
+  try {
+    const announcementSnap = await getDocs(collection(db, 'announcements'));
+    const memberName = (await getWelcomeName(userEmail)) || '';
+
+    for (const docSnap of announcementSnap.docs) {
+      const announcement = { id: docSnap.id, ...docSnap.data() };
+      if (announcement.archived === true) continue;
+
+      const assignedTo = Array.isArray(announcement.assignedTo)
+        ? announcement.assignedTo
+        : (announcement.assignedTo ? [announcement.assignedTo] : ['everyone']);
+      const assignedToNames = Array.isArray(announcement.assignedToNames)
+        ? announcement.assignedToNames
+        : (announcement.assignedToNames ? [announcement.assignedToNames] : []);
+
+      if (!matchesAnnouncementTarget(assignedTo, assignedToNames, userEmail, memberName)) {
+        continue;
+      }
+
+      const validity = getAnnouncementValidityState(announcement);
+      if (validity.valid && announcement.title) {
+        announcementRefs.push(announcement);
+      }
+    }
+  } catch (error) {
+    console.warn('Unable to load announcements for home dashboard:', error);
+  }
+
+  try {
+    const pollsSnap = await getDocs(collection(db, 'polls'));
+    pollsSnap.forEach(docSnap => {
+      const poll = { id: docSnap.id, ...docSnap.data() };
+      const status = String(poll.status || '').trim().toLowerCase();
+      if (poll.question && status !== 'closed' && status !== 'resolved' && status !== 'completed' && status !== 'done') {
+        pollRefs.push(poll);
+      }
+    });
+  } catch (error) {
+    console.warn('Unable to load polls for home dashboard:', error);
+  }
+
+  try {
+    const ticketQuery = query(collection(db, 'tickets'), where('assignedTo', '==', userEmail));
+    const ticketsSnap = await getDocs(ticketQuery);
+    ticketsSnap.forEach((docSnap) => {
+      const ticket = { id: docSnap.id, ...docSnap.data() };
+      const status = String(ticket.status || 'open').trim().toLowerCase();
+      if (status !== 'closed' && status !== 'resolved' && status !== 'completed' && status !== 'done') {
+        ticketRefs.push(ticket);
+      }
+    });
+  } catch (error) {
+    console.warn('Unable to load tickets for home dashboard:', error);
+  }
+
+  try {
+    const resourcesSnap = await getDocs(collection(db, 'resources'));
+    resourcesSnap.forEach(docSnap => {
+      const resource = { id: docSnap.id, ...docSnap.data() };
+      if (resource.title || resource.name) {
+        resourceRefs.push(resource);
+      }
+    });
+  } catch (error) {
+    console.warn('Unable to load resources for home dashboard:', error);
+  }
+
+  try {
+    const progressDoc = await getDoc(doc(db, 'progressReports', 'thesisProgress'));
+    if (progressDoc.exists()) {
+      const sections = Array.isArray(progressDoc.data()?.sections) ? progressDoc.data().sections : [];
+      sections.forEach((section) => {
+        const items = Array.isArray(section?.items) ? section.items : [];
+        items.forEach((item, index) => {
+          if (!item || typeof item !== 'object') return;
+          const itemStatus = String(item.status || '').trim().toLowerCase();
+          if (itemStatus === 'completed' || itemStatus === 'complete' || itemStatus === 'done') return;
+
+          const assigned = Array.isArray(item.assignedTo) ? item.assignedTo : (item.assignedTo ? [item.assignedTo] : []);
+          const assignedNames = Array.isArray(item.assignedToName) ? item.assignedToName : [];
+          const isForCurrentUser = assigned.some(value => normalizeEmail(value) === normalizeEmail(userEmail))
+            || assignedNames.some(value => normalizeEmail(value) === normalizeEmail(userEmail));
+          if (!assigned.length || isForCurrentUser || assigned.includes('everyone')) {
+            progressRefs.push({ ...item, id: item.id || `${section.title || 'progress'}-${index}` });
+          }
+        });
+      });
+    }
+  } catch (error) {
+    console.warn('Unable to load progress reports for home dashboard:', error);
+  }
+
+  try {
+    const chatRoomsSnap = await getDocs(collection(db, 'liveChats'));
+    for (const docSnap of chatRoomsSnap.docs) {
+      const room = { id: docSnap.id, ...docSnap.data() };
+      const messagesSnap = await getDocs(collection(db, 'liveChats', docSnap.id, 'messages'));
+      const lastReadKey = `chatLastRead:${userEmail}:${docSnap.id}`;
+      const lastRead = Number(localStorage.getItem(lastReadKey) || 0);
+      const unreadMessages = messagesSnap.docs
+        .map((messageDoc) => ({ id: messageDoc.id, ...messageDoc.data() }))
+        .filter((message) => {
+          const parsedCreatedAt = parseDateValue(message.createdAt);
+          const createdAt = parsedCreatedAt ? parsedCreatedAt.getTime() : Number(message.createdAt || 0);
+          const sender = normalizeEmail(message.senderEmail);
+          return !message.deleted && sender !== normalizeEmail(userEmail) && createdAt > lastRead;
+        })
+        .slice(0, 4);
+
+      unreadMessages.forEach((message) => {
+        chatRefs.push({
+          roomName: getChatRoomDisplayName(room, room.id),
+          senderName: message.senderName || getUserName(message.senderEmail) || 'Member',
+          messageText: message.text || (message.imageData ? '[Image]' : '[Message]')
+        });
+      });
+    }
+  } catch (error) {
+    console.warn('Unable to load chat rooms for home dashboard:', error);
+  }
+
+  try {
+    const meetingsSnap = await getDocs(collection(db, 'meetings'));
+    meetingsSnap.forEach(docSnap => {
+      const meeting = { id: docSnap.id, ...docSnap.data() };
+      const status = String(meeting.status || 'Active').trim().toLowerCase();
+      const assignedTo = Array.isArray(meeting.assignedTo)
+        ? meeting.assignedTo
+        : (meeting.assignedTo ? [meeting.assignedTo] : []);
+      const isVisibleToMember = assignedTo.length === 0
+        || assignedTo.some(value => normalizeEmail(value) === normalizeEmail(userEmail) || normalizeEmail(value) === 'everyone' || normalizeEmail(value) === 'all');
+
+      const meetingDate = meeting.date;
+      const meetingTime = meeting.time;
+      const parsedMeetingDate = meetingDate && meetingTime ? new Date(`${meetingDate}T${meetingTime}`) : null;
+      const now = new Date();
+      const isFinished = parsedMeetingDate && !isNaN(parsedMeetingDate.getTime())
+        ? now.getTime() > parsedMeetingDate.getTime() + (2 * 60 * 60 * 1000)
+        : false;
+      const isOngoing = parsedMeetingDate && !isNaN(parsedMeetingDate.getTime())
+        ? now.getTime() >= parsedMeetingDate.getTime() && now.getTime() <= parsedMeetingDate.getTime() + (2 * 60 * 60 * 1000)
+        : false;
+      const isUpcoming = parsedMeetingDate && !isNaN(parsedMeetingDate.getTime())
+        ? now.getTime() < parsedMeetingDate.getTime()
+        : false;
+
+      if (isVisibleToMember && status !== 'completed' && status !== 'cancelled' && status !== 'finished' && !isFinished && (isUpcoming || isOngoing)) {
+        meetingRefs.push(meeting);
+      }
+    });
+  } catch (error) {
+    console.warn('Unable to load meetings for home dashboard:', error);
+  }
+
+  memberStatusRefs.push(...getMemberStatusFlashcardItems());
+
+  const sectionBuckets = [
+    { key: 'tasks', items: taskRefs, eligible: eligibleTaskRefs },
+    { key: 'announcements', items: announcementRefs, eligible: eligibleAnnouncementRefs },
+    { key: 'polls', items: pollRefs, eligible: eligiblePollRefs },
+    { key: 'tickets', items: ticketRefs, eligible: eligibleTicketRefs },
+    { key: 'resources', items: resourceRefs, eligible: eligibleResourceRefs },
+    { key: 'progress', items: progressRefs, eligible: eligibleProgressRefs },
+    { key: 'chat', items: chatRefs, eligible: eligibleChatRefs },
+    { key: 'meetings', items: meetingRefs, eligible: eligibleMeetingRefs }
+  ];
+
+  sectionBuckets.forEach(({ key, items, eligible }) => {
+    items.forEach((item) => {
+      if (!item) {
+        return;
+      }
+
+      if (shouldShowHomeFlashcardItem(key, item)) {
+        eligible.push(item);
+      }
+    });
+  });
+
+  const bodyItems = getLatestHomeDashboardItems(
+    eligibleTaskRefs,
+    eligibleAnnouncementRefs,
+    eligiblePollRefs,
+    eligibleTicketRefs,
+    eligibleResourceRefs,
+    eligibleProgressRefs,
+    eligibleChatRefs,
+    eligibleMeetingRefs,
+    memberStatusRefs
+  );
+  renderHomeFlashcard(bodyItems);
+}
+
+function stopHomeFlashcardListeners() {
+  stopHomeChatMessageListeners();
+  homeFlashcardListeners.forEach((unsubscribe) => {
+    if (typeof unsubscribe === 'function') {
+      unsubscribe();
+    }
+  });
+  homeFlashcardListeners = [];
+}
+
+function subscribeToHomeFlashcardUpdates() {
+  stopHomeFlashcardListeners();
+
+  const taskQuery = query(collection(db, 'tasks'), where('assignedTo', 'in', [userEmail, 'everyone']));
+  homeFlashcardListeners.push(
+    onSnapshot(taskQuery, () => refreshHomeDashboard(), (error) => console.warn('Home flashcard task listener error:', error))
+  );
+
+  homeFlashcardListeners.push(
+    onSnapshot(collection(db, 'announcements'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard announcement listener error:', error))
+  );
+
+  homeFlashcardListeners.push(
+    onSnapshot(collection(db, 'resources'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard resource listener error:', error))
+  );
+
+  homeFlashcardListeners.push(
+    onSnapshot(doc(db, 'progressReports', 'thesisProgress'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard progress listener error:', error))
+  );
+
+  homeFlashcardListeners.push(
+    onSnapshot(collection(db, 'liveChats'), (snapshot) => {
+      const rooms = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      subscribeHomeChatMessageListeners(rooms);
+      void refreshHomeDashboard();
+    }, (error) => console.warn('Home flashcard chat listener error:', error))
+  );
+
+  homeFlashcardListeners.push(
+    onSnapshot(collection(db, 'meetings'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard meeting listener error:', error))
+  );
+
+  homeFlashcardListeners.push(
+    onSnapshot(collection(db, 'polls'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard poll listener error:', error))
+  );
+
+  homeFlashcardListeners.push(
+    onSnapshot(query(collection(db, 'tickets'), where('assignedTo', '==', userEmail)), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard ticket listener error:', error))
+  );
+}
+
+function loadHomeDashboard() {
+  subscribeToHomeFlashcardUpdates();
+  refreshHomeDashboard();
 }
 
 function formatDateTime(value) {
@@ -299,39 +1276,88 @@ function renderMemberStatusPanel() {
   const panel = document.getElementById('memberStatusPanel');
   if (!panel) return;
 
-  const rows = members
-    .filter(member => !isHiddenMember(member))
-    .map(member => {
-      const normalizedId = normalizeEmail(member.uid);
-      const statusData = memberStatusDocs[normalizedId] || {};
-      const active = isMemberCurrentlyActive(statusData);
-      const restricted = statusData.accessAllowed === false;
-      const badgeColor = active ? '#10b981' : '#6b7280';
-      const badgeText = active ? 'ACTIVE' : 'OFFLINE';
-      const lastSeenActiveLabel = statusData.lastActive ? formatDateTime(statusData.lastActive) : 'Unknown';
-      const lastSeenLabel = statusData.lastActive ? getTimeAgo(statusData.lastActive) : 'Unknown';
-      const statusNote = active ? `Last active ${lastSeenLabel}` : `Last seen active ${lastSeenLabel}`;
-      const restrictedNote = restricted ? '<p style="margin: 0.5rem 0 0 0; color: #fca5a5; font-size: 0.9rem; font-weight: 600;">Restricted access</p>' : '';
+  const adminEmail = 'johnpaulbugayong@gmail.com';
+  const adminEntry = { uid: adminEmail, name: 'Admin' };
+  const seen = new Set();
+  const statusEntries = [...members, adminEntry].filter((member) => {
+    if (!member || !member.uid || member.uid === 'everyone') return false;
+    const normalizedUid = normalizeEmail(member.uid);
+    if (!normalizedUid || seen.has(normalizedUid)) return false;
+    seen.add(normalizedUid);
+    return true;
+  });
 
-      return `
-        <div style="border: 1px solid #374151; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem; background: #111827;">
-          <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; flex-wrap: wrap;">
-            <div>
-              <h3 style="margin: 0 0 0.5rem 0; color: #f8fafc;">${member.name}</h3>
-              <p style="margin: 0 0.5rem 0 0; color: #94a3b8; font-size: 0.9rem;">${member.uid}</p>
-              <p style="margin: 0; color: #cbd5e1; font-size: 0.9rem;">${statusNote}</p>
-              <p style="margin: 0.5rem 0 0 0; color: #9ca3af; font-size: 0.85rem;">Last seen active: ${lastSeenActiveLabel}</p>
-              ${restrictedNote}
+  const rows = statusEntries.map((member) => {
+    const normalizedId = normalizeEmail(member.uid);
+    const statusData = memberStatusDocs[normalizedId] || {};
+    const active = isMemberCurrentlyActive(statusData);
+    const restricted = statusData.accessAllowed === false;
+    const badgeColor = active ? '#10b981' : '#6b7280';
+    const badgeText = active ? 'ACTIVE' : 'OFFLINE';
+    const lastSeenActiveLabel = statusData.lastActive ? formatDateTime(statusData.lastActive) : 'Unknown';
+    const lastSeenLabel = statusData.lastActive ? getTimeAgo(statusData.lastActive) : 'Unknown';
+    const statusNote = active ? `Last active ${lastSeenLabel}` : `Last seen active ${lastSeenLabel}`;
+    const restrictedNote = restricted ? '<p style="margin: 0.5rem 0 0 0; color: #fca5a5; font-size: 0.9rem; font-weight: 600;">Restricted access</p>' : '';
+    const displayName = normalizedId === normalizeEmail(adminEmail) ? 'Admin' : (member.name || member.uid);
+
+    return `
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; border: 1px solid #374151; border-radius: 0.75rem; margin-bottom: 0.75rem; background: rgba(17, 24, 39, 0.88);">
+        <div style="display: flex; align-items: center; gap: 0.85rem; min-width: 0; flex: 1;">
+          ${renderUserAvatarMarkup(member.uid, 36)}
+          <div style="min-width: 0; flex: 1;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.2rem;">
+              <span style="font-weight: 700; color: #f8fafc; font-size: 0.96rem;">${displayName}</span>
             </div>
-            <div style="display: inline-flex; align-items: center; gap: 0.5rem;">
-              <span style="display: inline-flex; align-items: center; justify-content: center; min-width: 92px; padding: 0.35rem 0.85rem; border-radius: 999px; background: ${badgeColor}; color: white; font-size: 0.8rem; font-weight: 600;">${badgeText}</span>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; color: #cbd5e1; font-size: 0.85rem;">
+              <span>${statusNote}</span>
+              ${restrictedNote ? `<span style="color: #fca5a5; font-weight: 600;">• Restricted</span>` : ''}
             </div>
+            <div style="margin-top: 0.2rem; color: #9ca3af; font-size: 0.8rem;">Last seen active: ${lastSeenActiveLabel}</div>
           </div>
         </div>
-      `;
-    });
+        <div style="display: inline-flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
+          <span style="display: inline-flex; align-items: center; justify-content: center; min-width: 92px; padding: 0.35rem 0.8rem; border-radius: 999px; background: ${badgeColor}; color: white; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em;">${badgeText}</span>
+        </div>
+      </div>
+    `;
+  });
 
   panel.innerHTML = rows.join('') || '<p style="color: #94a3b8; text-align: center;">No member status data available.</p>';
+  void hydrateProfileAvatars();
+}
+
+function subscribeToMemberRoster() {
+  if (memberRosterUnsubscribe) {
+    memberRosterUnsubscribe();
+    memberRosterUnsubscribe = null;
+  }
+
+  memberRosterUnsubscribe = onSnapshot(collection(db, 'userRoles'), (snapshot) => {
+    resetMemberCatalog();
+
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() || {};
+      if (!isTrackedAuthMember(data)) return;
+
+      const docId = normalizeEmail(docSnap.id);
+      if (!docId) return;
+
+      const displayName = typeof data.displayName === 'string' && data.displayName.trim()
+        ? data.displayName.trim()
+        : (typeof data.name === 'string' && data.name.trim() ? data.name.trim() : (typeof data.email === 'string' && data.email.trim() ? data.email.trim() : docId));
+
+      ensureMemberEntry(docId, displayName);
+    });
+
+    if (userEmail) {
+      ensureMemberEntry(userEmail, userEmail);
+    }
+
+    syncMentionUsers();
+    renderMemberStatusPanel();
+  }, (error) => {
+    console.warn('Unable to subscribe to member roster:', error);
+  });
 }
 
 function subscribeToMemberStatuses() {
@@ -352,6 +1378,7 @@ function subscribeToMemberStatuses() {
       };
     });
     renderMemberStatusPanel();
+    refreshMemberStatusFlashcard();
   }, (error) => {
     console.warn('Unable to subscribe to member statuses:', error);
   });
@@ -372,6 +1399,7 @@ async function pollMemberStatuses() {
     });
     memberStatusDocs = newDocs;
     if (typeof renderMemberStatusPanel === 'function') renderMemberStatusPanel();
+    refreshMemberStatusFlashcard();
   } catch (error) {
     console.warn('Error polling member statuses:', error);
   }
@@ -1114,10 +2142,11 @@ function renderMemberProgressReport(sections) {
       <h3 style="margin: 0 0 0.75rem 0; color: #3b82f6;">${section.title}</h3>
       ${Array.isArray(section.items) ? section.items.map(item => {
         const assignedToName = Array.isArray(item.assignedToName) ? item.assignedToName.join(', ') : (item.assignedToName || (item.assignedTo ? getUserName(item.assignedTo) : 'Unassigned'));
+        const itemName = item.name === 'New Item' ? '' : (item.name || '');
         return `
           <div style="padding: 0.75rem; background: #111827; border: 1px solid #374151; border-radius: 0.5rem; margin-bottom: 0.5rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
-              <span style="color: #d1d5db;">${item.name}</span>
+              <span style="color: #d1d5db;">${itemName}</span>
               <span style="color: ${item.status === 'Completed' ? '#22c55e' : item.status === 'Pending' ? '#f59e0b' : '#94a3b8'}; font-weight: 600;">${item.status || 'Not Started'}</span>
             </div>
             <p style="margin: 0.5rem 0 0 0; color: #60a5fa; font-size: 0.85rem;">Assigned to: ${assignedToName}</p>
@@ -1170,17 +2199,34 @@ function mergeProgressStructures(defaultSections, savedSections) {
 
 function loadProgressReport() {
   const progressRef = doc(db, progressReportCollection, progressReportDocId);
-  saveProgressBackupSections([]);
-  void persistProgressReportSections([]);
-  renderMemberProgressReport([]);
 
   onSnapshot(progressRef, async (snap) => {
-    const sections = [];
-    saveProgressBackupSections(sections);
-    renderMemberProgressReport(sections);
+    if (snap.exists()) {
+      const data = snap.data() || {};
+      const sections = Array.isArray(data.sections) ? data.sections : [];
+      if (sections.length === 0) {
+        const backupSections = getProgressBackupSections() || [];
+        if (backupSections.length > 0) {
+          renderMemberProgressReport(backupSections);
+          return;
+        }
+      }
+      saveProgressBackupSections(sections);
+      renderMemberProgressReport(sections);
+      return;
+    }
+
+    const backupSections = getProgressBackupSections() || [];
+    if (backupSections.length > 0) {
+      renderMemberProgressReport(backupSections);
+      return;
+    }
+
+    renderMemberProgressReport([]);
   }, (error) => {
     console.error('Progress report onSnapshot error:', error);
-    renderMemberProgressReport([]);
+    const backupSections = getProgressBackupSections() || [];
+    renderMemberProgressReport(backupSections);
   });
 }
 
@@ -1291,6 +2337,13 @@ window.votePoll = async function(pollId, optionIndex) {
     
     if (pollDoc.exists()) {
       const pollData = pollDoc.data();
+      
+      // Check if poll is closed
+      if (pollData.status === 'closed') {
+        alert("This poll is closed and no longer accepts votes.");
+        return;
+      }
+      
       const votes = pollData.votes || {};
       
       // Remove previous vote if exists
@@ -1318,7 +2371,8 @@ window.votePoll = async function(pollId, optionIndex) {
 function loadPolls() {
   onSnapshot(collection(db, "polls"), (snap) => {
     pollsContainer.innerHTML = "";
-    let pollCount = 0;
+    let activePollCount = 0;
+    let closedPollCount = 0;
 
     const docs = [];
     snap.forEach(doc => docs.push(doc));
@@ -1335,47 +2389,109 @@ function loadPolls() {
     });
     pollNotificationsInitialized = true;
 
-    docs.forEach(doc => {
-      const poll = doc.data() || {};
-      pollCount++;
-      
-      const votes = getSafePollVotes(poll);
-      const options = getSafePollOptions(poll);
-      const totalVotes = Object.values(votes).reduce((sum, voters) => sum + (Array.isArray(voters) ? voters.length : 0), 0);
-      const userVoted = Object.values(votes).some(voters => Array.isArray(voters) && voters.includes(userEmail));
-      
-      let optionsHtml = "";
-      options.forEach((option, index) => {
-        const optionVotes = Array.isArray(votes[index]) ? votes[index].length : 0;
-        const percentage = totalVotes > 0 ? Math.round((optionVotes / totalVotes) * 100) : 0;
-        const isUserVote = Array.isArray(votes[index]) && votes[index].includes(userEmail);
+    // Separate active and closed polls
+    const activePolls = docs.filter(doc => (doc.data().status || 'active') === 'active');
+    const closedPolls = docs.filter(doc => (doc.data().status || 'active') === 'closed');
+
+    // Render active polls
+    if (activePolls.length > 0) {
+      pollsContainer.innerHTML += `<h3 style="color: #e2e8f0; margin-bottom: 1rem; margin-top: 0;">Active Polls</h3>`;
+      activePolls.forEach(doc => {
+        const poll = doc.data() || {};
+        activePollCount++;
         
-        optionsHtml += `
-          <div class="poll-option ${isUserVote ? 'user-vote' : ''}" style="margin: 0.5rem 0; padding: 0.5rem; border: 1px solid #374151; border-radius: 0.375rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span>${option}</span>
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span>${optionVotes} votes (${percentage}%)</span>
-                ${!userVoted ? `<button onclick="votePoll('${doc.id}', ${index})" style="background: #3b82f6; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer;">Vote</button>` : ''}
+        const votes = getSafePollVotes(poll);
+        const options = getSafePollOptions(poll);
+        const totalVotes = Object.values(votes).reduce((sum, voters) => sum + (Array.isArray(voters) ? voters.length : 0), 0);
+        const userVoted = Object.values(votes).some(voters => Array.isArray(voters) && voters.includes(userEmail));
+        
+        let optionsHtml = "";
+        options.forEach((option, index) => {
+          const optionVotes = Array.isArray(votes[index]) ? votes[index].length : 0;
+          const percentage = totalVotes > 0 ? Math.round((optionVotes / totalVotes) * 100) : 0;
+          const isUserVote = Array.isArray(votes[index]) && votes[index].includes(userEmail);
+          
+          optionsHtml += `
+            <div class="poll-option ${isUserVote ? 'user-vote' : ''}" style="margin: 0.5rem 0; padding: 0.5rem; border: 1px solid #374151; border-radius: 0.375rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>${option}</span>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span>${optionVotes} votes (${percentage}%)</span>
+                  ${!userVoted ? `<button onclick="votePoll('${doc.id}', ${index})" style="background: #3b82f6; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer;">Vote</button>` : ''}
+                </div>
+              </div>
+              <div style="width: 100%; height: 8px; background: #374151; border-radius: 4px; margin-top: 0.25rem;">
+                <div style="width: ${percentage}%; height: 100%; background: ${isUserVote ? '#10b981' : '#3b82f6'}; border-radius: 4px;"></div>
               </div>
             </div>
-            <div style="width: 100%; height: 8px; background: #374151; border-radius: 4px; margin-top: 0.25rem;">
-              <div style="width: ${percentage}%; height: 100%; background: ${isUserVote ? '#10b981' : '#3b82f6'}; border-radius: 4px;"></div>
-            </div>
+          `;
+        });
+        
+        pollsContainer.innerHTML += `
+          <div class="poll-item" style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #374151; border-left: 4px solid #3b82f6; border-radius: 0.5rem;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #f3f4f6;">${poll.question || "Untitled Poll"}</h4>
+            <p style="color: #9ca3af; margin: 0 0 1rem 0; font-size: 0.875rem;">Total votes: ${totalVotes}</p>
+            ${optionsHtml}
           </div>
         `;
       });
-      
+    }
+
+    // Render closed/archived polls
+    if (closedPolls.length > 0) {
+      const archiveContentId = 'archivedPollsContent';
+      const archiveHtml = closedPolls.map(doc => {
+        const poll = doc.data() || {};
+        closedPollCount++;
+        
+        const votes = getSafePollVotes(poll);
+        const options = getSafePollOptions(poll);
+        const totalVotes = Object.values(votes).reduce((sum, voters) => sum + (Array.isArray(voters) ? voters.length : 0), 0);
+        const userVoted = Object.values(votes).some(voters => Array.isArray(voters) && voters.includes(userEmail));
+        
+        let optionsHtml = "";
+        options.forEach((option, index) => {
+          const optionVotes = Array.isArray(votes[index]) ? votes[index].length : 0;
+          const percentage = totalVotes > 0 ? Math.round((optionVotes / totalVotes) * 100) : 0;
+          const isUserVote = Array.isArray(votes[index]) && votes[index].includes(userEmail);
+          
+          optionsHtml += `
+            <div class="poll-option ${isUserVote ? 'user-vote' : ''}" style="margin: 0.5rem 0; padding: 0.5rem; border: 1px solid #6b7280; border-radius: 0.375rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: #d1d5db;">${option}</span>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span style="color: #cbd5e1;">${optionVotes} votes (${percentage}%)</span>
+                </div>
+              </div>
+              <div style="width: 100%; height: 8px; background: #374151; border-radius: 4px; margin-top: 0.25rem;">
+                <div style="width: ${percentage}%; height: 100%; background: #9ca3af; border-radius: 4px;"></div>
+              </div>
+            </div>
+          `;
+        });
+        
+        return `
+          <div class="poll-item" style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #6b7280; border-left: 4px solid #9ca3af; border-radius: 0.5rem;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #f3f4f6;">${poll.question || "Untitled Poll"}</h4>
+            <p style="color: #cbd5e1; margin: 0 0 1rem 0; font-size: 0.875rem;">Total votes: ${totalVotes} · CLOSED</p>
+            ${optionsHtml}
+          </div>
+        `;
+      }).join('');
+
       pollsContainer.innerHTML += `
-        <div class="poll-item" style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.5rem;">
-          <h4 style="margin: 0 0 0.5rem 0; color: #f3f4f6;">${poll.question || "Untitled Poll"}</h4>
-          <p style="color: #9ca3af; margin: 0 0 1rem 0; font-size: 0.875rem;">Total votes: ${totalVotes}</p>
-          ${optionsHtml}
+        <div style="margin-top: 2rem;">
+          <div style="display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; margin-bottom: 1rem;">
+            <button onclick="toggleArchivedPolls()" style="padding: 0.4rem 0.75rem; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
+              ${archivedPollsCollapsed ? 'Show Archived Polls' : 'Hide Archived Polls'}
+            </button>
+          </div>
+          <div id="${archiveContentId}" style="display: ${archivedPollsCollapsed ? 'none' : 'block'};">${archiveHtml}</div>
         </div>
       `;
-    });
+    }
 
-    pollsEmptyState.style.display = pollCount === 0 ? "block" : "none";
+    pollsEmptyState.style.display = activePollCount === 0 ? "block" : "none";
   }, (error) => {
     console.error('Polls onSnapshot error:', error);
   });
@@ -1455,9 +2571,12 @@ function renderAnnouncementComments(announcementId, comments) {
   return safeComments.map((comment, index) => `
     <div style="margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid #4b5563; border-radius: 0.375rem; background: #111827;">
       <div style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; align-items: center;">
-        <div>
-          <span style="font-weight: 600; color: #f3f4f6;">${comment.author || comment.email || 'Member'}</span>
-          <div style="font-size: 0.8rem; color: #9ca3af;">${formatAnnouncementDate(comment.createdAt)}</div>
+        <div style="display: flex; align-items: center; gap: 0.6rem; min-width: 0;">
+          ${renderUserAvatarMarkup(comment.email || comment.author || 'Member', 26)}
+          <div>
+            <span style="font-weight: 600; color: #f3f4f6;">${comment.author || comment.email || 'Member'}</span>
+            <div style="font-size: 0.8rem; color: #9ca3af;">${formatAnnouncementDate(comment.createdAt)}</div>
+          </div>
         </div>
         ${comment.email === userEmail ? `<button onclick="deleteAnnouncementComment('${announcementId}', ${index})" style="background: #ef4444 !important; color: white !important; border: none !important; padding: 0.15rem 0.35rem !important; border-radius: 0.25rem !important; cursor: pointer !important; font-size: 0.65rem !important; line-height: 1 !important; width: auto !important; min-width: 0 !important; margin-top: 0 !important; box-shadow: none !important;">Delete</button>` : ''}
       </div>
@@ -1470,6 +2589,7 @@ function loadAnnouncements() {
   onSnapshot(collection(db, "announcements"), (snap) => {
     announcementsContainer.innerHTML = "";
     let announcementCount = 0;
+    const archivedAnnouncements = [];
 
     const docs = [];
     snap.forEach(doc => docs.push(doc));
@@ -1478,17 +2598,22 @@ function loadAnnouncements() {
     docs.forEach(doc => {
       const announcement = doc.data() || {};
       const previous = previousAnnouncementMap.get(doc.id);
-      if (announcementNotificationsInitialized && !previous && announcement.title) {
-        const assignedTo = Array.isArray(announcement.assignedTo) ? announcement.assignedTo : ["everyone"];
-        const shouldNotify = assignedTo.includes("everyone") || assignedTo.includes(userEmail);
+      const assignedTo = Array.isArray(announcement.assignedTo) ? announcement.assignedTo : ["everyone"];
+
+      if (announcementNotificationsInitialized && !previous && announcement.archived !== true && announcement.title) {
+        const shouldNotify = matchesAnnouncementTarget(assignedTo, userEmail);
         if (shouldNotify) {
           showAdminUpdateNotification('New Announcement', `New announcement: "${announcement.title}"`);
         }
       }
       previousAnnouncementMap.set(doc.id, announcement);
 
-      const assignedTo = Array.isArray(announcement.assignedTo) ? announcement.assignedTo : ["everyone"];
-      if (!assignedTo.includes("everyone") && !assignedTo.includes(userEmail)) return;
+      if (!matchesAnnouncementTarget(assignedTo, userEmail)) return;
+
+      if (announcement.archived === true) {
+        archivedAnnouncements.push({ id: doc.id, ...announcement });
+        return;
+      }
 
       const announcementDate = formatAnnouncementDate(announcement.createdAt);
       const commentsEnabled = announcement.commentsEnabled !== false;
@@ -1515,8 +2640,32 @@ function loadAnnouncements() {
       `;
     });
 
+    if (archivedAnnouncements.length > 0) {
+      announcementsContainer.innerHTML += `
+        <div style="margin-top: 2rem;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem;">
+            <h3 style="color: #e2e8f0; margin: 0;">Archived Announcements</h3>
+            <button onclick="toggleArchivedAnnouncements()" style="padding: 0.4rem 0.75rem; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
+              ${archivedAnnouncementsCollapsed ? 'Show' : 'Hide'} (${archivedAnnouncements.length})
+            </button>
+          </div>
+          <div id="archivedAnnouncementsContent" style="display: ${archivedAnnouncementsCollapsed ? 'none' : 'block'};">
+            ${archivedAnnouncements.map(announcement => `
+              <div class="announcement-item" style="margin-bottom: 0.75rem; padding: 0.85rem 1rem; border: 1px solid #4b5563; border-left: 4px solid #94a3b8; border-radius: 0.5rem; background: #1f2937; opacity: 0.8;">
+                <h4 style="margin: 0 0 0.35rem 0; color: #cbd5e1;">${announcement.title || 'Untitled announcement'}</h4>
+                <p style="color: #9ca3af; margin: 0 0 0.5rem 0; font-size: 0.8rem;">Archived · Posted on ${formatAnnouncementDate(announcement.createdAt)}</p>
+                <p style="color: #d1d5db; margin: 0; white-space: pre-wrap;">${announcement.content || ''}</p>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
     announcementNotificationsInitialized = true;
     announcementsEmptyState.style.display = announcementCount === 0 ? "block" : "none";
+    void hydrateProfileAvatars();
+    refreshHomeDashboard();
   }, (error) => {
     console.error('Announcements onSnapshot error:', error);
   });
@@ -1684,10 +2833,6 @@ window.joinScheduledMeeting = function(roomName) {
   initializeJitsiConference(roomName);
 };
 
-function getChatRoomDisplayName(email) {
-  return getUserName(email) || email;
-}
-
 function escapeHtml(text) {
   return String(text)
     .replace(/&/g, '&amp;')
@@ -1822,7 +2967,7 @@ function renderChatRooms(chatRooms) {
   if (!container) return;
 
   if (!chatRooms || chatRooms.length === 0) {
-    container.innerHTML = '<p style="color: #94a3b8; text-align: center;">No live chat rooms available yet.</p>';
+    container.innerHTML = '<p style="color: #94a3b8; text-align: center;">No chat as of the moment.</p>';
     return;
   }
 
@@ -1834,9 +2979,11 @@ function renderChatRooms(chatRooms) {
     chatRoomsById[room.id] = room;
     const roomDiv = document.createElement('div');
     roomDiv.style.cssText = 'border: 1px solid #374151; background: #1e293b; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;';
-    const createdBy = room.createdByName
-      ? getFriendlyName(room.createdByName)
-      : (getUserName(room.createdByEmail) || 'Unknown');
+    const createdBy = normalizeEmail(room.createdByEmail) === 'johnpaulbugayong@gmail.com'
+      ? 'Admin'
+      : (room.createdByName
+        ? getFriendlyName(room.createdByName)
+        : (getUserName(room.createdByEmail) || 'Unknown'));
     const statusColor = room.status === 'Closed' ? '#ef4444' : '#10b981';
     const isActive = room.status === 'Active';
 
@@ -2082,11 +3229,32 @@ function handleChatImageInputChange(event) {
     return;
   }
 
+  const fileName = file.name.toLowerCase();
+  const isImageByMime = typeof file.type === 'string' && file.type.toLowerCase().startsWith('image/');
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.ico', '.tif', '.tiff', '.heic', '.heif', '.avif', '.jfif'];
+  const isImageByExtension = imageExtensions.some(ext => fileName.endsWith(ext));
+
+  if (!isImageByMime && !isImageByExtension) {
+    clearChatImageSelection();
+    alert('Please select a valid image file.');
+    return;
+  }
+
+  if (file.size > 10 * 1024 * 1024) {
+    clearChatImageSelection();
+    alert('Image file is too large. Please select an image smaller than 10 MB.');
+    return;
+  }
+
   const reader = new FileReader();
   reader.onload = () => {
     selectedChatImageData = reader.result;
     selectedChatImageName = file.name;
     updateChatImagePreview();
+  };
+  reader.onerror = () => {
+    clearChatImageSelection();
+    alert('Failed to read the image file.');
   };
   reader.readAsDataURL(file);
 }
@@ -2414,6 +3582,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
       const welcomeName = await getWelcomeName(userEmail);
       welcomeEl.textContent = `Welcome, ${welcomeName}`;
     }
+    await displayMemberProfilePicture(userEmail);
     console.log('User logged in as:', userEmail);
     console.log('Starting to load data from Firestore...');
     
@@ -2422,6 +3591,8 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
 
     watchMemberAccessState();
     startMemberPresenceHeartbeat();
+    void refreshMentionMembers();
+    subscribeToMemberRoster();
     subscribeToMemberStatuses();
     // Start periodic polling of userRoles from Firestore every 2 minutes
     startMemberStatusPolling(120000);
@@ -2590,6 +3761,8 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
       if (taskCount === 0 && !emptyState) {
         container.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No tasks assigned yet. Check back soon!</p>';
       }
+
+      refreshHomeDashboard();
     }, (error) => {
       console.error('Tasks onSnapshot error:', error);
     });
@@ -2597,6 +3770,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     // Load polls, announcements, and in-app notifications
     loadPolls();
     loadAnnouncements();
+    loadHomeDashboard();
     loadInAppNotifications();
     checkMaintenance();
     loadProgressReport();
@@ -2764,6 +3938,35 @@ window.toggleCompletedTasks = function() {
     : `Hide completed tasks (${completedCount})`;
   completedTasksList.style.display = completedTasksCollapsed ? 'none' : 'block';
   localStorage.setItem('completedTasksCollapsed', completedTasksCollapsed ? 'true' : 'false');
+};
+
+window.toggleArchivedPolls = function() {
+  archivedPollsCollapsed = !archivedPollsCollapsed;
+  const archiveContent = document.getElementById('archivedPollsContent');
+  const archiveButtons = document.querySelectorAll('button[onclick="toggleArchivedPolls()"]');
+
+  if (archiveContent) {
+    archiveContent.style.display = archivedPollsCollapsed ? 'none' : 'block';
+  }
+
+  archiveButtons.forEach(button => {
+    button.textContent = `${archivedPollsCollapsed ? 'Show Archived Polls' : 'Hide Archived Polls'}`;
+  });
+
+  localStorage.setItem('archivedPollsCollapsed', archivedPollsCollapsed ? 'true' : 'false');
+};
+
+window.toggleArchivedAnnouncements = function() {
+  archivedAnnouncementsCollapsed = !archivedAnnouncementsCollapsed;
+  const archiveContent = document.getElementById('archivedAnnouncementsContent');
+  const archiveButtons = document.querySelectorAll('button[onclick="toggleArchivedAnnouncements()"]');
+
+  if (archiveContent) archiveContent.style.display = archivedAnnouncementsCollapsed ? 'none' : 'block';
+  archiveButtons.forEach(button => {
+    const count = button.textContent.match(/\((\d+)\)/)?.[1] || '0';
+    button.textContent = `${archivedAnnouncementsCollapsed ? 'Show' : 'Hide'} (${count})`;
+  });
+  localStorage.setItem('archivedAnnouncementsCollapsed', archivedAnnouncementsCollapsed ? 'true' : 'false');
 };
 
 // Make loadTicketHistory available globally

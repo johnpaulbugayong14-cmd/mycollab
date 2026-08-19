@@ -22,6 +22,65 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+async function loadProfilePictureForEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  try {
+    const snap = await getDoc(doc(db, 'userRoles', normalizedEmail));
+    if (snap.exists()) {
+      return snap.data()?.profilePicture || null;
+    }
+    return null;
+  } catch (error) {
+    console.warn('Error loading profile picture for chat user:', error);
+    return null;
+  }
+}
+
+function getInitialsFromEmail(email) {
+  const source = String(email || '').trim();
+  if (!source) return '?';
+
+  const cleaned = source.includes('@') ? source.split('@')[0] : source;
+  const parts = cleaned.split(/[._\s-]+/).filter(Boolean).slice(0, 2);
+  if (parts.length === 0) return '?';
+  return parts.map(part => part.charAt(0).toUpperCase()).join('').slice(0, 2);
+}
+
+function renderUserAvatarMarkup(email, size = 28) {
+  const normalized = normalizeEmail(email);
+  const initials = getInitialsFromEmail(email || 'Member');
+  const safeSize = Math.max(20, Number(size) || 28);
+  return `
+    <div data-profile-email="${escapeHtml(normalized || '')}" style="width:${safeSize}px; height:${safeSize}px; border-radius:50%; background:#1f2937; border:1px solid #4b5563; overflow:hidden; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 0 0 1px rgba(148,163,184,0.15);">
+      <span style="color:#e5e7eb; font-size:${Math.max(9, safeSize * 0.38)}px; font-weight:700; letter-spacing:0.04em;">${escapeHtml(initials)}</span>
+    </div>
+  `;
+}
+
+async function hydrateProfileAvatars() {
+  const avatarNodes = [...document.querySelectorAll('[data-profile-email]')];
+  if (!avatarNodes.length) return;
+
+  const uniqueEmails = [...new Set(avatarNodes.map(node => normalizeEmail(node.getAttribute('data-profile-email'))).filter(Boolean))];
+  if (!uniqueEmails.length) return;
+
+  const results = await Promise.all(uniqueEmails.map(async (email) => {
+    const memberPicture = await loadProfilePictureForEmail(email).catch(() => null);
+    return memberPicture ? { email, picture: memberPicture } : { email, picture: null };
+  }));
+
+  const byEmail = new Map(results.filter(item => item && item.email).map(item => [item.email, item.picture]));
+
+  avatarNodes.forEach((node) => {
+    const email = normalizeEmail(node.getAttribute('data-profile-email'));
+    const picture = byEmail.get(email);
+    if (!picture) return;
+    node.innerHTML = `<img src="${picture}" alt="Profile" style="width:100%; height:100%; object-fit:cover; display:block;" />`;
+  });
+}
+
 function formatDisplayNameFromEmail(email) {
   const normalized = normalizeEmail(email);
   if (!normalized) return 'Member';
@@ -101,6 +160,11 @@ function getUserName(email) {
   const created = ensureMemberEntry(email, formatDisplayNameFromEmail(email));
   const fallbackName = created ? created.name : formatDisplayNameFromEmail(email);
   return fallbackName;
+}
+
+function getChatSenderName(message = {}) {
+  if (normalizeEmail(message.senderEmail) === 'johnpaulbugayong@gmail.com') return 'Admin';
+  return message.senderName || getUserName(message.senderEmail) || 'Unknown';
 }
 
 function getQueryParam(key) {
@@ -215,7 +279,7 @@ function updateReplyPreview() {
     return;
   }
 
-  const sender = replyToMessage.senderName || getUserName(replyToMessage.senderEmail) || 'Unknown';
+  const sender = getChatSenderName(replyToMessage);
   const text = replyToMessage.deleted
     ? 'This message was unsent.'
     : (replyToMessage.text || (replyToMessage.imageData ? '[image]' : ''));
@@ -346,11 +410,22 @@ window.closeChatAlbum = closeChatAlbum;
 window.displayChatAlbum = displayChatAlbum;
 window.showFullscreenImagePreview = showFullscreenImagePreview;
 
+function sortMessagesByDateTime(messages) {
+  if (!Array.isArray(messages)) return [];
+  return messages.sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeA - timeB;
+  });
+}
+
 function renderChatMessages(messages) {
   const chatMessagesEl = document.getElementById('chatMessages');
   if (!chatMessagesEl) return;
 
-  allChatMessages = messages;
+  // Sort messages by date and time (oldest to newest)
+  const sortedMessages = sortMessagesByDateTime(messages);
+  allChatMessages = sortedMessages;
 
   if (!messages || messages.length === 0) {
     chatMessagesEl.innerHTML = '<p style="color: #94a3b8; text-align: center; margin: 1rem 0;">No messages yet. Start the conversation!</p>';
@@ -360,13 +435,31 @@ function renderChatMessages(messages) {
   chatMessagesEl.innerHTML = '';
   chatMessagesById = {};
 
-  messages.forEach((msg) => {
+  let lastDate = null;
+
+  sortedMessages.forEach((msg) => {
+    // Add date separator if date changed
+    if (msg.createdAt) {
+      const currentDate = new Date(msg.createdAt).toLocaleDateString([], { year: 'numeric', month: 'short', day: '2-digit' });
+      if (lastDate !== currentDate) {
+        const dateSeparator = document.createElement('div');
+        dateSeparator.style.cssText = 'display: flex; align-items: center; justify-content: center; margin: 1.5rem 0 1rem 0; gap: 0.75rem;';
+        dateSeparator.innerHTML = `
+          <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent);"></div>
+          <div style="padding: 0.35rem 0.75rem; font-size: 0.8rem; color: #cbd5e1; font-weight: 600; white-space: nowrap; letter-spacing: 0.02em;">${currentDate}</div>
+          <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent);"></div>
+        `;
+        chatMessagesEl.appendChild(dateSeparator);
+        lastDate = currentDate;
+      }
+    }
+
     chatMessagesById[msg.id] = msg;
     const msgDiv = document.createElement('div');
     msgDiv.className = 'chat-message';
     msgDiv.style.opacity = msg.deleted ? '0.75' : '1';
 
-    const sender = msg.senderName || getUserName(msg.senderEmail) || 'Unknown';
+    const sender = getChatSenderName(msg);
     const timestamp = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
     const messageText = msg.deleted ? 'This message was unsent.' : msg.text || '';
     const safeText = escapeHtml(messageText);
@@ -386,7 +479,10 @@ function renderChatMessages(messages) {
 
     msgDiv.innerHTML = `
       <div style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem;">
-        <div style="font-size: 0.9rem; color: #94a3b8;">${escapeHtml(sender)}</div>
+        <div style="display: flex; align-items: center; gap: 0.6rem; min-width: 0;">
+          ${renderUserAvatarMarkup(msg.senderEmail || sender, 26)}
+          <div style="font-size: 0.9rem; color: #94a3b8;">${escapeHtml(sender)}</div>
+        </div>
         <div style="font-size: 0.8rem; color: #6b7280;">${timestamp}</div>
       </div>
       <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; white-space: pre-wrap; word-break: break-word;">${replyQuote}${imageMarkup}${renderedText}</div>
@@ -409,6 +505,7 @@ function renderChatMessages(messages) {
     chatMessagesEl.appendChild(msgDiv);
   });
 
+  void hydrateProfileAvatars();
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
   const albumModal = document.getElementById('chatAlbumModal');
   if (albumModal && albumModal.style.display === 'flex') {
@@ -463,19 +560,40 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
   const chatMessagesEl = document.getElementById('chatMessages');
   if (!chatMessagesEl) return;
 
-  if (!messages || messages.length === 0) {
+  // Sort messages by date and time (oldest to newest)
+  const sortedMessages = sortMessagesByDateTime(messages);
+
+  if (!sortedMessages || sortedMessages.length === 0) {
     chatMessagesEl.innerHTML = '<p style="color: #94a3b8; text-align: center; margin: 1rem 0;">No messages match your search.</p>';
     return;
   }
 
   chatMessagesEl.innerHTML = '';
 
-  messages.forEach((msg) => {
+  let lastDate = null;
+
+  sortedMessages.forEach((msg) => {
+    // Add date separator if date changed
+    if (msg.createdAt) {
+      const currentDate = new Date(msg.createdAt).toLocaleDateString([], { year: 'numeric', month: 'short', day: '2-digit' });
+      if (lastDate !== currentDate) {
+        const dateSeparator = document.createElement('div');
+        dateSeparator.style.cssText = 'display: flex; align-items: center; justify-content: center; margin: 1.5rem 0 1rem 0; gap: 0.75rem;';
+        dateSeparator.innerHTML = `
+          <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent);"></div>
+          <div style="padding: 0.35rem 0.75rem; font-size: 0.8rem; color: #cbd5e1; font-weight: 600; white-space: nowrap; letter-spacing: 0.02em;">${currentDate}</div>
+          <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent);"></div>
+        `;
+        chatMessagesEl.appendChild(dateSeparator);
+        lastDate = currentDate;
+      }
+    }
+
     const msgDiv = document.createElement('div');
     msgDiv.className = 'chat-message search-match';
     msgDiv.style.opacity = msg.deleted ? '0.75' : '1';
 
-    const sender = msg.senderName || getUserName(msg.senderEmail) || 'Unknown';
+    const sender = getChatSenderName(msg);
     const timestamp = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
     const messageText = msg.deleted ? 'This message was unsent.' : msg.text || '';
     const highlightedText = msg.deleted ? messageText : highlightSearchTerms(messageText, searchQuery);
@@ -495,7 +613,10 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
 
     msgDiv.innerHTML = `
       <div style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem;">
-        <div style="font-size: 0.9rem; color: #94a3b8;">${escapeHtml(sender)}</div>
+        <div style="display: flex; align-items: center; gap: 0.6rem; min-width: 0;">
+          ${renderUserAvatarMarkup(msg.senderEmail || sender, 26)}
+          <div style="font-size: 0.9rem; color: #94a3b8;">${escapeHtml(sender)}</div>
+        </div>
         <div style="font-size: 0.8rem; color: #6b7280;">${timestamp}</div>
       </div>
       <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; white-space: pre-wrap; word-break: break-word;">${replyQuote}${imageMarkup}${renderedText}</div>
@@ -518,6 +639,7 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
     chatMessagesEl.appendChild(msgDiv);
   });
 
+  void hydrateProfileAvatars();
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
   const albumModal = document.getElementById('chatAlbumModal');
   if (albumModal && albumModal.style.display === 'flex') {
@@ -843,21 +965,12 @@ function handleChatImageInputChange(event) {
     return;
   }
 
-  // Accept all image formats
-  const validImageMimeTypes = [
-    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-    'image/bmp', 'image/tiff', 'image/tif', 'image/svg+xml', 'image/x-icon',
-    'image/vnd.microsoft.icon', 'image/x-png', 'image/x-citrix-jpeg', 
-    'image/x-citrix-png', 'image/heic', 'image/heif', 'image/apng'
-  ];
-  
-  // Check if file is an image type (by MIME type or extension)
-  const isImageByMime = validImageMimeTypes.includes(file.type.toLowerCase());
-  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.svg', '.ico', '.heic', '.heif', '.apng'];
   const fileName = file.name.toLowerCase();
+  const isImageByMime = typeof file.type === 'string' && file.type.toLowerCase().startsWith('image/');
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.ico', '.tif', '.tiff', '.heic', '.heif', '.avif', '.jfif'];
   const isImageByExtension = imageExtensions.some(ext => fileName.endsWith(ext));
 
-  if (!isImageByMime && !isImageByExtension && file.type) {
+  if (!isImageByMime && !isImageByExtension) {
     showError('Please select a valid image file.');
     return;
   }
@@ -870,7 +983,6 @@ function handleChatImageInputChange(event) {
   const reader = new FileReader();
   reader.onload = async () => {
     try {
-      // Compress the image before storing
       const compressedData = await compressImage(reader.result, 500);
       selectedChatImageData = compressedData;
       selectedChatImageName = file.name;
@@ -927,7 +1039,7 @@ async function sendChatMessage(event) {
   const cleanedMessage = message.split('\n').map(line => line.trim()).join('\n').trim();
   const messageData = {
     senderEmail: currentEmail,
-    senderName: getUserName(currentEmail),
+    senderName: normalizeEmail(currentEmail) === 'johnpaulbugayong@gmail.com' ? 'Admin' : getUserName(currentEmail),
     text: cleanedMessage || '',
     createdAt: Date.now(),
     deleted: false
@@ -979,15 +1091,20 @@ async function loadChatRoomInfo(chatId) {
   }
 
   const data = chatDoc.data();
+  if (currentUserEmail && chatId) {
+    localStorage.setItem(`chatLastRead:${currentUserEmail}:${chatId}`, String(Date.now()));
+  }
   const titleEl = document.getElementById('chatTitle');
   const metaEl = document.getElementById('chatMeta');
   const statusEl = document.getElementById('chatStatus');
 
   if (titleEl) titleEl.textContent = data.title || 'Live Chat';
   if (metaEl) {
-    const createdBy = data.createdByName && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.createdByName)
-      ? data.createdByName
-      : getUserName(data.createdByEmail);
+    const createdBy = normalizeEmail(data.createdByEmail) === 'johnpaulbugayong@gmail.com'
+      ? 'Admin'
+      : (data.createdByName && !/^[^@\s]+@[^\s]+\.[^@\s]+$/.test(data.createdByName)
+        ? data.createdByName
+        : getUserName(data.createdByEmail));
     metaEl.textContent = `Created by ${createdBy} • ${new Date(data.createdAt).toLocaleString()}`;
   }
   if (statusEl) {

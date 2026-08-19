@@ -90,7 +90,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 import { db } from "./firebase.js";
-import { signOutUser, getStoredUserEmail, getStoredUserRole, setUserRole, setUserAccess, createMemberAccount, deleteMemberAccount, approvePasswordReset } from "./auth.js";
+import { signOutUser, getStoredUserEmail, getStoredUserRole, getEffectiveRole, setUserRole, setUserAccess, createMemberAccount, deleteMemberAccount, approvePasswordReset } from "./auth.js";
 import { sendNotificationToUsers, showLocalNotification, initializeNotifications } from "./notifications.js";
 
 window.signOutUser = signOutUser;
@@ -101,6 +101,19 @@ let chart;
 let chartUpdateTimeout;
 let lastMemberProgress = {};
 let lastAnalyticsTasks = [];
+let archivedPollsCollapsed = localStorage.getItem('archivedPollsCollapsed') !== 'false';
+let archivedAnnouncementsCollapsed = localStorage.getItem('archivedAnnouncementsCollapsed') !== 'false';
+
+function escapeHtml(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+window.escapeHtml = escapeHtml;
 
 function parseDeadline(value) {
   if (!value) return null;
@@ -175,7 +188,7 @@ function normalizeProgressSections(sections, defaultSections = getDefaultProgres
     .map((section, index) => ({
       title: section.title || `Additional Section ${normalizedDefault.length + index + 1}`,
       items: Array.isArray(section.items) ? section.items.map((item) => ({
-        name: item.name || 'New Item',
+        name: item.name || '',
         status: item.status || 'Not Started',
         assignedTo: Array.isArray(item.assignedTo) ? item.assignedTo : (item.assignedTo ? [item.assignedTo] : []),
         assignedToName: Array.isArray(item.assignedToName) ? item.assignedToName : (item.assignedToName ? [item.assignedToName] : [])
@@ -187,13 +200,24 @@ function normalizeProgressSections(sections, defaultSections = getDefaultProgres
 
 async function persistProgressReportSections(sections) {
   const progressRef = doc(db, progressReportCollection, progressReportDocId);
+  const safeSections = Array.isArray(sections) ? sections : [];
+
   try {
-    await setDoc(progressRef, { sections, updatedAt: new Date().toISOString() }, { merge: true });
-    saveProgressBackupSections(sections);
+    await setDoc(progressRef, { sections: safeSections, updatedAt: new Date().toISOString() }, { merge: true });
+    const savedSnapshot = await getDoc(progressRef);
+    const savedSections = savedSnapshot.exists() && Array.isArray(savedSnapshot.data()?.sections)
+      ? savedSnapshot.data().sections
+      : [];
+    if (safeSections.length > 0 && savedSections.length === 0) {
+      throw new Error('Firestore did not retain the progress report sections.');
+    }
+    saveProgressBackupSections(safeSections);
+    adminProgressSections = safeSections;
     return true;
   } catch (error) {
     console.error("Firestore progress save failed, falling back to local storage:", error);
-    saveProgressBackupSections(sections);
+    saveProgressBackupSections(safeSections);
+    adminProgressSections = safeSections;
     return false;
   }
 }
@@ -284,6 +308,26 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+async function loadProfilePictureForEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  try {
+    const snap = await getDoc(doc(db, 'userRoles', normalizedEmail));
+    if (snap.exists()) {
+      return snap.data()?.profilePicture || null;
+    }
+    return null;
+  } catch (error) {
+    console.warn('Error loading profile picture for member:', error);
+    return null;
+  }
+}
+
+async function loadMemberProfilePicture(email) {
+  return loadProfilePictureForEmail(email);
+}
+
 function isHiddenMember(memberOrEmail) {
   const normalized = normalizeEmail(memberOrEmail?.uid || memberOrEmail);
   return normalized === 'everyone' || normalized === 'johnpaulbugayong@gmail.com';
@@ -346,6 +390,148 @@ async function refreshMentionMembers() {
   }
 }
 
+async function compressImage(file, maxWidth = 400, quality = 0.7) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function getInitialsFromEmail(email) {
+  const source = String(email || '').trim();
+  if (!source) return '?';
+
+  const cleaned = source.includes('@') ? source.split('@')[0] : source;
+  const parts = cleaned.split(/[._\s-]+/).filter(Boolean).slice(0, 2);
+  if (parts.length === 0) return '?';
+  return parts.map(part => part.charAt(0).toUpperCase()).join('').slice(0, 2);
+}
+
+function renderUserAvatarMarkup(email, size = 28) {
+  const normalized = normalizeEmail(email);
+  const initials = getInitialsFromEmail(email || 'Member');
+  const safeSize = Math.max(20, Number(size) || 28);
+  return `
+    <div data-profile-email="${escapeHtml(normalized || '')}" style="width:${safeSize}px; height:${safeSize}px; border-radius:50%; background:#1f2937; border:1px solid #4b5563; overflow:hidden; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 0 0 1px rgba(148,163,184,0.15);">
+      <span style="color:#e5e7eb; font-size:${Math.max(9, safeSize * 0.38)}px; font-weight:700; letter-spacing:0.04em;">${escapeHtml(initials)}</span>
+    </div>
+  `;
+}
+
+async function hydrateProfileAvatars() {
+  const avatarNodes = [...document.querySelectorAll('[data-profile-email]')];
+  if (!avatarNodes.length) return;
+
+  const uniqueEmails = [...new Set(avatarNodes.map(node => normalizeEmail(node.getAttribute('data-profile-email'))).filter(Boolean))];
+  if (!uniqueEmails.length) return;
+
+  const results = await Promise.all(uniqueEmails.map(async (email) => {
+    const memberPicture = await loadProfilePictureForEmail(email).catch(() => null);
+    if (memberPicture) return { email, picture: memberPicture };
+    const adminPicture = await loadAdminProfilePicture(email).catch(() => null);
+    return adminPicture ? { email, picture: adminPicture } : { email, picture: null };
+  }));
+
+  const byEmail = new Map(results.filter(item => item && item.email).map(item => [item.email, item.picture]));
+
+  avatarNodes.forEach((node) => {
+    const email = normalizeEmail(node.getAttribute('data-profile-email'));
+    const picture = byEmail.get(email);
+    if (!picture) return;
+
+    node.innerHTML = `<img src="${picture}" alt="Profile" style="width:100%; height:100%; object-fit:cover; display:block;" />`;
+  });
+}
+
+async function saveAdminProfilePicture(email, imageBase64) {
+  try {
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) return false;
+    
+    await setDoc(doc(db, 'userRoles', normalizedEmail), {
+      profilePicture: imageBase64,
+      profilePictureUpdatedAt: new Date().toISOString()
+    }, { merge: true });
+    
+    return true;
+  } catch (error) {
+    console.error('Error saving profile picture to Firestore:', error);
+    return false;
+  }
+}
+
+async function loadAdminProfilePicture(email) {
+  try {
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) return null;
+    
+    const snap = await getDoc(doc(db, 'userRoles', normalizedEmail));
+    if (snap.exists()) {
+      const data = snap.data();
+      return data.profilePicture || null;
+    }
+    return null;
+  } catch (error) {
+    console.warn('Error loading profile picture:', error);
+    return null;
+  }
+}
+
+async function displayAdminProfilePicture(email) {
+  const profilePictureDiv = document.getElementById('adminProfilePicture') || document.getElementById('adminHeaderProfilePicture');
+  if (!profilePictureDiv) return;
+  
+  const profilePicture = await loadAdminProfilePicture(email);
+  if (profilePicture) {
+    profilePictureDiv.innerHTML = `<img src="${profilePicture}" style="width: 100%; height: 100%; object-fit: cover;" />`;
+  } else {
+    profilePictureDiv.innerHTML = `<span style="color: #e5e7eb; font-size: 0.9rem; font-weight: 700;">${escapeHtml(getInitialsFromEmail(email))}</span>`;
+  }
+}
+
+window.handleAdminProfileUpload = async function(event) {
+  const file = event.target.files?.[0];
+  if (!file || !adminEmail) return;
+  
+  try {
+    const compressed = await compressImage(file, 400, 0.7);
+    const saved = await saveAdminProfilePicture(adminEmail, compressed);
+    
+    if (saved) {
+      await displayAdminProfilePicture(adminEmail);
+      alert('Profile picture updated successfully!');
+    } else {
+      alert('Profile picture was compressed but could not be saved to server.');
+    }
+  } catch (error) {
+    console.error('Error uploading profile picture:', error);
+    alert('Failed to upload profile picture. Please try again.');
+  }
+  
+  // Reset input
+  event.target.value = '';
+};
+
 function getUserName(email) {
   const normalized = normalizeEmail(email);
   const member = members.find(m => normalizeEmail(m.uid) === normalized);
@@ -360,6 +546,65 @@ let adminRole = null;
 let liveChatRoomsUnsubscribe = null;
 let liveChatMessagesUnsubscribe = null;
 let selectedLiveChatId = null;
+let adminPresenceHeartbeatTimer = null;
+let adminPresenceTrackingInitialized = false;
+let adminPresenceState = true;
+let adminPresenceLastUpdatedAt = 0;
+
+const VALID_ADMIN_ROLES = new Set(['admin', 'limited-admin', 'member']);
+
+function normalizeRoleName(role) {
+  return String(role || '').trim().toLowerCase();
+}
+
+function setAdminRoleLoadingState() {
+  document.body.classList.add('admin-loading');
+
+  const navButtons = document.querySelectorAll('.nav-btn');
+  navButtons.forEach(btn => {
+    btn.style.display = 'none';
+  });
+
+  document.querySelectorAll('.content-section').forEach(section => {
+    section.style.display = 'none';
+    section.classList.remove('active');
+  });
+}
+
+function clearAdminRoleLoadingState() {
+  if (document.body) {
+    document.body.classList.remove('admin-loading');
+  }
+}
+
+window.addEventListener('load', () => {
+  clearAdminRoleLoadingState();
+});
+
+function hasValidAdminRole(role) {
+  return VALID_ADMIN_ROLES.has(normalizeRoleName(role));
+}
+
+async function resolveAdminRoleForCurrentUser() {
+  const currentEmail = adminEmail || await getStoredUserEmail();
+  if (!currentEmail) {
+    adminRole = 'member';
+    clearAdminRoleLoadingState();
+    return adminRole;
+  }
+
+  adminEmail = currentEmail;
+  const effectiveRole = normalizeRoleName(await getEffectiveRole(adminEmail));
+  const storedRole = normalizeRoleName(await getStoredUserRole());
+  const candidate = hasValidAdminRole(effectiveRole)
+    ? effectiveRole
+    : (hasValidAdminRole(storedRole) ? storedRole : 'member');
+
+  adminRole = candidate;
+  clearAdminRoleLoadingState();
+  return adminRole;
+}
+
 let liveChatRoomsById = {};
 let adminChatMessagesById = {};
 let adminReplyToMessage = null;
@@ -412,18 +657,28 @@ function isMemberCurrentlyActive(member) {
 }
 
 (async () => {
-  // Retry getting admin credentials if first attempt fails (to handle timing issues)
   adminEmail = await getStoredUserEmail();
-  adminRole = await getStoredUserRole();
+  setAdminRoleLoadingState();
+
+  // Resolve the current role from Firestore before rendering any admin-only UI.
+  await resolveAdminRoleForCurrentUser();
+
   let retries = 0;
-  
   while ((!adminEmail || !adminRole) && retries < 5) {
     if (!adminEmail) adminEmail = await getStoredUserEmail();
-    if (!adminRole) adminRole = await getStoredUserRole();
+    if (!adminRole) await resolveAdminRoleForCurrentUser();
     if (!adminEmail || !adminRole) {
       retries++;
       await new Promise(resolve => setTimeout(resolve, 200));
     }
+  }
+
+  if (!hasValidAdminRole(adminRole)) {
+    adminRole = 'member';
+  }
+
+  if (adminEmail) {
+    startAdminPresenceHeartbeat();
   }
 
 function getDefaultProgressStructure() {
@@ -451,14 +706,17 @@ function renderAdminProgressReport(sections) {
 
   console.log('Rendering', sections.length, 'sections');
   container.innerHTML = sections.map((section, sectionIndex) => `
-    <div style="margin-bottom: 1.25rem;">
-      <h3 style="margin: 0 0 0.75rem 0; color: #0ea5e9;">${section.title}</h3>
+    <div style="margin-bottom: 1.25rem; padding: 1rem; background: #0f172a; border: 1px solid #4b5563; border-radius: 0.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; gap: 1rem;">
+        <input id="sectionTitle-${sectionIndex}" type="text" value="${escapeHtml(section.title || '')}" placeholder="Section title" style="flex: 1; background: #111827; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.5rem; font-size: 1rem; font-weight: 600;" />
+        <button onclick="window.deleteProgressSection(${sectionIndex})" style="background: #ef4444; color: white; border: none; padding: 0.35rem 0.75rem; border-radius: 0.375rem; cursor: pointer; font-size: 0.85rem; white-space: nowrap;">Delete Section</button>
+      </div>
       ${Array.isArray(section.items) ? section.items.map((item, itemIndex) => {
         const assignedToValue = Array.isArray(item.assignedTo) ? item.assignedTo : (item.assignedTo ? [item.assignedTo] : []);
         return `
           <div style="display: grid; gap: 0.75rem; margin-bottom: 0.65rem; padding: 0.75rem; background: #111827; border: 1px solid #374151; border-radius: 0.5rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
-              ${item.isNewItem ? `<input id="itemName-${sectionIndex}-${itemIndex}" type="text" value="${escapeHtml(item.name || '')}" placeholder="Item name" style="flex:1 1 auto; min-width:0; width:auto; background:#0f172a; color:#f8fafc; border:1px solid #4b5563; border-radius:0.375rem; padding:0.5rem; font-size:0.95rem;" />` : `<span style="color: #d1d5db;">${escapeHtml(item.name || '')}</span>`}
+              ${item.isNewItem ? `<input id="itemName-${sectionIndex}-${itemIndex}" type="text" value="${escapeHtml(item.name === 'New Item' ? '' : (item.name || ''))}" placeholder="Item name" style="flex:1 1 auto; min-width:0; width:auto; background:#0f172a; color:#f8fafc; border:1px solid #4b5563; border-radius:0.375rem; padding:0.5rem; font-size:0.95rem;" />` : `<span style="color: #d1d5db;">${escapeHtml(item.name === 'New Item' ? '' : (item.name || ''))}</span>`}
               <select id="progress-${sectionIndex}-${itemIndex}" style="background: #0f172a; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.875rem;">
                 <option value="Not Started" ${item.status === 'Not Started' || !item.status ? 'selected' : ''}>Not Started</option>
                 <option value="Pending" ${item.status === 'Pending' ? 'selected' : ''}>Pending</option>
@@ -486,12 +744,11 @@ function addAdminProgressSection() {
     adminProgressSections = getDefaultProgressStructure();
   }
 
-  const newSectionIndex = adminProgressSections.length + 1;
   adminProgressSections.push({
-    title: `New Section ${newSectionIndex}`,
+    title: '',
     items: [
       {
-        name: 'New Item',
+        name: '',
         status: 'Not Started',
         assignedTo: [],
         assignedToName: [],
@@ -504,24 +761,51 @@ function addAdminProgressSection() {
   renderAdminProgressReport(adminProgressSections);
 }
 
+window.deleteProgressSection = async function(sectionIndex) {
+  if (!Number.isInteger(sectionIndex) || sectionIndex < 0 || sectionIndex >= adminProgressSections.length) {
+    alert('Invalid section index.');
+    return;
+  }
+
+  const section = adminProgressSections[sectionIndex];
+  const sectionTitle = section.title || '(Untitled Section)';
+  if (!confirm(`Delete section "${sectionTitle}"? This action cannot be undone.`)) {
+    return;
+  }
+
+  adminProgressSections.splice(sectionIndex, 1);
+  const savedToFirestore = await persistProgressReportSections(adminProgressSections);
+  
+  if (savedToFirestore) {
+    alert('Section deleted successfully!');
+  } else {
+    alert('Section deleted locally. Please refresh once the connection is restored.');
+  }
+  
+  renderAdminProgressReport(adminProgressSections);
+}
+
 function getProgressFormValues() {
   const sections = Array.isArray(adminProgressSections) && adminProgressSections.length ? adminProgressSections : getDefaultProgressStructure();
-  return sections.map((section, sectionIndex) => ({
-    title: section.title,
-    items: section.items.map((item, itemIndex) => {
-      const itemNameInput = document.getElementById(`itemName-${sectionIndex}-${itemIndex}`);
-      const statusSelect = document.getElementById(`progress-${sectionIndex}-${itemIndex}`);
-      const assignedSelect = document.getElementById(`assignedTo-${sectionIndex}-${itemIndex}`);
-      const assignedTo = assignedSelect ? Array.from(assignedSelect.selectedOptions).map(option => option.value).filter(v => v !== '') : (Array.isArray(item.assignedTo) ? item.assignedTo : []);
-      const assignedToName = assignedSelect ? Array.from(assignedSelect.selectedOptions).map(option => members.find(m => m.uid === option.value)?.name).filter(Boolean) : (Array.isArray(item.assignedToName) ? item.assignedToName : []);
-      return {
-        name: itemNameInput ? itemNameInput.value.trim() || item.name : item.name,
-        status: statusSelect ? statusSelect.value : item.status,
-        assignedTo,
-        assignedToName
-      };
-    })
-  }));
+  return sections.map((section, sectionIndex) => {
+    const sectionTitleInput = document.getElementById(`sectionTitle-${sectionIndex}`);
+    return {
+      title: sectionTitleInput ? sectionTitleInput.value.trim() : section.title,
+      items: section.items.map((item, itemIndex) => {
+        const itemNameInput = document.getElementById(`itemName-${sectionIndex}-${itemIndex}`);
+        const statusSelect = document.getElementById(`progress-${sectionIndex}-${itemIndex}`);
+        const assignedSelect = document.getElementById(`assignedTo-${sectionIndex}-${itemIndex}`);
+        const assignedTo = assignedSelect ? Array.from(assignedSelect.selectedOptions).map(option => option.value).filter(v => v !== '') : (Array.isArray(item.assignedTo) ? item.assignedTo : []);
+        const assignedToName = assignedSelect ? Array.from(assignedSelect.selectedOptions).map(option => members.find(m => m.uid === option.value)?.name).filter(Boolean) : (Array.isArray(item.assignedToName) ? item.assignedToName : []);
+        return {
+          name: itemNameInput ? itemNameInput.value.trim() || (item.name === 'New Item' ? '' : item.name) : (item.name === 'New Item' ? '' : item.name),
+          status: statusSelect ? statusSelect.value : item.status,
+          assignedTo,
+          assignedToName
+        };
+      })
+    };
+  });
 }
 
 window.saveProgressReport = async function() {
@@ -628,7 +912,10 @@ function subscribeToMemberRoles() {
     snapshot.forEach((docSnap) => {
       const data = docSnap.data() || {};
       const docId = normalizeEmail(docSnap.id);
-      if (!docId) return;
+      if (!docId || isHiddenMember(docId)) return;
+
+      if (!isTrackedAuthMember(data)) return;
+      
       seen.add(docId);
 
       let member = members.find(m => normalizeEmail(m.uid) === docId);
@@ -654,6 +941,69 @@ function subscribeToMemberRoles() {
   });
 }
 
+async function updateAdminPresence(isOnline = true, options = {}) {
+  if (!adminEmail) return;
+
+  const { force = false } = options;
+  const now = Date.now();
+  const shouldSkip = !force && isOnline === adminPresenceState && now - adminPresenceLastUpdatedAt < 10000;
+
+  if (shouldSkip) return;
+
+  const normalizedEmail = normalizeEmail(adminEmail);
+
+  try {
+    await setDoc(doc(db, 'userRoles', normalizedEmail), {
+      email: normalizedEmail,
+      role: adminRole || 'admin',
+      lastActive: new Date().toISOString(),
+      isOnline,
+      updatedAt: new Date()
+    }, { merge: true });
+
+    adminPresenceState = isOnline;
+    adminPresenceLastUpdatedAt = now;
+  } catch (error) {
+    console.error('Unable to update admin presence on server:', error);
+    throw error;
+  }
+}
+
+function startAdminPresenceHeartbeat() {
+  if (adminPresenceTrackingInitialized) return;
+  adminPresenceTrackingInitialized = true;
+
+  const syncPresence = (isOnline, options = {}) => {
+    void updateAdminPresence(isOnline, options);
+  };
+
+  syncPresence(true, { force: true });
+
+  if (adminPresenceHeartbeatTimer) {
+    clearInterval(adminPresenceHeartbeatTimer);
+  }
+
+  adminPresenceHeartbeatTimer = window.setInterval(() => {
+    syncPresence(true, { force: true });
+  }, 20000);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      syncPresence(false, { force: true });
+    } else {
+      syncPresence(true, { force: true });
+    }
+  });
+
+  window.addEventListener('pagehide', () => {
+    syncPresence(false, { force: true, keepalive: true });
+  });
+
+  window.addEventListener('beforeunload', () => {
+    syncPresence(false, { force: true, keepalive: true });
+  });
+}
+
 function getPrivilegeList(role) {
   const roleData = memberRoles[role] || memberRoles.member;
   return roleData.privileges.map(privilege => `<li style="margin: 0.25rem 0; color: #d1d5db;">${privilege}</li>`).join('');
@@ -664,7 +1014,17 @@ function getAllowedSections(role) {
 }
 
 function applyAdminRoleRestrictions() {
-  const allowedSections = getAllowedSections(adminRole);
+  if (!hasValidAdminRole(adminRole)) {
+    setAdminRoleLoadingState();
+    return;
+  }
+
+  const currentRole = normalizeRoleName(adminRole);
+  const effectiveRole = hasValidAdminRole(currentRole) ? currentRole : 'member';
+  const allowedSections = getAllowedSections(effectiveRole);
+
+  document.body.classList.remove('admin-loading');
+
   const navButtons = document.querySelectorAll('.nav-btn');
   navButtons.forEach(btn => {
     const onclickValue = btn.getAttribute('onclick') || '';
@@ -681,17 +1041,25 @@ function applyAdminRoleRestrictions() {
   });
 
   const firstAllowed = allowedSections.find(id => document.getElementById(id));
-  if (firstAllowed) {
-    showSection(firstAllowed);
+  if (firstAllowed && typeof window.showSection === 'function') {
+    window.showSection(firstAllowed);
   }
 }
 
 function waitForAdminRole() {
   return new Promise((resolve) => {
+    if (hasValidAdminRole(adminRole)) {
+      resolve();
+      return;
+    }
+
     const start = Date.now();
     const interval = setInterval(() => {
-      if (adminRole !== null || Date.now() - start > 3000) {
+      if (hasValidAdminRole(adminRole) || Date.now() - start > 3000) {
         clearInterval(interval);
+        if (!hasValidAdminRole(adminRole)) {
+          adminRole = 'member';
+        }
         resolve();
       }
     }, 100);
@@ -731,12 +1099,15 @@ function renderMemberManagementPanel() {
       return `
       <div style="border: 1px solid #374151; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem; background: #111827;">
         <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
-          <div>
-            <h3 style="margin: 0 0 0.5rem 0; color: #f8fafc;">${member.name}</h3>
-            <p style="margin: 0 0.5rem 0 0; color: #94a3b8; font-size: 0.9rem;">${member.uid}</p>
-            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
-              <span style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; background: ${badgeColor}; color: white; font-size: 0.8rem;">${role.toUpperCase()}</span>
-              <span style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; background: ${accessBadgeColor}; color: white; font-size: 0.8rem;">${accessBadgeText}</span>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            ${renderUserAvatarMarkup(member.uid, 42)}
+            <div>
+              <h3 style="margin: 0 0 0.5rem 0; color: #f8fafc;">${member.name}</h3>
+              <p style="margin: 0 0.5rem 0 0; color: #94a3b8; font-size: 0.9rem;">${member.uid}</p>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                <span style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; background: ${badgeColor}; color: white; font-size: 0.8rem;">${role.toUpperCase()}</span>
+                <span style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; background: ${accessBadgeColor}; color: white; font-size: 0.8rem;">${accessBadgeText}</span>
+              </div>
             </div>
           </div>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -1309,18 +1680,43 @@ function loadProgressReport() {
   const progressRef = doc(db, progressReportCollection, progressReportDocId);
   console.log('Progress report reference:', progressRef);
 
-  saveProgressBackupSections([]);
-  void persistProgressReportSections([]);
-  renderAdminProgressReport([]);
-
   onSnapshot(progressRef, async (snap) => {
     console.log('Progress report snapshot received:', snap.exists());
-    const sections = [];
-    saveProgressBackupSections(sections);
-    renderAdminProgressReport(sections);
+
+    if (snap.exists()) {
+      const data = snap.data() || {};
+      const sections = Array.isArray(data.sections) ? data.sections : [];
+      console.log('Progress report sections loaded:', sections.length);
+      if (sections.length === 0) {
+        const backupSections = getProgressBackupSections() || [];
+        if (backupSections.length > 0) {
+          adminProgressSections = backupSections;
+          renderAdminProgressReport(backupSections);
+          return;
+        }
+      }
+      adminProgressSections = sections;
+      saveProgressBackupSections(sections);
+      renderAdminProgressReport(sections);
+      return;
+    }
+
+    const backupSections = getProgressBackupSections() || [];
+    if (backupSections.length > 0) {
+      console.log('Firestore document is empty; restoring local backup until Firestore is updated.');
+      adminProgressSections = backupSections;
+      renderAdminProgressReport(backupSections);
+      return;
+    }
+
+    console.log('No progress report exists yet and no local backup is available.');
+    adminProgressSections = [];
+    renderAdminProgressReport([]);
   }, (error) => {
     console.error('Progress report onSnapshot error:', error);
-    renderAdminProgressReport([]);
+    const backupSections = getProgressBackupSections() || [];
+    adminProgressSections = backupSections;
+    renderAdminProgressReport(backupSections);
   });
 }
 
@@ -1881,6 +2277,7 @@ window.createPoll = async function () {
       question,
       options,
       votes: {},
+      status: 'active',
       emailNotificationSent: false,
       createdAt: new Date()
     };
@@ -2110,6 +2507,7 @@ window.createAnnouncement = async function () {
       assignedToNames,
       createdAt: new Date(),
       commentsEnabled: true,
+      archived: false,
       emailNotificationSent: false
     };
 
@@ -2195,6 +2593,24 @@ window.deletePoll = async function (id) {
   }
 };
 
+/* TOGGLE POLL STATUS (CLOSE/REOPEN) */
+window.togglePollStatus = async function (id, currentStatus) {
+  const newStatus = currentStatus === 'active' ? 'closed' : 'active';
+  const action = newStatus === 'closed' ? 'close' : 'reopen';
+  
+  if (confirm(`Are you sure you want to ${action} this poll?`)) {
+    try {
+      await updateDoc(doc(db, "polls", id), {
+        status: newStatus
+      });
+      alert(`Poll ${action}d successfully!`);
+    } catch (error) {
+      console.error(`Error toggling poll status:`, error);
+      alert(`Failed to ${action} poll. Please try again.`);
+    }
+  }
+};
+
 /* DELETE ANNOUNCEMENT */
 window.deleteAnnouncement = async function (id) {
   if (confirm("Are you sure you want to delete this announcement? This action cannot be undone.")) {
@@ -2205,6 +2621,26 @@ window.deleteAnnouncement = async function (id) {
       console.error("Error deleting announcement:", error);
       alert("Failed to delete announcement. Please try again.");
     }
+  }
+};
+
+window.archiveAnnouncement = async function (id) {
+  if (!confirm("Archive this announcement? It will be hidden from the active announcement list.")) return;
+
+  try {
+    await updateDoc(doc(db, "announcements", id), { archived: true });
+  } catch (error) {
+    console.error("Error archiving announcement:", error);
+    alert("Failed to archive announcement. Please try again.");
+  }
+};
+
+window.restoreAnnouncement = async function (id) {
+  try {
+    await updateDoc(doc(db, "announcements", id), { archived: false });
+  } catch (error) {
+    console.error("Error restoring announcement:", error);
+    alert("Failed to restore announcement. Please try again.");
   }
 };
 
@@ -2230,29 +2666,99 @@ onSnapshot(collection(db, "polls"), (snap) => {
     return timeB - timeA;
   });
 
-  docs.forEach(docSnap => {
-    const poll = docSnap.data() || {};
-    const createdDate = getPollCreatedDate(poll.createdAt);
-    const options = getSafePollOptions(poll);
-    const votes = poll.votes || {};
+  // Separate active and closed polls
+  const activePolls = docs.filter(docSnap => (docSnap.data().status || 'active') === 'active');
+  const closedPolls = docs.filter(docSnap => (docSnap.data().status || 'active') === 'closed');
 
-    container.innerHTML += `
-      <div class="card" style="margin-bottom: 1rem;">
-        <h4 class="poll-question">${poll.question || "Untitled Poll"}</h4>
-        <p class="poll-created-date">Created: ${createdDate}</p>
-        <div style="margin: 0.5rem 0;">
-          ${options.map((option, index) => `
-            <div class="poll-option-row" style="display: flex; justify-content: space-between; padding: 0.25rem; background: #f8fafc; border-radius: 0.25rem; margin-bottom: 0.25rem;">
-              <span class="poll-option-text" style="color: #334155;">${option}</span>
-              <span class="poll-option-votes" style="color: #475569;">${Array.isArray(votes[index]) ? votes[index].length : 0} votes</span>
-            </div>
-          `).join('')}
+  // Render active polls
+  if (activePolls.length > 0) {
+    container.innerHTML += `<h3 style="color: #e2e8f0; margin-bottom: 1rem;">Active Polls</h3>`;
+    activePolls.forEach(docSnap => {
+      const poll = docSnap.data() || {};
+      const createdDate = getPollCreatedDate(poll.createdAt);
+      const options = getSafePollOptions(poll);
+      const votes = poll.votes || {};
+
+      container.innerHTML += `
+        <div class="card" style="margin-bottom: 1rem; border-left: 4px solid #10b981;">
+          <h4 class="poll-question">${poll.question || "Untitled Poll"}</h4>
+          <p class="poll-created-date">Created: ${createdDate}</p>
+          <div style="margin: 0.5rem 0;">
+            ${options.map((option, index) => `
+              <div class="poll-option-row" style="display: flex; justify-content: space-between; padding: 0.25rem; background: #f8fafc; border-radius: 0.25rem; margin-bottom: 0.25rem;">
+                <span class="poll-option-text" style="color: #334155;">${option}</span>
+                <span class="poll-option-votes" style="color: #475569;">${Array.isArray(votes[index]) ? votes[index].length : 0} votes</span>
+              </div>
+            `).join('')}
+          </div>
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
+            <button onclick="togglePollStatus('${docSnap.id}', 'active')" style="padding: 0.5rem 1rem; background: #f59e0b; color: white; border: none; border-radius: 0.5rem; cursor: pointer; font-weight: 600;">🔒 Close Poll</button>
+            <button onclick="deletePoll('${docSnap.id}')" class="btn-danger" style="padding: 0.5rem 1rem;">🗑️ Delete</button>
+          </div>
         </div>
-        <button onclick="deletePoll('${docSnap.id}')" class="btn-danger" style="margin-top: 0.5rem;">🗑️ Delete Poll</button>
+      `;
+    });
+  }
+
+  // Render closed polls in archive section
+  if (closedPolls.length > 0) {
+    const archiveContentId = 'archivedPollsContent';
+    container.innerHTML += `
+      <div style="margin-top: 2rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem;">
+          <h3 style="color: #e2e8f0; margin: 0;">Archived Polls</h3>
+          <button onclick="toggleArchivedPolls()" style="padding: 0.4rem 0.75rem; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
+            ${archivedPollsCollapsed ? 'Show' : 'Hide'} (${closedPolls.length})
+          </button>
+        </div>
+        <div id="${archiveContentId}" style="display: ${archivedPollsCollapsed ? 'none' : 'block'};">
+          ${closedPolls.map(docSnap => {
+            const poll = docSnap.data() || {};
+            const createdDate = getPollCreatedDate(poll.createdAt);
+            const options = getSafePollOptions(poll);
+            const votes = poll.votes || {};
+
+            return `
+              <div class="card" style="margin-bottom: 1rem; border-left: 4px solid #94a3b8; opacity: 0.75;">
+                <h4 class="poll-question" style="color: #cbd5e1;">${poll.question || "Untitled Poll"}</h4>
+                <p class="poll-created-date" style="color: #6b7280;">Created: ${createdDate} · CLOSED</p>
+                <div style="margin: 0.5rem 0;">
+                  ${options.map((option, index) => `
+                    <div class="poll-option-row" style="display: flex; justify-content: space-between; padding: 0.25rem; background: #e5e7eb; border-radius: 0.25rem; margin-bottom: 0.25rem;">
+                      <span class="poll-option-text" style="color: #6b7280;">${option}</span>
+                      <span class="poll-option-votes" style="color: #9ca3af;">${Array.isArray(votes[index]) ? votes[index].length : 0} votes</span>
+                    </div>
+                  `).join('')}
+                </div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
+                  <button onclick="togglePollStatus('${docSnap.id}', 'closed')" style="padding: 0.5rem 1rem; background: #06b6d4; color: white; border: none; border-radius: 0.5rem; cursor: pointer; font-weight: 600;">🔓 Reopen Poll</button>
+                  <button onclick="deletePoll('${docSnap.id}')" class="btn-danger" style="padding: 0.5rem 1rem;">🗑️ Delete</button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
       </div>
     `;
-  });
+  }
 });
+
+window.toggleArchivedPolls = function() {
+  archivedPollsCollapsed = !archivedPollsCollapsed;
+  const archiveContent = document.getElementById('archivedPollsContent');
+  const archiveButtons = document.querySelectorAll('button[onclick="toggleArchivedPolls()"]');
+
+  if (archiveContent) {
+    archiveContent.style.display = archivedPollsCollapsed ? 'none' : 'block';
+  }
+
+  archiveButtons.forEach(button => {
+    const count = button.textContent.match(/\((\d+)\)/)?.[1] || '0';
+    button.textContent = `${archivedPollsCollapsed ? 'Show' : 'Hide'} (${count})`;
+  });
+
+  localStorage.setItem('archivedPollsCollapsed', archivedPollsCollapsed ? 'true' : 'false');
+};
 
 /* LOAD ANNOUNCEMENTS */
 onSnapshot(collection(db, "announcements"), (snap) => {
@@ -2276,25 +2782,35 @@ onSnapshot(collection(db, "announcements"), (snap) => {
     return timeB - timeA;
   });
 
-  docs.forEach(docSnap => {
+  const archivedDocs = docs.filter(docSnap => docSnap.data()?.archived === true);
+  const activeDocs = docs.filter(docSnap => docSnap.data()?.archived !== true);
+
+  activeDocs.forEach(docSnap => {
     const announcement = docSnap.data();
     const createdDate = announcement.createdAt?.toDate?.() ? announcement.createdAt.toDate().toLocaleDateString() : "Unknown date";
     const commentsEnabled = announcement.commentsEnabled !== false;
     const comments = Array.isArray(announcement.comments) ? announcement.comments : [];
     const assignedToNames = Array.isArray(announcement.assignedToNames) ? announcement.assignedToNames : [];
     const assignedToText = assignedToNames.length > 0 ? `Assigned to: ${assignedToNames.join(", ")}` : "Assigned to: Everyone";
-      const commentHtml = comments.length > 0 ? comments.map((comment, index) => `
+      const commentHtml = comments.length > 0 ? comments.map((comment, index) => {
+          const commentEmail = comment.email || comment.author || '';
+          const commentAuthor = comment.author || comment.email || 'Member';
+          return `
           <div style="margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid #e5e7eb; border-radius: 0.375rem; background: #111827;">
             <div style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; align-items: center;">
-              <div>
-                <span style="font-weight: 600; color: #f3f4f6;">${comment.author || comment.email || 'Member'}</span>
-                <div style="font-size: 0.8rem; color: #9ca3af;">${formatCommentDate(comment.createdAt)}</div>
+              <div style="display: flex; align-items: center; gap: 0.6rem;">
+                ${renderUserAvatarMarkup(commentEmail || commentAuthor, 28)}
+                <div>
+                  <span style="font-weight: 600; color: #f3f4f6;">${commentAuthor}</span>
+                  <div style="font-size: 0.8rem; color: #9ca3af;">${formatCommentDate(comment.createdAt)}</div>
+                </div>
               </div>
               <button onclick="deleteAnnouncementComment('${docSnap.id}', ${index})" style="background: #ef4444 !important; color: white !important; border: none !important; padding: 0.15rem 0.35rem !important; border-radius: 0.25rem !important; cursor: pointer !important; font-size: 0.65rem !important; line-height: 1 !important; width: auto !important; min-width: 0 !important; margin-top: 0 !important; box-shadow: none !important;">Delete</button>
             </div>
             <p class="comment-content" style="margin: 0; color: #d1d5db; white-space: pre-wrap;">${comment.content}</p>
           </div>
-        `).join('') : `<p style='color: #9ca3af; margin: 0;'>No comments yet.</p>`;
+        `;
+        }).join('') : `<p style='color: #9ca3af; margin: 0;'>No comments yet.</p>`;
 
     container.innerHTML += `
       <div class="card" style="margin-bottom: 1rem;">
@@ -2314,13 +2830,66 @@ onSnapshot(collection(db, "announcements"), (snap) => {
             <button onclick="addAnnouncementComment('${docSnap.id}')" style="background: #3b82f6; color: white; border: none; padding: 0.75rem 1rem; border-radius: 0.375rem; cursor: pointer;">Post Comment as Admin</button>
           </div>
         </div>
-        <button onclick="deleteAnnouncement('${docSnap.id}')" class="btn-danger" style="margin-top: 0.75rem;">🗑️ Delete Announcement</button>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem;">
+            <button onclick="archiveAnnouncement('${docSnap.id}')" style="background: #f59e0b; color: white; border: none; padding: 0.5rem 0.75rem; border-radius: 0.375rem; cursor: pointer;">Archive Announcement</button>
+            <button onclick="deleteAnnouncement('${docSnap.id}')" class="btn-danger">🗑️ Delete Announcement</button>
+          </div>
       </div>
     `;
   });
+
+  if (activeDocs.length === 0) {
+    container.innerHTML += "<p style='color: #94a3b8; text-align: center;'>No active announcements.</p>";
+  }
+
+  if (archivedDocs.length > 0) {
+    container.innerHTML += `
+      <div style="margin-top: 2rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem;">
+          <h3 style="color: #e2e8f0; margin: 0;">Archived Announcements</h3>
+          <button onclick="toggleArchivedAnnouncements()" style="padding: 0.4rem 0.75rem; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
+            ${archivedAnnouncementsCollapsed ? 'Show' : 'Hide'} (${archivedDocs.length})
+          </button>
+        </div>
+        <div id="archivedAnnouncementsContent" style="display: ${archivedAnnouncementsCollapsed ? 'none' : 'block'};">
+          ${archivedDocs.map(docSnap => {
+            const announcement = docSnap.data() || {};
+            const createdDate = announcement.createdAt?.toDate?.() ? announcement.createdAt.toDate().toLocaleDateString() : "Unknown date";
+            return `
+              <div class="card" style="margin-bottom: 0.75rem; padding: 0.85rem 1rem; border-left: 4px solid #94a3b8; opacity: 0.75;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                  <div>
+                    <h4 style="margin: 0; color: #cbd5e1;">${announcement.title || 'Untitled announcement'}</h4>
+                    <p style="margin: 0.25rem 0 0; color: #6b7280; font-size: 0.8rem;">Archived · Created: ${createdDate}</p>
+                  </div>
+                  <button onclick="restoreAnnouncement('${docSnap.id}')" style="background: #06b6d4; color: white; border: none; padding: 0.4rem 0.7rem; border-radius: 0.375rem; cursor: pointer;">Restore</button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
 });
 
+window.toggleArchivedAnnouncements = function () {
+  archivedAnnouncementsCollapsed = !archivedAnnouncementsCollapsed;
+  const archiveContent = document.getElementById('archivedAnnouncementsContent');
+  const archiveButtons = document.querySelectorAll('button[onclick="toggleArchivedAnnouncements()"]');
+
+  if (archiveContent) archiveContent.style.display = archivedAnnouncementsCollapsed ? 'none' : 'block';
+  archiveButtons.forEach(button => {
+    const count = button.textContent.match(/\((\d+)\)/)?.[1] || '0';
+    button.textContent = `${archivedAnnouncementsCollapsed ? 'Show' : 'Hide'} (${count})`;
+  });
+  localStorage.setItem('archivedAnnouncementsCollapsed', archivedAnnouncementsCollapsed ? 'true' : 'false');
+};
+
 loadProgressReport();
+if (adminEmail) {
+  void displayAdminProfilePicture(adminEmail);
+}
 if (document.getElementById('addProgressSectionButton')) {
   document.getElementById('addProgressSectionButton').addEventListener('click', addAdminProgressSection);
 }
@@ -2346,7 +2915,7 @@ async function createLiveChatRoom(event) {
     await addDoc(collection(db, 'liveChats'), {
       title,
       createdByEmail: adminEmail,
-      createdByName: getUserName(adminEmail),
+      createdByName: 'Admin',
       status: 'Active',
       createdAt: Date.now()
     });
@@ -2372,7 +2941,9 @@ function renderAdminChatRooms(rooms) {
   rooms.forEach((room) => {
     liveChatRoomsById[room.id] = room;
     const statusColor = room.status === 'Closed' ? '#ef4444' : '#10b981';
-    const createdBy = room.createdByName || getUserName(room.createdByEmail) || 'Unknown';
+    const createdBy = normalizeEmail(room.createdByEmail) === normalizeEmail(adminEmail)
+      ? 'Admin'
+      : (room.createdByName || getUserName(room.createdByEmail) || 'Unknown');
     const isActive = room.status === 'Active';
     const canDelete = true;
 
@@ -2754,7 +3325,7 @@ async function sendAdminChatMessage(event) {
 
   const newMessage = {
     senderEmail: adminEmail,
-    senderName: getUserName(adminEmail),
+    senderName: 'Admin',
     text: message || '',
     createdAt: Date.now(),
     deleted: false
