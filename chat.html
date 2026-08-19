@@ -131,6 +131,88 @@
       border-color: rgba(148, 163, 184, 0.2);
     }
 
+    .pinned-messages-section {
+      margin-bottom: 1rem;
+      border: 1px solid rgba(250, 204, 21, 0.25);
+      border-radius: 0.75rem;
+      background: rgba(30, 41, 59, 0.72);
+      overflow: hidden;
+    }
+
+    .pinned-messages-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.8rem 1rem;
+      border: 0;
+      color: #fef3c7;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      font-weight: 700;
+    }
+
+    .pinned-messages-header:hover {
+      background: rgba(250, 204, 21, 0.08);
+    }
+
+    .pinned-messages-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 0 0.75rem 0.75rem;
+    }
+
+    .pinned-message-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      width: 100%;
+      padding: 0.7rem;
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      border-radius: 0.6rem;
+      background: rgba(15, 23, 42, 0.65);
+      color: #e2e8f0;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+    }
+
+    .pinned-message-item:hover {
+      border-color: rgba(250, 204, 21, 0.45);
+      background: rgba(250, 204, 21, 0.08);
+    }
+
+    .pinned-message-content {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .pinned-message-sender {
+      color: #facc15;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .pinned-message-preview {
+      margin-top: 0.2rem;
+      overflow: hidden;
+      color: #cbd5e1;
+      font-size: 0.86rem;
+      line-height: 1.35;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pinned-messages-empty {
+      padding: 0.2rem 0.25rem 0.1rem;
+      color: #94a3b8;
+      font-size: 0.85rem;
+    }
+
     .chat-message strong {
       display: block;
       margin-bottom: 0.5rem;
@@ -601,6 +683,13 @@
 
     <div class="chat-page-card">
       <div id="chatError"></div>
+      <section id="pinnedMessagesSection" class="pinned-messages-section" aria-label="Pinned messages">
+        <button type="button" id="pinnedMessagesToggle" class="pinned-messages-header" aria-expanded="true">
+          <span><i class="fas fa-thumbtack"></i> Pinned messages <span id="pinnedMessagesCount">0</span></span>
+          <i id="pinnedMessagesChevron" class="fas fa-chevron-up" aria-hidden="true"></i>
+        </button>
+        <div id="pinnedMessagesList" class="pinned-messages-list"></div>
+      </section>
       <div id="chatMessages"></div>
       <div id="chatImagePreview"></div>
       <div id="replyPreview" class="reply-preview">

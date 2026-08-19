@@ -291,6 +291,7 @@ async function loadMemberGradientTheme(email) {
 
   if (memberGradientUnsubscribe) memberGradientUnsubscribe();
   memberGradientUnsubscribe = onSnapshot(doc(db, 'userRoles', normalizedEmail), (profileSnap) => {
+    void displayMemberProfilePicture(normalizedEmail);
     const savedTheme = profileSnap.exists() ? profileSnap.data()?.interfaceGradient : null;
     if (!savedTheme || typeof savedTheme !== 'object') {
       applyOriginalMemberTheme();
@@ -413,10 +414,25 @@ async function saveProfilePictureForEmail(email, imageBase64) {
   if (!normalizedEmail) return false;
 
   try {
+    if (imageBase64.length > 900000) {
+      throw new Error('The profile picture is too large to save. Please choose a smaller image.');
+    }
+
+    try {
+      localStorage.setItem(`profilePicture:${normalizedEmail}`, imageBase64);
+    } catch (cacheError) {
+      console.warn('Unable to cache member profile picture locally:', cacheError);
+    }
+
     await setDoc(doc(db, 'userRoles', normalizedEmail), {
       profilePicture: imageBase64,
       profilePictureUpdatedAt: new Date().toISOString()
     }, { merge: true });
+
+    const savedProfile = await getDoc(doc(db, 'userRoles', normalizedEmail));
+    if (!savedProfile.exists() || savedProfile.data()?.profilePicture !== imageBase64) {
+      throw new Error('The profile picture could not be verified after saving.');
+    }
     return true;
   } catch (error) {
     console.error('Error saving profile picture to Firestore:', error);
@@ -431,11 +447,24 @@ async function loadProfilePictureForEmail(email) {
   try {
     const snap = await getDoc(doc(db, 'userRoles', normalizedEmail));
     if (snap.exists()) {
-      return snap.data()?.profilePicture || null;
+      const profilePicture = snap.data()?.profilePicture || null;
+      if (profilePicture) {
+        try {
+          localStorage.setItem(`profilePicture:${normalizedEmail}`, profilePicture);
+        } catch (cacheError) {
+          console.warn('Unable to cache member profile picture locally:', cacheError);
+        }
+        return profilePicture;
+      }
     }
-    return null;
   } catch (error) {
     console.warn('Error loading profile picture for member:', error);
+  }
+
+  try {
+    return localStorage.getItem(`profilePicture:${normalizedEmail}`) || null;
+  } catch (cacheError) {
+    console.warn('Unable to read cached member profile picture:', cacheError);
     return null;
   }
 }
@@ -505,7 +534,7 @@ window.handleMemberProfileUpload = async function(event) {
   }
 
   try {
-    const compressed = await compressImage(file, 400, 0.7);
+    const compressed = await compressImage(file, 256, 0.55);
     const saved = await saveProfilePictureForEmail(userEmail, compressed);
 
     if (saved) {
@@ -3315,10 +3344,12 @@ function renderChatMessages(messages) {
     const buttonBaseStyle = 'display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;';
     const replyButton = !msg.deleted ? `<button type="button" onclick="setReplyToMessage('${msg.id}')" style="${buttonBaseStyle}">Reply</button>` : '';
     const unsendButton = isOwnMessage && !msg.deleted ? `<button type="button" onclick="unsendChatMessage('${selectedChatId}', '${msg.id}')" style="${buttonBaseStyle}">Unsend</button>` : '';
-    const actionButtons = [replyButton, unsendButton].filter(Boolean).join('<span style="margin: 0 0.35rem; color: #374151;">|</span>');
+    const pinButton = !msg.deleted ? `<button type="button" onclick="toggleChatMessagePin('${selectedChatId}', '${msg.id}')" style="${buttonBaseStyle}">${msg.pinned ? 'Unpin' : 'Pin'}</button>` : '';
+    const actionButtons = [replyButton, unsendButton, pinButton].filter(Boolean).join('<span style="margin: 0 0.35rem; color: #374151;">|</span>');
 
     msgDiv.innerHTML = `
       ${replyPreview}
+      ${msg.pinned ? '<div style="color: #facc15; font-size: 0.75rem; font-weight: 700; margin-bottom: 0.35rem;">Pinned message</div>' : ''}
       <div style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem; opacity: ${opacity};">
         <div style="font-size: 0.85rem; color: #94a3b8;">${escapeHtml(sender)}</div>
         <div style="font-size: 0.75rem; color: #6b7280;">${timestamp}</div>
@@ -3405,6 +3436,23 @@ function closeChatRoomPanel() {
 function clearReplyToMessage() {
   replyToMessage = null;
   updateReplyPreview();
+}
+
+async function toggleChatMessagePin(chatId, messageId) {
+  if (!chatId || !messageId) return;
+
+  const message = chatMessagesById[messageId];
+  if (!message) return;
+
+  try {
+    await updateDoc(doc(db, 'liveChats', chatId, 'messages', messageId), {
+      pinned: !message.pinned,
+      pinnedAt: !message.pinned ? Date.now() : null,
+      pinnedBy: !message.pinned ? userEmail : null
+    });
+  } catch (error) {
+    console.error('Failed to update chat message pin:', error);
+  }
 }
 
 function updateReplyPreview() {
@@ -3751,6 +3799,7 @@ window.openChatRoom = openChatRoom;
 window.closeChatRoomPanel = closeChatRoomPanel;
 window.setReplyToMessage = setReplyToMessage;
 window.unsendChatMessage = unsendChatMessage;
+window.toggleChatMessagePin = toggleChatMessagePin;
 window.sendChatMessage = sendChatMessage;
 window.triggerChatImageInput = triggerChatImageInput;
 window.handleChatImageInputChange = handleChatImageInputChange;

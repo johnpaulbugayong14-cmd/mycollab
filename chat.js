@@ -443,6 +443,49 @@ function getAllChatImages() {
     }));
 }
 
+function renderPinnedMessages(messages) {
+  const section = document.getElementById('pinnedMessagesSection');
+  const list = document.getElementById('pinnedMessagesList');
+  const count = document.getElementById('pinnedMessagesCount');
+  if (!section || !list || !count) return;
+
+  const pinnedMessages = (messages || []).filter(message => message.pinned && !message.deleted);
+  count.textContent = pinnedMessages.length;
+
+  if (pinnedMessages.length === 0) {
+    list.innerHTML = '<div class="pinned-messages-empty">No pinned messages yet.</div>';
+    return;
+  }
+
+  list.innerHTML = pinnedMessages.map((message) => {
+    const sender = getChatSenderName(message);
+    const text = message.text || (message.imageData ? '[Image]' : 'Pinned message');
+    const preview = text.length > 120 ? `${text.slice(0, 120)}...` : text;
+    return `
+      <button type="button" class="pinned-message-item" data-pinned-message-id="${escapeHtml(message.id)}">
+        <i class="fas fa-thumbtack" style="color: #facc15; margin-top: 0.15rem;" aria-hidden="true"></i>
+        <span class="pinned-message-content">
+          <span class="pinned-message-sender">${escapeHtml(sender)}</span>
+          <span class="pinned-message-preview">${escapeHtml(preview)}</span>
+        </span>
+      </button>
+    `;
+  }).join('');
+}
+
+function scrollToPinnedMessage(messageId) {
+  if (!messageId) return;
+  if (currentSearchQuery) clearSearch();
+
+  const messageElement = [...document.querySelectorAll('#chatMessages .chat-message')]
+    .find(element => element.dataset.messageId === messageId);
+  if (!messageElement) return;
+
+  messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  messageElement.style.outline = '2px solid #facc15';
+  setTimeout(() => { messageElement.style.outline = ''; }, 1600);
+}
+
 function updateChatAlbumGrid() {
   const grid = document.getElementById('chatAlbumGrid');
   if (!grid) return;
@@ -526,6 +569,7 @@ function renderChatMessages(messages) {
     chatMessagesById[msg.id] = msg;
     const msgDiv = document.createElement('div');
     msgDiv.className = 'chat-message';
+    msgDiv.dataset.messageId = msg.id;
     msgDiv.style.opacity = msg.deleted ? '0.75' : '1';
 
     const sender = getChatSenderName(msg);
@@ -543,10 +587,12 @@ function renderChatMessages(messages) {
     const normalizedCurrentUserEmail = normalizeEmail(currentUserEmail || '');
     const isOwnMessage = normalizedCurrentUserEmail && normalizeEmail(msg.senderEmail) === normalizedCurrentUserEmail;
     const unsendButton = isOwnMessage && !msg.deleted ? `<button type="button" class="chat-unsend-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(248, 113, 113, 0.12); color: #f97316; border: 1px solid rgba(248, 113, 113, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">Unsend</button>` : '';
+    const pinButton = !msg.deleted ? `<button type="button" class="chat-pin-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: ${msg.pinned ? 'rgba(250, 204, 21, 0.2)' : 'rgba(148, 163, 184, 0.12)'}; color: ${msg.pinned ? '#facc15' : '#cbd5e1'}; border: 1px solid ${msg.pinned ? 'rgba(250, 204, 21, 0.45)' : 'rgba(148, 163, 184, 0.35)'}; border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">${msg.pinned ? 'Unpin' : 'Pin'}</button>` : '';
     const replyButton = !msg.deleted ? `<button type="button" class="chat-reply-btn" data-message-id="${msg.id}">↩ Reply</button>` : '';
-    const actionButtons = [replyButton, unsendButton].filter(Boolean).join('<span style="margin: 0 0.35rem; color: #374151;">|</span>');
+    const actionButtons = [replyButton, unsendButton, pinButton].filter(Boolean).join('<span style="margin: 0 0.35rem; color: #374151;">|</span>');
 
     msgDiv.innerHTML = `
+      ${msg.pinned ? '<div style="color: #facc15; font-size: 0.75rem; font-weight: 700; margin-bottom: 0.35rem;">Pinned message</div>' : ''}
       <div style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem;">
         <div style="display: flex; align-items: center; gap: 0.6rem; min-width: 0;">
           ${renderUserAvatarMarkup(msg.senderEmail || sender, 26)}
@@ -596,6 +642,14 @@ function renderChatMessages(messages) {
       e.stopPropagation();
       const messageId = this.dataset.messageId;
       unsendChatMessage(selectedChatId, messageId);
+    });
+  });
+
+  const pinBtns = chatMessagesEl.querySelectorAll('.chat-pin-btn');
+  pinBtns.forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      toggleChatMessagePin(selectedChatId, this.dataset.messageId);
     });
   });
 
@@ -660,6 +714,7 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
 
     const msgDiv = document.createElement('div');
     msgDiv.className = 'chat-message search-match';
+    msgDiv.dataset.messageId = msg.id;
     msgDiv.style.opacity = msg.deleted ? '0.75' : '1';
 
     const sender = getChatSenderName(msg);
@@ -677,10 +732,12 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
     const normalizedCurrentUserEmail = normalizeEmail(currentUserEmail || '');
     const isOwnMessage = normalizedCurrentUserEmail && normalizeEmail(msg.senderEmail) === normalizedCurrentUserEmail;
     const unsendButton = isOwnMessage && !msg.deleted ? `<button type="button" class="chat-unsend-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(248, 113, 113, 0.12); color: #f97316; border: 1px solid rgba(248, 113, 113, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">Unsend</button>` : '';
+    const pinButton = !msg.deleted ? `<button type="button" class="chat-pin-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: ${msg.pinned ? 'rgba(250, 204, 21, 0.2)' : 'rgba(148, 163, 184, 0.12)'}; color: ${msg.pinned ? '#facc15' : '#cbd5e1'}; border: 1px solid ${msg.pinned ? 'rgba(250, 204, 21, 0.45)' : 'rgba(148, 163, 184, 0.35)'}; border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">${msg.pinned ? 'Unpin' : 'Pin'}</button>` : '';
     const replyButton = !msg.deleted ? `<button type="button" class="chat-reply-btn" data-message-id="${msg.id}">↩ Reply</button>` : '';
-    const actionButtons = [replyButton, unsendButton].filter(Boolean).join('<span style="margin: 0 0.35rem; color: #374151;">|</span>');
+    const actionButtons = [replyButton, unsendButton, pinButton].filter(Boolean).join('<span style="margin: 0 0.35rem; color: #374151;">|</span>');
 
     msgDiv.innerHTML = `
+      ${msg.pinned ? '<div style="color: #facc15; font-size: 0.75rem; font-weight: 700; margin-bottom: 0.35rem;">Pinned message</div>' : ''}
       <div style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem;">
         <div style="display: flex; align-items: center; gap: 0.6rem; min-width: 0;">
           ${renderUserAvatarMarkup(msg.senderEmail || sender, 26)}
@@ -730,6 +787,14 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
       e.stopPropagation();
       const messageId = this.dataset.messageId;
       unsendChatMessage(selectedChatId, messageId);
+    });
+  });
+
+  const pinBtns = chatMessagesEl.querySelectorAll('.chat-pin-btn');
+  pinBtns.forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      toggleChatMessagePin(selectedChatId, this.dataset.messageId);
     });
   });
 
@@ -943,6 +1008,23 @@ async function unsendChatMessage(chatId, messageId) {
   }
 }
 
+async function toggleChatMessagePin(chatId, messageId) {
+  if (!chatId || !messageId) return;
+
+  const message = chatMessagesById[messageId];
+  if (!message) return;
+
+  try {
+    await updateDoc(doc(db, 'liveChats', chatId, 'messages', messageId), {
+      pinned: !message.pinned,
+      pinnedAt: !message.pinned ? Date.now() : null,
+      pinnedBy: !message.pinned ? currentUserEmail : null
+    });
+  } catch (error) {
+    console.error('Failed to update chat message pin:', error);
+  }
+}
+
 function updateChatImagePreview() {
   const preview = document.getElementById('chatImagePreview');
   if (!preview) return;
@@ -1077,6 +1159,7 @@ async function subscribeChatMessages(chatId) {
   chatMessagesUnsubscribe = onSnapshot(messagesQuery, (snapshot) => {
     const messages = [];
     snapshot.forEach((docSnap) => messages.push({ id: docSnap.id, ...docSnap.data() }));
+    renderPinnedMessages(messages);
     renderChatMessages(messages);
   }, (error) => {
     console.error('Chat messages listener error:', error);
@@ -1239,6 +1322,25 @@ async function init() {
       if (event.target === albumModal) {
         closeChatAlbum();
       }
+    });
+  }
+
+  const pinnedMessagesToggle = document.getElementById('pinnedMessagesToggle');
+  const pinnedMessagesList = document.getElementById('pinnedMessagesList');
+  const pinnedMessagesChevron = document.getElementById('pinnedMessagesChevron');
+  if (pinnedMessagesToggle && pinnedMessagesList) {
+    pinnedMessagesToggle.addEventListener('click', () => {
+      const isExpanded = pinnedMessagesToggle.getAttribute('aria-expanded') === 'true';
+      pinnedMessagesToggle.setAttribute('aria-expanded', String(!isExpanded));
+      pinnedMessagesList.style.display = isExpanded ? 'none' : 'flex';
+      if (pinnedMessagesChevron) {
+        pinnedMessagesChevron.className = isExpanded ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
+      }
+    });
+
+    pinnedMessagesList.addEventListener('click', (event) => {
+      const item = event.target.closest('.pinned-message-item');
+      if (item) scrollToPinnedMessage(item.dataset.pinnedMessageId);
     });
   }
 

@@ -470,14 +470,29 @@ async function hydrateProfileAvatars() {
 }
 
 async function saveAdminProfilePicture(email, imageBase64) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return false;
+
   try {
-    const normalizedEmail = normalizeEmail(email);
-    if (!normalizedEmail) return false;
+    if (imageBase64.length > 900000) {
+      throw new Error('The profile picture is too large to save. Please choose a smaller image.');
+    }
+
+    try {
+      localStorage.setItem(`profilePicture:${normalizedEmail}`, imageBase64);
+    } catch (cacheError) {
+      console.warn('Unable to cache admin profile picture locally:', cacheError);
+    }
     
     await setDoc(doc(db, 'userRoles', normalizedEmail), {
       profilePicture: imageBase64,
       profilePictureUpdatedAt: new Date().toISOString()
     }, { merge: true });
+
+    const savedProfile = await getDoc(doc(db, 'userRoles', normalizedEmail));
+    if (!savedProfile.exists() || savedProfile.data()?.profilePicture !== imageBase64) {
+      throw new Error('The profile picture could not be verified after saving.');
+    }
     
     return true;
   } catch (error) {
@@ -487,18 +502,30 @@ async function saveAdminProfilePicture(email, imageBase64) {
 }
 
 async function loadAdminProfilePicture(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
   try {
-    const normalizedEmail = normalizeEmail(email);
-    if (!normalizedEmail) return null;
-    
     const snap = await getDoc(doc(db, 'userRoles', normalizedEmail));
     if (snap.exists()) {
       const data = snap.data();
-      return data.profilePicture || null;
+      if (data.profilePicture) {
+        try {
+          localStorage.setItem(`profilePicture:${normalizedEmail}`, data.profilePicture);
+        } catch (cacheError) {
+          console.warn('Unable to cache admin profile picture locally:', cacheError);
+        }
+        return data.profilePicture;
+      }
     }
-    return null;
   } catch (error) {
     console.warn('Error loading profile picture:', error);
+  }
+
+  try {
+    return localStorage.getItem(`profilePicture:${normalizedEmail}`) || null;
+  } catch (cacheError) {
+    console.warn('Unable to read cached admin profile picture:', cacheError);
     return null;
   }
 }
@@ -515,12 +542,24 @@ async function displayAdminProfilePicture(email) {
   }
 }
 
+function syncAdminProfilePicture(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return;
+
+  if (adminProfilePictureUnsubscribe) adminProfilePictureUnsubscribe();
+  adminProfilePictureUnsubscribe = onSnapshot(doc(db, 'userRoles', normalizedEmail), () => {
+    void displayAdminProfilePicture(normalizedEmail);
+  }, (error) => {
+    console.warn('Unable to sync admin profile picture from Firestore:', error);
+  });
+}
+
 window.handleAdminProfileUpload = async function(event) {
   const file = event.target.files?.[0];
   if (!file || !adminEmail) return;
   
   try {
-    const compressed = await compressImage(file, 400, 0.7);
+    const compressed = await compressImage(file, 256, 0.55);
     const saved = await saveAdminProfilePicture(adminEmail, compressed);
     
     if (saved) {
@@ -617,6 +656,7 @@ let adminReplyToMessage = null;
 let selectedAdminChatImageData = null;
 let selectedAdminChatImageName = null;
 let userRolesUnsubscribe = null;
+let adminProfilePictureUnsubscribe = null;
 let adminProgressSections = [];
 
 function parseDateValue(value) {
@@ -3126,6 +3166,7 @@ window.toggleArchivedAnnouncements = function () {
 
 loadProgressReport();
 if (adminEmail) {
+  syncAdminProfilePicture(adminEmail);
   void displayAdminProfilePicture(adminEmail);
 }
 if (document.getElementById('addProgressSectionButton')) {
@@ -3439,12 +3480,14 @@ function renderAdminChatMessages(messages) {
     const buttonBaseStyle = 'display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;';
     const replyButton = !msg.deleted ? `<button type="button" onclick="setAdminReplyToMessage('${msg.id}')" style="${buttonBaseStyle}">Reply</button>` : '';
     const unsendButton = isOwn && !msg.deleted ? `<button type="button" onclick="unsendAdminChatMessage('${selectedLiveChatId}', '${msg.id}')" style="${buttonBaseStyle}">Unsend</button>` : '';
-    const actionButtons = [replyButton, unsendButton].filter(Boolean).join('<span style="margin: 0 0.35rem; color: #374151;">|</span>');
+    const pinButton = !msg.deleted ? `<button type="button" onclick="toggleAdminChatMessagePin('${selectedLiveChatId}', '${msg.id}')" style="${buttonBaseStyle}">${msg.pinned ? 'Unpin' : 'Pin'}</button>` : '';
+    const actionButtons = [replyButton, unsendButton, pinButton].filter(Boolean).join('<span style="margin: 0 0.35rem; color: #374151;">|</span>');
 
     const messageDiv = document.createElement('div');
     messageDiv.style.cssText = 'padding: 0.85rem 1rem; margin-bottom: 0.75rem; border-radius: 10px; background: #111827;';
     messageDiv.innerHTML = `
       ${replyPreview}
+      ${msg.pinned ? '<div style="color: #facc15; font-size: 0.75rem; font-weight: 700; margin-bottom: 0.35rem;">Pinned message</div>' : ''}
       <div style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem; opacity: ${msg.deleted ? 0.7 : 1};">
         <div style="font-size: 0.85rem; color: #94a3b8;">${escapeHtml(msg.senderName || getUserName(msg.senderEmail) || 'Guest')}</div>
         <div style="font-size: 0.75rem; color: #6b7280;">${msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</div>
@@ -3609,6 +3652,23 @@ async function unsendAdminChatMessage(chatId, messageId) {
   }
 }
 
+async function toggleAdminChatMessagePin(chatId, messageId) {
+  if (!chatId || !messageId) return;
+
+  const message = adminChatMessagesById[messageId];
+  if (!message) return;
+
+  try {
+    await updateDoc(doc(db, 'liveChats', chatId, 'messages', messageId), {
+      pinned: !message.pinned,
+      pinnedAt: !message.pinned ? Date.now() : null,
+      pinnedBy: !message.pinned ? adminEmail : null
+    });
+  } catch (error) {
+    console.error('Failed to update admin chat message pin:', error);
+  }
+}
+
 function showAdminReactionDetails(emoji, users) {
   let modal = document.getElementById('adminReactionDetailsModal');
   if (modal) modal.remove();
@@ -3751,6 +3811,7 @@ window.openAdminChatRoom = openAdminChatRoom;
 window.closeAdminChatPanel = closeAdminChatPanel;
 window.setAdminReplyToMessage = setAdminReplyToMessage;
 window.unsendAdminChatMessage = unsendAdminChatMessage;
+window.toggleAdminChatMessagePin = toggleAdminChatMessagePin;
 window.sendAdminChatMessage = sendAdminChatMessage;
 window.triggerAdminChatImageInput = triggerAdminChatImageInput;
 window.handleAdminChatImageInputChange = handleAdminChatImageInputChange;
