@@ -1037,19 +1037,22 @@ function loadSurveyManagement() {
     }
 
     container.innerHTML = surveys.map((survey) => `
-      <div style="margin-bottom:1rem; padding:1rem; border:1px solid #374151; border-radius:0.75rem; background:#1e293b;">
-        <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
+      <article class="survey-management-item">
+        <div class="survey-management-header">
           <div>
-            <h3 style="margin:0 0 0.35rem; color:#f8fafc;">${escapeHtml(survey.title || 'Untitled survey')}</h3>
-            <p style="margin:0; color:#94a3b8; font-size:0.85rem;">${survey.mode === 'likert' ? 'Likert scale' : 'Text box'} · ${Array.isArray(survey.questions) ? survey.questions.length : 0} questions</p>
-            <p style="margin:0.25rem 0 0; color:#60a5fa; font-size:0.85rem;">Target: ${escapeHtml((survey.targetNames || survey.targetEmails || []).join(', '))}</p>
+            <h3 class="survey-management-title">${escapeHtml(survey.title || 'Untitled survey')}</h3>
+            <p class="survey-management-meta">${survey.mode === 'likert' ? 'Likert scale' : 'Text response'} · ${Array.isArray(survey.questions) ? survey.questions.length : 0} questions${survey.includeSuggestion === true ? ' · Optional suggestions' : ''}</p>
+            <p class="survey-management-target"><strong>Target:</strong> ${escapeHtml((survey.targetNames || survey.targetEmails || []).join(', '))}</p>
           </div>
-          <button type="button" onclick="deleteSurvey('${survey.id}', '${escapeHtml(survey.title || 'Untitled survey').replace(/'/g, '&#039;')}')" style="width:auto; background:#ef4444; color:white; border:none; padding:0.5rem 0.75rem; border-radius:0.375rem; cursor:pointer;"><i class="fas fa-trash"></i> Delete</button>
+          <span style="padding:0.3rem 0.55rem; border-radius:999px; background:${survey.active === false ? 'rgba(148,163,184,0.16)' : 'rgba(16,185,129,0.14)'}; color:${survey.active === false ? '#cbd5e1' : '#6ee7b7'}; font-size:0.72rem; font-weight:700;">${survey.active === false ? 'Closed' : 'Active'}</span>
         </div>
-        <p style="margin:0.5rem 0 0.75rem; color:#94a3b8; font-size:0.8rem;">Created: ${escapeHtml(formatSurveyDate(survey.createdAt))}</p>
-        <button type="button" onclick="viewSurveyResponses('${survey.id}')" style="width:auto; background:#3b82f6; color:white; border:none; padding:0.5rem 0.75rem; border-radius:0.375rem; cursor:pointer;"><i class="fas fa-comments"></i> View Member Feedback</button>
-        <div id="survey-responses-${survey.id}"></div>
-      </div>
+        <p class="survey-management-meta">Created ${escapeHtml(formatSurveyDate(survey.createdAt))}</p>
+        <div class="survey-management-actions">
+          <button type="button" onclick="viewSurveyResponses('${survey.id}')" style="background:#2563eb;"><i class="fas fa-comments"></i> View Feedback</button>
+          <button type="button" onclick="deleteSurvey('${survey.id}', '${escapeHtml(survey.title || 'Untitled survey').replace(/'/g, '&#039;')}')" style="background:#b91c1c;"><i class="fas fa-trash"></i> Delete Survey</button>
+        </div>
+        <div id="survey-responses-${survey.id}" class="survey-feedback-list"></div>
+      </article>
     `).join('');
   }, (error) => {
     console.error('Survey management listener error:', error);
@@ -1145,6 +1148,17 @@ function subscribeToMemberRoles() {
     loadSurveyAssignTo();
     loadInAppNotificationRecipients();
     renderMemberManagementPanel();
+
+    if (document.getElementById('task-analytics')?.classList.contains('active')) {
+      members
+        .filter(member => member.uid !== 'everyone' && member.name)
+        .forEach(member => {
+          if (!lastMemberProgress[member.name]) {
+            lastMemberProgress[member.name] = { done: 0, pending: 0, overdue: 0, needsAction: 0, pendingValidation: 0 };
+          }
+        });
+      updateChart(lastMemberProgress);
+    }
   }, (error) => {
     console.error('Member roles subscription failed:', error);
   });
@@ -2122,7 +2136,8 @@ onSnapshot(collection(db, "tasks"), (snap) => {
   window.lastAnalyticsTasks = allTasks;
 
   allTasks.forEach(t => {
-    const memberName = t.assignedToName || t.assignedTo || "Unassigned";
+    const assignedMember = t.assignedToName || t.assignedTo || "Unassigned";
+    const memberName = normalizeEmail(assignedMember) === 'johnpaulbugayong@gmail.com' ? 'Admin' : assignedMember;
 
     let status = (t.status || "pending").toLowerCase().trim();
     const deadline = parseDeadline(t.deadline);
@@ -2140,6 +2155,15 @@ onSnapshot(collection(db, "tasks"), (snap) => {
     else if (status === "pending validation") memberProgress[memberName].pendingValidation++;
     else memberProgress[memberName].pending++;
   });
+
+  members
+    .filter(member => member.uid !== 'everyone' && member.name)
+    .forEach(member => {
+      const memberName = normalizeEmail(member.name) === 'johnpaulbugayong@gmail.com' ? 'Admin' : member.name;
+      if (!memberProgress[memberName]) {
+        memberProgress[memberName] = { done: 0, pending: 0, overdue: 0, needsAction: 0, pendingValidation: 0 };
+      }
+    });
 
   // Update chart data store
   lastMemberProgress = memberProgress;

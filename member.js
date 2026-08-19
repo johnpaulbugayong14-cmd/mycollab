@@ -705,7 +705,13 @@ function getAnnouncementValidityMs() {
 
 function getHomeGreeting(name) {
   const safeName = String(name || 'Member').trim() || 'Member';
-  return `Hello there, ${safeName}!`;
+  const hour = new Date().getHours();
+  const greeting = hour >= 5 && hour < 12
+    ? 'Good morning'
+    : hour >= 12 && hour < 18
+      ? 'Good afternoon'
+      : 'Good evening';
+  return `${greeting}, ${safeName}!`;
 }
 
 function getAnnouncementValidityState(announcement) {

@@ -15,6 +15,65 @@
   <link rel="stylesheet" href="style.css?v=1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
+    .survey-management-list {
+      display: grid;
+      gap: 0.9rem;
+    }
+    .survey-management-item {
+      padding: 1.1rem 1.2rem;
+      border: 1px solid #334155;
+      border-left: 4px solid #3b82f6;
+      border-radius: 0.7rem;
+      background: rgba(15, 23, 42, 0.72);
+      box-shadow: 0 8px 24px rgba(2, 6, 23, 0.18);
+    }
+    .survey-management-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .survey-management-title {
+      margin: 0;
+      color: #f8fafc;
+      font-size: 1.05rem;
+      overflow-wrap: anywhere;
+    }
+    .survey-management-meta,
+    .survey-management-target {
+      margin: 0.3rem 0 0;
+      color: #94a3b8;
+      font-size: 0.82rem;
+      overflow-wrap: anywhere;
+    }
+    .survey-management-target strong {
+      color: #cbd5e1;
+    }
+    .survey-management-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid rgba(71, 85, 105, 0.55);
+    }
+    .survey-management-actions button {
+      width: auto;
+      min-width: 0;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid transparent;
+      border-radius: 0.4rem;
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    .survey-feedback-list {
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid rgba(71, 85, 105, 0.55);
+    }
     body.admin-loading .nav-btn,
     body.admin-loading .content-section {
       display: none !important;
@@ -273,7 +332,8 @@
       <section id="manage-surveys" class="content-section">
         <div class="card">
           <h2><i class="fas fa-list-check"></i> Manage Surveys</h2>
-          <div id="surveysList">
+          <p style="margin: -0.75rem 0 1.25rem; color: #94a3b8;">Review survey participation and member feedback from one place.</p>
+          <div id="surveysList" class="survey-management-list">
             <p style="color: #94a3b8; text-align: center;">Loading surveys...</p>
           </div>
         </div>
