@@ -1,4 +1,4 @@
-import { collection, onSnapshot, doc, updateDoc, addDoc, getDoc, setDoc, arrayUnion, getDocs, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, onSnapshot, doc, updateDoc, addDoc, getDoc, setDoc, deleteField, arrayUnion, getDocs, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db, auth } from "./firebase.js";
 import { signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStoredUserEmail, signOutUser, getPasswordChangeRequired, getAccountPasswordHint, updateAccountPassword } from "./auth.js";
@@ -24,6 +24,8 @@ let dismissedInAppNotificationIds = new Set(getDismissedInAppNotifications());
 let inAppNotificationQueue = [];
 let inAppNotificationDisplaying = false;
 let accessStatusUnsubscribe = null;
+let memberGradientUnsubscribe = null;
+let surveyGateUnsubscribe = null;
 let memberStatusUnsubscribe = null;
 let memberRosterUnsubscribe = null;
 let memberStatusDocs = {};
@@ -72,6 +74,236 @@ const mentionUsers = [];
 const progressReportCollection = "progressReports";
 const progressReportDocId = "thesisProgress";
 const progressStorageKey = "thesisProgressReportBackup";
+const memberGradientStorageKey = 'memberInterfaceGradient';
+const defaultMemberGradientTheme = {
+  start: '#0f172a',
+  end: '#1e293b',
+  direction: '135deg',
+  sidebar: '#0f172a',
+  header: '#0f172a',
+  card: '#1e293b',
+  accent: '#3b82f6'
+};
+let currentMemberThemeTextColors = {
+  body: '#f8fafc',
+  sidebar: '#f8fafc',
+  header: '#f8fafc',
+  card: '#f8fafc',
+  input: '#f8fafc'
+};
+
+function getMemberGradientStorageKey(email = userEmail) {
+  const normalizedEmail = normalizeEmail(email);
+  return `${memberGradientStorageKey}:${normalizedEmail || 'anonymous'}`;
+}
+
+function getReadableTextColor(hexColor) {
+  const red = parseInt(hexColor.slice(1, 3), 16);
+  const green = parseInt(hexColor.slice(3, 5), 16);
+  const blue = parseInt(hexColor.slice(5, 7), 16);
+  const luminance = (0.299 * red) + (0.587 * green) + (0.114 * blue);
+  return luminance > 160 ? '#111827' : '#f8fafc';
+}
+
+function applyMemberThemeTextColors(colors = currentMemberThemeTextColors) {
+  const targets = [
+    ['#datetime', colors.header],
+    ['#welcome', colors.header],
+    ['#home-greeting', colors.card]
+  ];
+
+  targets.forEach(([selector, color]) => {
+    document.querySelectorAll(selector).forEach((element) => {
+      element.style.setProperty('color', color, 'important');
+      element.style.setProperty('-webkit-text-fill-color', color, 'important');
+    });
+  });
+
+  document.querySelectorAll('.nav-btn').forEach((button) => {
+    button.style.setProperty('color', colors.sidebar, 'important');
+  });
+}
+
+function applyOriginalMemberTheme() {
+  document.body.classList.remove('member-theme');
+  ['--member-interface-gradient', '--member-sidebar-color', '--member-header-color', '--member-card-color', '--member-accent-color', '--member-body-text-color', '--member-sidebar-text-color', '--member-header-text-color', '--member-card-text-color', '--member-input-text-color'].forEach((property) => {
+    document.body.style.removeProperty(property);
+  });
+
+  document.querySelectorAll('#datetime, #welcome, #home-greeting, .nav-btn').forEach((element) => {
+    element.style.removeProperty('color');
+    element.style.removeProperty('-webkit-text-fill-color');
+  });
+
+  currentMemberThemeTextColors = {
+    body: '#f8fafc',
+    sidebar: '#cbd5e1',
+    header: '#cbd5e1',
+    card: '#f1f5f9',
+    input: '#e2e8f0'
+  };
+
+  const startInput = document.getElementById('memberGradientStart');
+  const endInput = document.getElementById('memberGradientEnd');
+  const directionInput = document.getElementById('memberGradientDirection');
+  const sidebarInput = document.getElementById('memberSidebarColor');
+  const headerInput = document.getElementById('memberHeaderColor');
+  const cardInput = document.getElementById('memberCardColor');
+  const accentInput = document.getElementById('memberAccentColor');
+  const preview = document.getElementById('memberGradientPreview');
+  if (startInput) startInput.value = defaultMemberGradientTheme.start;
+  if (endInput) endInput.value = defaultMemberGradientTheme.end;
+  if (directionInput) directionInput.value = defaultMemberGradientTheme.direction;
+  if (sidebarInput) sidebarInput.value = defaultMemberGradientTheme.sidebar;
+  if (headerInput) headerInput.value = defaultMemberGradientTheme.header;
+  if (cardInput) cardInput.value = defaultMemberGradientTheme.card;
+  if (accentInput) accentInput.value = defaultMemberGradientTheme.accent;
+  if (preview) preview.style.background = `linear-gradient(${defaultMemberGradientTheme.direction}, ${defaultMemberGradientTheme.start} 0%, ${defaultMemberGradientTheme.end} 100%)`;
+}
+
+function applyMemberGradientTheme(theme = defaultMemberGradientTheme) {
+  const start = /^#[0-9a-f]{6}$/i.test(theme.start) ? theme.start : defaultMemberGradientTheme.start;
+  const end = /^#[0-9a-f]{6}$/i.test(theme.end) ? theme.end : defaultMemberGradientTheme.end;
+  const sidebar = /^#[0-9a-f]{6}$/i.test(theme.sidebar) ? theme.sidebar : defaultMemberGradientTheme.sidebar;
+  const header = /^#[0-9a-f]{6}$/i.test(theme.header) ? theme.header : defaultMemberGradientTheme.header;
+  const card = /^#[0-9a-f]{6}$/i.test(theme.card) ? theme.card : defaultMemberGradientTheme.card;
+  const accent = /^#[0-9a-f]{6}$/i.test(theme.accent) ? theme.accent : defaultMemberGradientTheme.accent;
+  const direction = ['45deg', '90deg', '135deg', '180deg'].includes(theme.direction) ? theme.direction : defaultMemberGradientTheme.direction;
+  const gradient = `linear-gradient(${direction}, ${start} 0%, ${end} 100%)`;
+  document.body.classList.add('member-theme');
+  document.body.style.setProperty('--member-interface-gradient', gradient);
+  document.body.style.setProperty('--member-sidebar-color', sidebar);
+  document.body.style.setProperty('--member-header-color', header);
+  document.body.style.setProperty('--member-card-color', card);
+  document.body.style.setProperty('--member-accent-color', accent);
+  document.body.style.setProperty('--member-body-text-color', getReadableTextColor(end));
+  document.body.style.setProperty('--member-sidebar-text-color', getReadableTextColor(sidebar));
+  document.body.style.setProperty('--member-header-text-color', getReadableTextColor(header));
+  document.body.style.setProperty('--member-card-text-color', getReadableTextColor(card));
+  const textColors = {
+    body: getReadableTextColor(end),
+    sidebar: getReadableTextColor(sidebar),
+    header: getReadableTextColor(header),
+    card: getReadableTextColor(card),
+    input: getReadableTextColor(card)
+  };
+  currentMemberThemeTextColors = textColors;
+  document.body.style.setProperty('--member-body-text-color', textColors.body);
+  document.body.style.setProperty('--member-sidebar-text-color', textColors.sidebar);
+  document.body.style.setProperty('--member-header-text-color', textColors.header);
+  document.body.style.setProperty('--member-card-text-color', textColors.card);
+  document.body.style.setProperty('--member-input-text-color', textColors.input);
+  applyMemberThemeTextColors(textColors);
+  window.applyMemberThemeTextColors = () => applyMemberThemeTextColors();
+
+  const startInput = document.getElementById('memberGradientStart');
+  const endInput = document.getElementById('memberGradientEnd');
+  const directionInput = document.getElementById('memberGradientDirection');
+  const sidebarInput = document.getElementById('memberSidebarColor');
+  const headerInput = document.getElementById('memberHeaderColor');
+  const cardInput = document.getElementById('memberCardColor');
+  const accentInput = document.getElementById('memberAccentColor');
+  const preview = document.getElementById('memberGradientPreview');
+  if (startInput) startInput.value = start;
+  if (endInput) endInput.value = end;
+  if (directionInput) directionInput.value = direction;
+  if (sidebarInput) sidebarInput.value = sidebar;
+  if (headerInput) headerInput.value = header;
+  if (cardInput) cardInput.value = card;
+  if (accentInput) accentInput.value = accent;
+  if (preview) preview.style.background = gradient;
+}
+
+function saveMemberGradientTheme() {
+  const theme = {
+    start: document.getElementById('memberGradientStart')?.value || defaultMemberGradientTheme.start,
+    end: document.getElementById('memberGradientEnd')?.value || defaultMemberGradientTheme.end,
+    direction: document.getElementById('memberGradientDirection')?.value || defaultMemberGradientTheme.direction,
+    sidebar: document.getElementById('memberSidebarColor')?.value || defaultMemberGradientTheme.sidebar,
+    header: document.getElementById('memberHeaderColor')?.value || defaultMemberGradientTheme.header,
+    card: document.getElementById('memberCardColor')?.value || defaultMemberGradientTheme.card,
+    accent: document.getElementById('memberAccentColor')?.value || defaultMemberGradientTheme.accent
+  };
+  localStorage.setItem(getMemberGradientStorageKey(), JSON.stringify(theme));
+  applyMemberGradientTheme(theme);
+
+  if (userEmail) {
+    void setDoc(doc(db, 'userRoles', normalizeEmail(userEmail)), {
+      interfaceGradient: theme,
+      updatedAt: new Date()
+    }, { merge: true }).catch((error) => {
+      console.warn('Unable to save interface gradient to Firestore:', error);
+    });
+  }
+}
+
+window.resetMemberGradientTheme = async function() {
+  localStorage.removeItem(getMemberGradientStorageKey());
+  applyOriginalMemberTheme();
+
+  if (userEmail) {
+    try {
+      await setDoc(doc(db, 'userRoles', normalizeEmail(userEmail)), {
+        interfaceGradient: deleteField(),
+        updatedAt: new Date()
+      }, { merge: true });
+    } catch (error) {
+      console.warn('Unable to reset interface gradient in Firestore:', error);
+    }
+  }
+};
+
+function initializeMemberGradientTheme() {
+  let theme = defaultMemberGradientTheme;
+  try {
+    const stored = JSON.parse(localStorage.getItem(getMemberGradientStorageKey()) || 'null');
+    if (stored && typeof stored === 'object') theme = { ...defaultMemberGradientTheme, ...stored };
+  } catch (error) {
+    console.warn('Unable to read saved interface gradient:', error);
+  }
+
+  applyMemberGradientTheme(theme);
+  ['memberGradientStart', 'memberGradientEnd', 'memberGradientDirection', 'memberSidebarColor', 'memberHeaderColor', 'memberCardColor', 'memberAccentColor'].forEach((id) => {
+    document.getElementById(id)?.addEventListener('input', saveMemberGradientTheme);
+    document.getElementById(id)?.addEventListener('change', saveMemberGradientTheme);
+  });
+}
+
+initializeMemberGradientTheme();
+
+async function loadMemberGradientTheme(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return;
+
+  let theme = null;
+  try {
+    const cached = JSON.parse(localStorage.getItem(getMemberGradientStorageKey(normalizedEmail)) || 'null');
+    if (cached && typeof cached === 'object') theme = { ...defaultMemberGradientTheme, ...cached };
+  } catch (error) {
+    console.warn('Unable to read cached member gradient:', error);
+  }
+
+  if (theme) {
+    applyMemberGradientTheme(theme);
+  } else {
+    applyOriginalMemberTheme();
+  }
+
+  if (memberGradientUnsubscribe) memberGradientUnsubscribe();
+  memberGradientUnsubscribe = onSnapshot(doc(db, 'userRoles', normalizedEmail), (profileSnap) => {
+    const savedTheme = profileSnap.exists() ? profileSnap.data()?.interfaceGradient : null;
+    if (!savedTheme || typeof savedTheme !== 'object') {
+      applyOriginalMemberTheme();
+      return;
+    }
+
+    const syncedTheme = { ...defaultMemberGradientTheme, ...savedTheme };
+    localStorage.setItem(getMemberGradientStorageKey(normalizedEmail), JSON.stringify(syncedTheme));
+    applyMemberGradientTheme(syncedTheme);
+  }, (error) => {
+    console.warn('Unable to sync member gradient from Firestore:', error);
+  });
+}
 
 function getProgressBackupSections() {
   try {
@@ -2906,6 +3138,48 @@ function insertMentionAtCursor(input, dropdown, name) {
   dropdown.style.display = 'none';
 }
 
+async function findPendingSurvey(email) {
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) return null;
+
+    try {
+      const snapshot = await getDocs(collection(db, 'surveys'));
+      const surveys = snapshot.docs
+        .map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
+        .filter(survey => {
+          if (survey.active === false) return false;
+          const targets = Array.isArray(survey.targetEmails) ? survey.targetEmails.map(normalizeEmail) : [];
+          return targets.includes(normalizedEmail) || targets.includes('everyone') || targets.includes('all');
+        })
+        .sort((a, b) => {
+          const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
+          const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
+          return timeA - timeB;
+        });
+
+      for (const survey of surveys) {
+        const responseSnap = await getDoc(doc(db, 'surveys', survey.id, 'responses', normalizedEmail));
+        if (!responseSnap.exists()) return survey;
+      }
+    } catch (error) {
+      console.warn('Unable to check required surveys:', error);
+    }
+
+    return null;
+}
+
+function watchRequiredSurveys(email) {
+  if (surveyGateUnsubscribe) surveyGateUnsubscribe();
+  surveyGateUnsubscribe = onSnapshot(collection(db, 'surveys'), () => {
+    void findPendingSurvey(email).then((pendingSurvey) => {
+      if (!pendingSurvey || window.location.pathname.endsWith('survey.html')) return;
+      window.location.replace(`survey.html?surveyId=${encodeURIComponent(pendingSurvey.id)}`);
+    });
+  }, (error) => {
+    console.warn('Unable to watch required surveys:', error);
+  });
+}
+
 function setupMentionAutocomplete(inputId, dropdownId) {
   const input = document.getElementById(inputId);
   const dropdown = document.getElementById(dropdownId);
@@ -3567,6 +3841,15 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     if (emptyState) emptyState.style.display = "none";
     if (welcomeEl) welcomeEl.style.display = "none";
   } else {
+    await loadMemberGradientTheme(userEmail);
+    watchRequiredSurveys(userEmail);
+    const pendingSurvey = await findPendingSurvey(userEmail);
+    if (pendingSurvey) {
+      const surveyUrl = `survey.html?surveyId=${encodeURIComponent(pendingSurvey.id)}`;
+      window.location.replace(surveyUrl);
+      return;
+    }
+
     const requiresPasswordChange = await enforcePasswordChangeIfNeeded();
     if (requiresPasswordChange) {
       console.log('Password change required; stopping member dashboard initialization.');

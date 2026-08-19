@@ -5,12 +5,112 @@
 }
 
 body {
+  --member-interface-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  --member-sidebar-color: #0f172a;
+  --member-header-color: #0f172a;
+  --member-card-color: #1e293b;
+  --member-accent-color: #3b82f6;
+  --member-body-text-color: #f8fafc;
+  --member-sidebar-text-color: #f8fafc;
+  --member-header-text-color: #f8fafc;
+  --member-card-text-color: #f8fafc;
+  --member-input-text-color: #f8fafc;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  background: var(--member-interface-gradient);
   color: #e2e8f0;
   min-height: 100vh;
   line-height: 1.6;
   overflow-x: hidden;
+}
+
+body.member-theme .sidebar {
+  background: var(--member-sidebar-color);
+  color: var(--member-sidebar-text-color);
+}
+
+body.member-theme .content-header {
+  background: var(--member-header-color);
+  color: var(--member-header-text-color);
+}
+
+body.member-theme .card {
+  background: var(--member-card-color);
+  color: var(--member-card-text-color);
+}
+
+body.member-theme {
+  color: var(--member-body-text-color);
+}
+
+body.member-theme .sidebar-header h2,
+body.member-theme .nav-btn,
+body.member-theme .sidebar-footer,
+body.member-theme .sidebar-footer label,
+body.member-theme .sidebar > *:not(.logout-btn),
+body.member-theme .sidebar > *:not(.logout-btn) *:not(button) {
+  color: var(--member-sidebar-text-color) !important;
+}
+
+body.member-theme .content-header .welcome-header {
+  color: var(--member-header-text-color) !important;
+}
+
+body.member-theme .content-header > *:not(.header-actions),
+body.member-theme .content-header > *:not(.header-actions) *:not(button),
+body.member-theme .header-actions > *:not(.header-logout),
+body.member-theme .header-actions > *:not(.header-logout) *:not(button) {
+  color: var(--member-header-text-color) !important;
+}
+
+body.member-theme .card > *:not(button),
+body.member-theme .card > *:not(button) *:not(button) {
+  color: var(--member-card-text-color) !important;
+}
+
+body.member-theme .card a {
+  color: var(--member-accent-color) !important;
+}
+
+body.member-theme .content-header h1 {
+  background: none;
+  -webkit-text-fill-color: var(--member-header-text-color);
+  color: var(--member-header-text-color) !important;
+}
+
+body.member-theme .card > h2,
+body.member-theme .card > h3,
+body.member-theme .card > h4,
+body.member-theme .card label,
+body.member-theme .card p,
+body.member-theme .card h4,
+body.member-theme .card h5,
+body.member-theme .card li {
+  color: var(--member-card-text-color) !important;
+}
+
+body.member-theme .card input,
+body.member-theme .card select,
+body.member-theme .card textarea {
+  background: var(--member-card-color) !important;
+  color: var(--member-input-text-color) !important;
+}
+
+body.member-theme .nav-btn:hover,
+body.member-theme .nav-btn.active {
+  color: var(--member-accent-color);
+}
+
+body.member-theme .nav-btn:hover {
+  background: color-mix(in srgb, var(--member-accent-color) 14%, transparent);
+}
+
+body.member-theme .nav-btn.active {
+  background: color-mix(in srgb, var(--member-accent-color) 22%, transparent);
+  border-right-color: var(--member-accent-color);
+}
+
+body.member-theme .datetime-center {
+  color: var(--member-accent-color);
 }
 
 h1, h2, h3 {

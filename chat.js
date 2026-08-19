@@ -17,9 +17,78 @@ let currentUserEmail = null;
 let allChatMessages = [];
 let currentSearchQuery = '';
 let replyToMessage = null;
+let chatThemeUnsubscribe = null;
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+const defaultChatTheme = {
+  start: '#0f172a',
+  end: '#1e293b',
+  direction: '135deg',
+  sidebar: '#0f172a',
+  header: '#0f172a',
+  card: '#1e293b',
+  accent: '#3b82f6'
+};
+
+function isThemeColor(value) {
+  return /^#[0-9a-f]{6}$/i.test(String(value || ''));
+}
+
+function getReadableChatTextColor(hexColor) {
+  const red = parseInt(hexColor.slice(1, 3), 16);
+  const green = parseInt(hexColor.slice(3, 5), 16);
+  const blue = parseInt(hexColor.slice(5, 7), 16);
+  return (0.299 * red) + (0.587 * green) + (0.114 * blue) > 160 ? '#111827' : '#f8fafc';
+}
+
+function applyChatTheme(theme) {
+  if (!theme || typeof theme !== 'object') {
+    document.body.classList.remove('chat-theme');
+    return;
+  }
+
+  const safeTheme = { ...defaultChatTheme, ...theme };
+  const start = isThemeColor(safeTheme.start) ? safeTheme.start : defaultChatTheme.start;
+  const end = isThemeColor(safeTheme.end) ? safeTheme.end : defaultChatTheme.end;
+  const sidebar = isThemeColor(safeTheme.sidebar) ? safeTheme.sidebar : defaultChatTheme.sidebar;
+  const header = isThemeColor(safeTheme.header) ? safeTheme.header : defaultChatTheme.header;
+  const card = isThemeColor(safeTheme.card) ? safeTheme.card : defaultChatTheme.card;
+  const accent = isThemeColor(safeTheme.accent) ? safeTheme.accent : defaultChatTheme.accent;
+  const direction = ['45deg', '90deg', '135deg', '180deg'].includes(safeTheme.direction)
+    ? safeTheme.direction
+    : defaultChatTheme.direction;
+
+  document.body.classList.add('chat-theme');
+  document.body.style.setProperty('--chat-interface-gradient', `linear-gradient(${direction}, ${start} 0%, ${end} 100%)`);
+  document.body.style.setProperty('--chat-sidebar-color', sidebar);
+  document.body.style.setProperty('--chat-header-color', header);
+  document.body.style.setProperty('--chat-card-color', card);
+  document.body.style.setProperty('--chat-accent-color', accent);
+  document.body.style.setProperty('--chat-header-text-color', getReadableChatTextColor(header));
+  document.body.style.setProperty('--chat-card-text-color', getReadableChatTextColor(card));
+
+  const interfaceGradient = `linear-gradient(${direction}, ${start} 0%, ${end} 100%)`;
+  document.querySelector('.chat-page-card')?.style.setProperty('background', interfaceGradient, 'important');
+  document.getElementById('chatMessages')?.style.setProperty('background', card, 'important');
+  document.querySelectorAll('.chat-message').forEach((message) => {
+    message.style.setProperty('background', card, 'important');
+  });
+}
+
+function syncChatTheme(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return;
+
+  if (chatThemeUnsubscribe) chatThemeUnsubscribe();
+  chatThemeUnsubscribe = onSnapshot(doc(db, 'userRoles', normalizedEmail), (profileSnap) => {
+    const theme = profileSnap.exists() ? profileSnap.data()?.interfaceGradient : null;
+    applyChatTheme(theme);
+  }, (error) => {
+    console.warn('Unable to sync chat interface theme:', error);
+  });
 }
 
 async function loadProfilePictureForEmail(email) {
@@ -1129,6 +1198,7 @@ function setupBackButton(from) {
 async function init() {
   await requireAuth(['member', 'admin']);
   currentUserEmail = await getStoredUserEmail();
+  syncChatTheme(currentUserEmail);
   await refreshMentionMembers();
 
   selectedChatId = getQueryParam('chatId');

@@ -241,6 +241,7 @@ const memberRoles = {
       'manage ticket submitted',
       'create announcement',
       'create poll',
+      'create survey',
       'create resource',
       'task analytics'
     ]
@@ -255,9 +256,11 @@ const memberRoles = {
       'manage ticket submitted',
       'create announcement',
       'create poll',
+      'create survey',
       'create resource',
       'manage in-app notifications',
       'manage polls',
+      'manage surveys',
       'manage announcements',
       'manage resources',
       'manage members',
@@ -273,6 +276,7 @@ const adminRoleAllowedSections = {
   'limited-admin': [
     'create-task',
     'create-poll',
+    'create-survey',
     'create-announcement',
     'create-resource',
     'support-tickets',
@@ -284,11 +288,13 @@ const adminRoleAllowedSections = {
   admin: [
     'create-task',
     'create-poll',
+    'create-survey',
     'create-announcement',
     'create-in-app-notification',
     'create-resource',
     'manage-in-app-notifications',
     'manage-polls',
+    'manage-surveys',
     'manage-announcements',
     'support-tickets',
     'maintenance',
@@ -851,6 +857,208 @@ function loadAnnouncementAssignTo() {
   });
 }
 
+function loadSurveyAssignTo() {
+  const container = document.getElementById('surveyAssignTo');
+  if (!container) return;
+  container.innerHTML = members
+    .filter(member => member.uid !== 'everyone')
+    .map(member => `
+      <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.9rem;">
+        <input type="checkbox" value="${member.uid}" class="survey-assign-checkbox">
+        ${member.name}
+      </label>
+    `).join('');
+}
+
+let surveyQuestionIndex = 0;
+
+window.updateSurveyFormatPreview = function () {
+  const preview = document.getElementById('surveyFormatPreview');
+  const mode = document.getElementById('surveyMode')?.value;
+  const includeSuggestion = document.getElementById('surveyIncludeSuggestion')?.checked === true;
+  if (!preview) return;
+
+  const suggestionPreview = includeSuggestion ? `
+    <div style="margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid rgba(148,163,184,0.25);">
+      <strong style="display:block; margin-bottom:0.45rem; color:#f8fafc;">Optional suggestion box</strong>
+      <textarea rows="2" disabled placeholder="Member may add a suggestion" style="width:100%; box-sizing:border-box; background:#0f172a; color:#cbd5e1; border:1px solid #64748b; border-radius:0.375rem; padding:0.65rem;"></textarea>
+    </div>
+  ` : '';
+
+  if (mode === 'likert') {
+    preview.innerHTML = `
+      <strong style="display:block; margin-bottom:0.5rem; color:#f8fafc;">Member response preview</strong>
+      <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+        ${[1, 2, 3, 4, 5].map(value => `<span style="display:inline-flex; align-items:center; justify-content:center; min-width:2rem; height:2rem; border:1px solid #64748b; border-radius:50%; color:#e2e8f0;">${value}</span>`).join('')}
+      </div>
+      <small style="display:block; margin-top:0.5rem; color:#94a3b8;">1 = Strongly disagree, 5 = Strongly agree</small>${suggestionPreview}
+    `;
+    return;
+  }
+
+  preview.innerHTML = `
+    <strong style="display:block; margin-bottom:0.5rem; color:#f8fafc;">Member response preview</strong>
+    <textarea rows="3" disabled placeholder="Member types an answer here" style="width:100%; box-sizing:border-box; background:#0f172a; color:#cbd5e1; border:1px solid #64748b; border-radius:0.375rem; padding:0.65rem;"></textarea>${suggestionPreview}
+  `;
+};
+
+window.addSurveyQuestion = function () {
+  const container = document.getElementById('surveyQuestions');
+  if (!container) return;
+  surveyQuestionIndex += 1;
+  const row = document.createElement('div');
+  row.className = 'survey-question-row';
+  row.style.cssText = 'display:grid; grid-template-columns:2rem minmax(0, 1fr) auto; gap:0.5rem; align-items:start;';
+  row.innerHTML = `
+    <span style="color:#94a3b8; min-width:1.5rem; padding-top:0.7rem;">${surveyQuestionIndex}.</span>
+    <textarea class="survey-question-input" rows="3" placeholder="Enter a survey question" required style="width:100%; min-width:0; min-height:4.5rem; padding:0.75rem 1rem; line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; resize:vertical;"></textarea>
+    <button type="button" aria-label="Remove question" onclick="this.closest('.survey-question-row').remove()" style="width:auto; min-width:2.5rem; flex:0 0 auto; background:#ef4444; color:white; border:none; padding:0.55rem 0.7rem; border-radius:0.375rem; cursor:pointer;"><i class="fas fa-trash"></i></button>
+  `;
+  container.appendChild(row);
+};
+
+window.createSurvey = async function () {
+  const title = document.getElementById('surveyTitle')?.value.trim();
+  const description = document.getElementById('surveyDescription')?.value.trim() || '';
+  const mode = document.getElementById('surveyMode')?.value;
+  const includeSuggestion = document.getElementById('surveyIncludeSuggestion')?.checked === true;
+  const targetEmails = [...document.querySelectorAll('.survey-assign-checkbox:checked')].map(input => input.value);
+  const questions = [...document.querySelectorAll('.survey-question-input')]
+    .map(input => input.value.trim())
+    .filter(Boolean);
+
+  if (!title || questions.length === 0 || targetEmails.length === 0) {
+    alert('Add a title, at least one question, and at least one target member.');
+    return;
+  }
+
+  try {
+    const targetNames = targetEmails.map(email => members.find(member => member.uid === email)?.name || email);
+    const surveyRef = await addDoc(collection(db, 'surveys'), {
+      title,
+      description,
+      mode: mode === 'likert' ? 'likert' : 'text',
+      includeSuggestion,
+      questions,
+      targetEmails,
+      targetNames,
+      active: true,
+      createdBy: adminEmail,
+      createdAt: new Date()
+    });
+
+    const surveyUrl = `${window.location.origin}${window.location.pathname.replace(/admin\.html$/, 'survey.html')}?surveyId=${encodeURIComponent(surveyRef.id)}`;
+    await sendNotificationToUsers(targetEmails, 'Survey Participation Required', `Please complete the survey: ${title}. Open ${surveyUrl}`, 'survey');
+
+    document.getElementById('surveyTitle').value = '';
+    document.getElementById('surveyDescription').value = '';
+    document.getElementById('surveyIncludeSuggestion').checked = false;
+    document.querySelectorAll('.survey-assign-checkbox').forEach(input => input.checked = false);
+    document.getElementById('surveyQuestions').innerHTML = '';
+    surveyQuestionIndex = 0;
+    window.addSurveyQuestion();
+    alert('Survey pushed successfully. Targeted members must complete it before returning to the member dashboard.');
+  } catch (error) {
+    console.error('Error creating survey:', error);
+    alert(`Failed to create survey: ${error.message}`);
+  }
+};
+
+function formatSurveyDate(value) {
+  if (!value) return 'Unknown date';
+  if (value.toDate) return value.toDate().toLocaleString();
+  return new Date(value).toLocaleString();
+}
+
+window.viewSurveyResponses = async function (surveyId) {
+  const container = document.getElementById(`survey-responses-${surveyId}`);
+  if (!container) return;
+  container.innerHTML = '<p style="color:#94a3b8;">Loading responses...</p>';
+
+  try {
+    const snapshot = await getDocs(collection(db, 'surveys', surveyId, 'responses'));
+    if (snapshot.empty) {
+      container.innerHTML = '<p style="color:#94a3b8;">No member responses yet.</p>';
+      return;
+    }
+
+    const responses = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+    container.innerHTML = responses.map((response) => `
+      <div style="margin-top:0.75rem; padding:0.85rem; border:1px solid #374151; border-radius:0.5rem; background:#0f172a;">
+        <div style="display:flex; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; margin-bottom:0.5rem;">
+          <strong style="color:#f8fafc;">${escapeHtml(getUserName(response.memberEmail || response.id))}</strong>
+          <span style="color:#94a3b8; font-size:0.8rem;">${escapeHtml(formatSurveyDate(response.submittedAt))}</span>
+        </div>
+        ${(Array.isArray(response.answers) ? response.answers : []).map((answer, index) => `
+          <div style="margin-top:0.5rem; color:#cbd5e1;">
+            <div style="font-weight:600; color:#e2e8f0;">${index + 1}. ${escapeHtml(answer.question)}</div>
+            <div style="margin-top:0.2rem; white-space:pre-wrap;">${escapeHtml(answer.answer)}</div>
+          </div>
+        `).join('')}
+        ${response.suggestion ? `<div style="display:block; margin-top:0.75rem; padding-top:0.65rem; border-top:1px solid #374151; color:#cbd5e1;"><strong style="display:block; color:#fbbf24;">Suggestion:</strong><div style="display:block; margin-top:0.35rem; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; line-height:1.6;">${escapeHtml(response.suggestion)}</div></div>` : ''}
+      </div>
+    `).join('');
+  } catch (error) {
+    console.error('Unable to load survey responses:', error);
+    container.innerHTML = '<p style="color:#fca5a5;">Unable to load survey responses.</p>';
+  }
+};
+
+window.deleteSurvey = async function (surveyId, surveyTitle) {
+  if (!confirm(`Delete survey "${surveyTitle || 'Untitled survey'}" and all member responses? This cannot be undone.`)) return;
+
+  try {
+    const responsesSnapshot = await getDocs(collection(db, 'surveys', surveyId, 'responses'));
+    await Promise.all(responsesSnapshot.docs.map(responseDoc => deleteDoc(responseDoc.ref)));
+    await deleteDoc(doc(db, 'surveys', surveyId));
+    alert('Survey and member responses deleted successfully.');
+  } catch (error) {
+    console.error('Unable to delete survey:', error);
+    alert('Failed to delete survey. Please try again.');
+  }
+};
+
+function loadSurveyManagement() {
+  const container = document.getElementById('surveysList');
+  if (!container) return;
+
+  onSnapshot(collection(db, 'surveys'), (snapshot) => {
+    const surveys = snapshot.docs
+      .map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
+      .sort((a, b) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
+
+    if (surveys.length === 0) {
+      container.innerHTML = '<p style="color:#94a3b8; text-align:center;">No surveys created yet.</p>';
+      return;
+    }
+
+    container.innerHTML = surveys.map((survey) => `
+      <div style="margin-bottom:1rem; padding:1rem; border:1px solid #374151; border-radius:0.75rem; background:#1e293b;">
+        <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
+          <div>
+            <h3 style="margin:0 0 0.35rem; color:#f8fafc;">${escapeHtml(survey.title || 'Untitled survey')}</h3>
+            <p style="margin:0; color:#94a3b8; font-size:0.85rem;">${survey.mode === 'likert' ? 'Likert scale' : 'Text box'} · ${Array.isArray(survey.questions) ? survey.questions.length : 0} questions</p>
+            <p style="margin:0.25rem 0 0; color:#60a5fa; font-size:0.85rem;">Target: ${escapeHtml((survey.targetNames || survey.targetEmails || []).join(', '))}</p>
+          </div>
+          <button type="button" onclick="deleteSurvey('${survey.id}', '${escapeHtml(survey.title || 'Untitled survey').replace(/'/g, '&#039;')}')" style="width:auto; background:#ef4444; color:white; border:none; padding:0.5rem 0.75rem; border-radius:0.375rem; cursor:pointer;"><i class="fas fa-trash"></i> Delete</button>
+        </div>
+        <p style="margin:0.5rem 0 0.75rem; color:#94a3b8; font-size:0.8rem;">Created: ${escapeHtml(formatSurveyDate(survey.createdAt))}</p>
+        <button type="button" onclick="viewSurveyResponses('${survey.id}')" style="width:auto; background:#3b82f6; color:white; border:none; padding:0.5rem 0.75rem; border-radius:0.375rem; cursor:pointer;"><i class="fas fa-comments"></i> View Member Feedback</button>
+        <div id="survey-responses-${survey.id}"></div>
+      </div>
+    `).join('');
+  }, (error) => {
+    console.error('Survey management listener error:', error);
+    container.innerHTML = '<p style="color:#fca5a5; text-align:center;">Unable to load surveys.</p>';
+  });
+}
+
+loadSurveyManagement();
+
 function loadInAppNotificationRecipients() {
   const container = document.getElementById("inAppNotificationRecipients");
   if (!container) return;
@@ -934,6 +1142,7 @@ function subscribeToMemberRoles() {
 
     loadMembers();
     loadAnnouncementAssignTo();
+    loadSurveyAssignTo();
     loadInAppNotificationRecipients();
     renderMemberManagementPanel();
   }, (error) => {
@@ -1374,6 +1583,11 @@ window.deleteInAppNotification = async function (id) {
 // Only run loaders when their target elements are present to avoid null DOM errors
 if (document.getElementById('assignedTo')) loadMembers();
 if (document.getElementById('announcementAssignTo')) loadAnnouncementAssignTo();
+if (document.getElementById('surveyAssignTo')) {
+  loadSurveyAssignTo();
+  window.addSurveyQuestion();
+  window.updateSurveyFormatPreview();
+}
 if (document.getElementById('inAppNotificationRecipients')) loadInAppNotificationRecipients();
 if (document.getElementById('inAppNotificationsList')) loadInAppNotificationsList();
 

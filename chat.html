@@ -16,6 +16,45 @@
       overflow-x: hidden;
     }
 
+    body.chat-theme {
+      background: var(--chat-interface-gradient) !important;
+      color: var(--chat-card-text-color);
+    }
+
+    body.chat-theme .chat-header {
+      background: var(--chat-header-color) !important;
+    }
+
+    body.chat-theme .chat-page-card {
+      background: var(--chat-interface-gradient) !important;
+    }
+
+    body.chat-theme #chatMessages,
+    body.chat-theme .chat-message {
+      background: var(--chat-card-color) !important;
+    }
+
+    body.chat-theme .chat-header h1,
+    body.chat-theme .chat-header h2,
+    body.chat-theme .chat-header h3,
+    body.chat-theme .chat-header p,
+    body.chat-theme .chat-meta {
+      color: var(--chat-header-text-color) !important;
+    }
+
+    body.chat-theme .chat-message,
+    body.chat-theme .chat-message,
+    body.chat-theme .chat-message div,
+    body.chat-theme .chat-message p {
+      color: var(--chat-card-text-color) !important;
+    }
+
+    body.chat-theme .chat-reply-btn,
+    body.chat-theme .chat-unsend-btn,
+    body.chat-theme .chat-react-btn {
+      color: var(--chat-accent-color) !important;
+    }
+
     .chat-page {
       min-height: 100vh;
       padding: 2rem 1.5rem;

@@ -464,12 +464,9 @@
       <li><button class="nav-btn" onclick="showSection('submit-ticket')"><i class="fas fa-headset"></i> Submit Ticket</button></li>
       <li><button class="nav-btn" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
       <li><button class="nav-btn" onclick="showSection('live-chat')"><i class="fas fa-comments"></i> Live Chat</button></li>
-      <li><button id="limited-admin-create-task-btn" class="nav-btn limited-admin-only" style="display:none;" onclick="showSection('my-tasks')"><i class="fas fa-plus"></i> Create Task</button></li>
-      <li><button id="limited-admin-create-announcement-btn" class="nav-btn limited-admin-only" style="display:none;" onclick="showSection('announcements')"><i class="fas fa-bullhorn"></i> Create Announcement</button></li>
-      <li><button id="limited-admin-create-poll-btn" class="nav-btn limited-admin-only" style="display:none;" onclick="showSection('active-polls')"><i class="fas fa-poll"></i> Create Poll</button></li>
-      <li><button id="limited-admin-create-resource-btn" class="nav-btn limited-admin-only" style="display:none;" onclick="showSection('resources')"><i class="fas fa-book"></i> Create Resource</button></li>
       <li><button class="nav-btn" onclick="showSection('resources')"><i class="fas fa-book"></i> Resources</button></li>
       <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-file-alt"></i> Progress Report</button></li>
+      <li><button class="nav-btn" onclick="showSection('appearance')"><i class="fas fa-palette"></i> Appearance</button></li>
     </ul>
   </nav>
 
@@ -716,6 +713,51 @@
         </div>
       </section>
 
+      <!-- Appearance Section -->
+      <section id="appearance" class="content-section">
+        <div class="card">
+          <h2 style="margin-bottom: 1rem;"><i class="fas fa-palette"></i> Appearance</h2>
+          <p style="color: #94a3b8; margin-bottom: 1rem;">Design your interface colors. Changes sync to your account across devices.</p>
+          <div style="display: grid; gap: 1rem; max-width: 520px;">
+            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
+              <span>First color</span>
+              <input id="memberGradientStart" type="color" value="#0f172a" aria-label="First gradient color" style="width: 3.25rem; height: 2.25rem; padding: 0.15rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; cursor: pointer;">
+            </label>
+            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
+              <span>Second color</span>
+              <input id="memberGradientEnd" type="color" value="#1e293b" aria-label="Second gradient color" style="width: 3.25rem; height: 2.25rem; padding: 0.15rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; cursor: pointer;">
+            </label>
+            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
+              <span>Gradient direction</span>
+              <select id="memberGradientDirection" aria-label="Gradient direction" style="max-width: 220px; padding: 0.6rem 0.75rem; border: 1px solid #64748b; border-radius: 0.5rem; background: #0f172a; color: #f8fafc;">
+                <option value="135deg">Diagonal</option>
+                <option value="90deg">Left to right</option>
+                <option value="180deg">Top to bottom</option>
+                <option value="45deg">Soft diagonal</option>
+              </select>
+            </label>
+            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
+              <span>Sidebar color</span>
+              <input id="memberSidebarColor" type="color" value="#0f172a" aria-label="Sidebar color" style="width: 3.25rem; height: 2.25rem; padding: 0.15rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; cursor: pointer;">
+            </label>
+            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
+              <span>Header color</span>
+              <input id="memberHeaderColor" type="color" value="#0f172a" aria-label="Header color" style="width: 3.25rem; height: 2.25rem; padding: 0.15rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; cursor: pointer;">
+            </label>
+            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
+              <span>Card color</span>
+              <input id="memberCardColor" type="color" value="#1e293b" aria-label="Card color" style="width: 3.25rem; height: 2.25rem; padding: 0.15rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; cursor: pointer;">
+            </label>
+            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
+              <span>Accent color</span>
+              <input id="memberAccentColor" type="color" value="#3b82f6" aria-label="Accent color" style="width: 3.25rem; height: 2.25rem; padding: 0.15rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; cursor: pointer;">
+            </label>
+            <div id="memberGradientPreview" style="height: 96px; border-radius: 0.75rem; border: 1px solid rgba(148, 163, 184, 0.35); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);" aria-label="Gradient preview"></div>
+            <button type="button" onclick="resetMemberGradientTheme()" style="width: fit-content; padding: 0.65rem 0.9rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; color: #e2e8f0; cursor: pointer;"><i class="fas fa-rotate-left"></i> Reset gradient</button>
+          </div>
+        </div>
+      </section>
+
     </div>
     <div id="notificationBanner" class="notification-banner" style="display:none;"></div>
   </main>
@@ -756,6 +798,13 @@ function closeMobileSidebar() {
 
 </script>
 <script>
+function applyLimitedAdminNavigationVisibility() {
+  const isLimitedAdmin = window.__memberRole === 'limited-admin';
+  document.querySelectorAll('.limited-admin-only').forEach((element) => {
+    element.style.display = isLimitedAdmin ? '' : 'none';
+  });
+}
+
 function renderMemberNavigation(isRestricted) {
   const navList = document.getElementById('member-nav-list');
   if (!navList) return;
@@ -765,8 +814,16 @@ function renderMemberNavigation(isRestricted) {
       <li><button class="nav-btn active" onclick="showSection('submit-ticket')"><i class="fas fa-headset"></i> Submit Ticket</button></li>
       <li><button class="nav-btn" onclick="showSection('ticket-history')"><i class="fas fa-ticket-alt"></i> Ticket History</button></li>
     `;
+    applyLimitedAdminNavigationVisibility();
     return;
   }
+
+  const limitedAdminNavigation = window.__memberRole === 'limited-admin' ? `
+    <li><button id="limited-admin-create-task-btn" class="nav-btn limited-admin-only" onclick="showSection('my-tasks')"><i class="fas fa-plus"></i> Create Task</button></li>
+    <li><button id="limited-admin-create-announcement-btn" class="nav-btn limited-admin-only" onclick="showSection('announcements')"><i class="fas fa-bullhorn"></i> Create Announcement</button></li>
+    <li><button id="limited-admin-create-poll-btn" class="nav-btn limited-admin-only" onclick="showSection('active-polls')"><i class="fas fa-poll"></i> Create Poll</button></li>
+    <li><button id="limited-admin-create-resource-btn" class="nav-btn limited-admin-only" onclick="showSection('resources')"><i class="fas fa-book"></i> Create Resource</button></li>
+  ` : '';
 
   navList.innerHTML = `
     <li><button class="nav-btn active" onclick="showSection('home')"><i class="fas fa-house"></i> Home</button></li>
@@ -778,13 +835,13 @@ function renderMemberNavigation(isRestricted) {
     <li><button class="nav-btn" onclick="showSection('submit-ticket')"><i class="fas fa-headset"></i> Submit Ticket</button></li>
     <li><button class="nav-btn" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
     <li><button class="nav-btn" onclick="showSection('live-chat')"><i class="fas fa-comments"></i> Live Chat</button></li>
-    <li><button id="limited-admin-create-task-btn" class="nav-btn limited-admin-only" style="display:none;" onclick="showSection('my-tasks')"><i class="fas fa-plus"></i> Create Task</button></li>
-    <li><button id="limited-admin-create-announcement-btn" class="nav-btn limited-admin-only" style="display:none;" onclick="showSection('announcements')"><i class="fas fa-bullhorn"></i> Create Announcement</button></li>
-    <li><button id="limited-admin-create-poll-btn" class="nav-btn limited-admin-only" style="display:none;" onclick="showSection('active-polls')"><i class="fas fa-poll"></i> Create Poll</button></li>
-    <li><button id="limited-admin-create-resource-btn" class="nav-btn limited-admin-only" style="display:none;" onclick="showSection('resources')"><i class="fas fa-book"></i> Create Resource</button></li>
+    ${limitedAdminNavigation}
     <li><button class="nav-btn" onclick="showSection('resources')"><i class="fas fa-book"></i> Resources</button></li>
     <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-file-alt"></i> Progress Report</button></li>
+    <li><button class="nav-btn" onclick="showSection('appearance')"><i class="fas fa-palette"></i> Appearance</button></li>
   `;
+  applyLimitedAdminNavigationVisibility();
+  window.applyMemberThemeTextColors?.();
 }
 </script>
 <script type="module">
@@ -793,6 +850,7 @@ function renderMemberNavigation(isRestricted) {
   await requireAuth(['member', 'limited-admin']);
 
   const role = await getStoredUserRole();
+  window.__memberRole = role;
   const accessAllowed = await getStoredUserAccess();
   const accessReason = await getStoredUserAccessReason();
   const restrictedNotice = document.getElementById('restrictedAccessNotice');
@@ -812,9 +870,7 @@ function renderMemberNavigation(isRestricted) {
     renderMemberNavigation(false);
   }
 
-  document.querySelectorAll('.limited-admin-only').forEach(el => {
-    el.style.display = (role === 'limited-admin') ? '' : 'none';
-  });
+  applyLimitedAdminNavigationVisibility();
 </script>
 <script type="module" src="member.js?v=7"></script>
 <script>
@@ -942,7 +998,8 @@ function showSection(sectionId) {
     'video-conference': '<i class="fas fa-video"></i> Video Conference',
     'live-chat': '<i class="fas fa-comments"></i> Live Chat',
     'resources': '<i class="fas fa-book"></i> Resources',
-    'progress-report': '<i class="fas fa-file-alt"></i> Progress Report'
+    'progress-report': '<i class="fas fa-file-alt"></i> Progress Report',
+    'appearance': '<i class="fas fa-palette"></i> Appearance'
   };
 
   const pageTitle = document.getElementById('page-title');

@@ -40,6 +40,8 @@
     <ul class="nav-list">
       <li><button class="nav-btn active" onclick="showSection('create-task')"><i class="fas fa-plus"></i> Create Task</button></li>
       <li><button class="nav-btn" onclick="showSection('create-poll')"><i class="fas fa-poll"></i> Create Poll</button></li>
+      <li><button class="nav-btn" onclick="showSection('create-survey')"><i class="fas fa-clipboard-check"></i> Create Survey</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-surveys')"><i class="fas fa-list-check"></i> Manage Surveys</button></li>
       <li><button class="nav-btn" onclick="showSection('create-announcement')"><i class="fas fa-bullhorn"></i> Announcement</button></li>
       <li><button class="nav-btn" onclick="showSection('create-in-app-notification')"><i class="fas fa-bell"></i> In-App Notice</button></li>
       <li><button class="nav-btn" onclick="showSection('create-resource')"><i class="fas fa-book"></i> Resource</button></li>
@@ -159,7 +161,7 @@
       
       <div class="form-group">
         <label for="announcementContent">Content</label>
-        <textarea id="announcementContent" placeholder="Enter announcement content" rows="6" required></textarea>
+          <textarea id="announcementContent" placeholder="Enter announcement content" rows="6" required style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; line-height:1.6; resize:vertical;"></textarea>
       </div>
       
       <div class="form-group">
@@ -170,6 +172,49 @@
       </div>
       
             <button type="submit" class="btn-warning"><i class="fas fa-bullhorn"></i> Create Announcement</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Create Survey Section -->
+      <section id="create-survey" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-clipboard-check"></i> Create Survey</h2>
+          <form onsubmit="event.preventDefault(); createSurvey();">
+            <div class="form-group">
+              <label for="surveyTitle">Survey title</label>
+              <input id="surveyTitle" type="text" placeholder="Enter survey title" required>
+            </div>
+            <div class="form-group">
+              <label for="surveyDescription">Instructions</label>
+                <textarea id="surveyDescription" rows="3" placeholder="Tell members what this survey is about" style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; line-height:1.6; resize:vertical;"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="surveyMode">Answer format</label>
+              <select id="surveyMode" required onchange="updateSurveyFormatPreview()">
+                <option value="text">Text box per question</option>
+                <option value="likert">Likert scale (1 to 5)</option>
+              </select>
+              <div id="surveyFormatPreview" style="margin-top: 0.75rem; padding: 0.85rem 1rem; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 0.5rem; background: rgba(59, 130, 246, 0.08); color: #cbd5e1;"></div>
+            </div>
+            <div class="form-group">
+              <label style="display:flex; align-items:center; gap:0.5rem;">
+                <input id="surveyIncludeSuggestion" type="checkbox" onchange="updateSurveyFormatPreview()" style="width:auto; margin:0;">
+                Include optional suggestion box
+              </label>
+              <p style="font-size:0.85rem; color:#94a3b8; margin-top:0.35rem;">Members may share an additional recommendation before submitting.</p>
+            </div>
+            <div class="form-group">
+              <label>Questions</label>
+              <div id="surveyQuestions" style="display: grid; gap: 0.75rem;"></div>
+              <button type="button" onclick="addSurveyQuestion()" style="margin-top: 0.75rem; background: #6b7280; color: white; border: none; padding: 0.55rem 0.8rem; border-radius: 0.375rem; cursor: pointer;"><i class="fas fa-plus"></i> Add question</button>
+            </div>
+            <div class="form-group">
+              <label>Target members</label>
+              <div id="surveyAssignTo" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+              <p style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.35rem;">Selected members must complete the survey before returning to the member dashboard.</p>
+            </div>
+            <button type="submit" class="btn-warning"><i class="fas fa-paper-plane"></i> Push Survey</button>
           </form>
         </div>
       </section>
@@ -220,6 +265,16 @@
           <h2><i class="fas fa-bell"></i> Manage In-App Notices</h2>
           <div id="inAppNotificationsList">
             <p style="color: #94a3b8; text-align: center;">Loading in-app notices...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Manage Surveys Section -->
+      <section id="manage-surveys" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-list-check"></i> Manage Surveys</h2>
+          <div id="surveysList">
+            <p style="color: #94a3b8; text-align: center;">Loading surveys...</p>
           </div>
         </div>
       </section>
