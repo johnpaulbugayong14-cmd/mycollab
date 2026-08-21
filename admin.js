@@ -1870,7 +1870,7 @@ loadLiveChatRooms();
     container.innerHTML = "";
 
     if (snap.empty) {
-      container.innerHTML = "<p style='color: #94a3b8; text-align: center;'>No resources created yet.</p>";
+      container.innerHTML = "<p style='color: #94a3b8; text-align: center;'>No resources found</p>";
       return;
     }
 
