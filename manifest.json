@@ -26,7 +26,7 @@
       "purpose": "any maskable"
     }
   ],
-  "version": "1.1.0",
+  "version": "1.1.1",
   "files": [
     {
       "path": "admin.html",
@@ -95,13 +95,13 @@
     },
     {
       "path": "member.html",
-      "size": 67397,
-      "sha256": "d8dac4589708e1b5ab3629b35a7cef57ae86368515a82620f384fdcf103ff807"
+      "size": 67253,
+      "sha256": "1847a4ff529a72bf2cfe6db16db3b47718e9bc985816fff1d8aeebbbda950c02"
     },
     {
       "path": "member.js",
-      "size": 177627,
-      "sha256": "a96bb90320ca4f50af3e7bbcf22ff1c0133126195e55401ab12cdbe7690bb44b"
+      "size": 177544,
+      "sha256": "84d498591a78933fc534ff68051f288daef690d4da42a2fc33a33e27456e6589"
     },
     {
       "path": "notifications.js",

@@ -2940,7 +2940,6 @@ function loadAnnouncements() {
 
 function loadResources() {
   const container = document.getElementById("resources");
-  const emptyState = document.getElementById("resourcesEmptyState");
   if (!container) {
     console.log('=== RESOURCES CONTAINER NOT FOUND ===');
     return;
@@ -2952,12 +2951,8 @@ function loadResources() {
     console.log('Resources snapshot received, docs count:', snap.size);
     container.innerHTML = "";
 
-    if (emptyState) {
-      emptyState.style.display = snap.empty ? "block" : "none";
-    }
-
     if (snap.empty) {
-      container.innerHTML = "";
+      container.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No resources found</p>';
       return;
     }
 
