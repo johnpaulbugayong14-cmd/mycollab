@@ -2,19 +2,58 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
 const CACHE_NAME = 'task-manager-v6';
+const UPDATE_META_CACHE = 'mycollab-update-meta-v1';
+const ACTIVE_KEY = new Request('/__mycollab_active_version__');
+const PREVIOUS_KEY = new Request('/__mycollab_previous_version__');
+const PENDING_KEY = new Request('/__mycollab_pending_version__');
 const urlsToCache = [
   'index.html',
   'login.html',
   'admin.html',
   'member.html',
+  'chat.html',
+  'survey.html',
   'style.css',
   'manifest.json',
   'firebase.js',
   'auth.js',
   'admin.js',
   'member.js',
-  'notifications.js'
+  'chat.js',
+  'survey.js',
+  'notifications.js',
+  'watchtogether.js',
+  'update-config.js',
+  'update-manager.js'
 ];
+
+async function readMeta(key) {
+  const cache = await caches.open(UPDATE_META_CACHE);
+  const response = await cache.match(key);
+  return response ? response.json() : null;
+}
+
+async function writeMeta(key, value) {
+  const cache = await caches.open(UPDATE_META_CACHE);
+  await cache.put(key, new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } }));
+}
+
+async function activeReleaseCache() {
+  const pending = await readMeta(PENDING_KEY);
+  if (pending && Date.now() - pending.activatedAt > 30000) {
+    const healthy = await readMeta(new Request(`/__mycollab_healthy_${pending.version}__`));
+    if (!healthy) {
+      const previous = await readMeta(PREVIOUS_KEY);
+      if (previous?.cacheName) {
+        await writeMeta(ACTIVE_KEY, previous);
+        await writeMeta(PENDING_KEY, null);
+        console.warn('[Updater] Trial release failed; rolled back to', previous.version);
+      }
+    }
+  }
+  const active = await readMeta(ACTIVE_KEY);
+  return active?.cacheName || null;
+}
 
 const firebaseConfig = {
   apiKey: "AIzaSyDwaMDGG7ke7fwM0wYsywSfPPZ2qZGPZLc",
@@ -73,28 +112,61 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  event.respondWith(
-    fetch(event.request)
-      .then(response => {
-        if (response && response.ok) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            try {
-              cache.put(event.request, responseClone);
-            } catch (e) {
-              console.warn('Failed to cache response:', e);
-            }
-          }).catch(err => console.warn('Failed to open cache:', err));
-        }
-        return response;
-      })
-      .catch(() => {
-        return caches.match(event.request).then(cachedResponse => {
-          if (cachedResponse) return cachedResponse;
-          return Response.error();
-        });
-      })
-  );
+  event.respondWith((async () => {
+    const releaseCacheName = await activeReleaseCache();
+    if (releaseCacheName) {
+      const releaseCache = await caches.open(releaseCacheName);
+      const releaseResponse = await releaseCache.match(event.request, { ignoreSearch: true });
+      if (releaseResponse) return releaseResponse;
+    }
+
+    const bundledResponse = await caches.match(event.request, { ignoreSearch: true });
+    if (bundledResponse) return bundledResponse;
+
+    try {
+      const response = await fetch(event.request);
+      if (response?.ok) {
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone)).catch(error => console.warn('Failed to cache response:', error));
+      }
+      return response;
+    } catch {
+      return Response.error();
+    }
+  })());
+});
+
+self.addEventListener('message', event => {
+  const data = event.data || {};
+  event.waitUntil((async () => {
+    if (data.type === 'ACTIVATE_RELEASE' && data.version && data.cacheName) {
+      const cache = await caches.open(data.cacheName);
+      const hasEntryPoint = await cache.match(new Request('/index.html'), { ignoreSearch: true });
+      if (!hasEntryPoint) throw new Error('Release entry point is missing');
+      const current = await readMeta(ACTIVE_KEY);
+      await writeMeta(PREVIOUS_KEY, current?.cacheName ? current : { version: 'bundled', cacheName: CACHE_NAME });
+      await writeMeta(ACTIVE_KEY, { version: data.version, cacheName: data.cacheName });
+      await writeMeta(PENDING_KEY, { version: data.version, cacheName: data.cacheName, activatedAt: Date.now() });
+      const previous = current?.cacheName || CACHE_NAME;
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.filter(cacheName => cacheName.startsWith('mycollab-release-') && cacheName !== data.cacheName && cacheName !== previous).map(cacheName => caches.delete(cacheName)));
+      console.log('[Updater] Activated trial release', data.version);
+    }
+
+    if (data.type === 'MARK_HEALTHY' && data.version) {
+      await writeMeta(new Request(`/__mycollab_healthy_${data.version}__`), { version: data.version, markedAt: Date.now() });
+      await writeMeta(PENDING_KEY, null);
+      console.log('[Updater] Release marked healthy', data.version);
+    }
+
+    if (data.type === 'ROLLBACK') {
+      const previous = await readMeta(PREVIOUS_KEY);
+      if (previous?.cacheName) {
+        await writeMeta(ACTIVE_KEY, previous);
+        await writeMeta(PENDING_KEY, null);
+      }
+    }
+  })());
 });
 
 self.addEventListener('activate', event => {
@@ -102,7 +174,7 @@ self.addEventListener('activate', event => {
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
+          if (cacheName !== CACHE_NAME && cacheName !== UPDATE_META_CACHE && !cacheName.startsWith('mycollab-release-')) {
             return caches.delete(cacheName);
           }
         })
