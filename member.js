@@ -4198,9 +4198,8 @@ function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticket
         const ticket = doc.data();
         console.log('Processing ticket:', ticket);
 
-        // Filter by assigned user
-        if (userEmail && ticket.assignedTo !== userEmail) {
-          console.log('Skipping ticket - not assigned to current user');
+        if (userEmail && ticket.submittedBy !== userEmail && ticket.assignedTo !== userEmail) {
+          console.log('Skipping ticket - not submitted by or assigned to current user');
           return;
         }
 
