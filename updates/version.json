@@ -1,7 +1,7 @@
 {
   "version": "1.1.1",
   "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.1/",
-  "required": true
+  "required": true,
   "releaseNotes": [
     "Stability improvements and bug fixes."
   ]
