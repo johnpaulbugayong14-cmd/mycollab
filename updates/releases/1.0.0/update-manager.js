@@ -153,12 +153,12 @@ async function downloadRelease(remote, server, backdrop) {
   setTimeout(() => window.location.reload(), 500);
 }
 
-async function checkForUpdate() {
+async function checkForUpdate(force = false) {
   if (!UPDATE_CONFIG.UPDATE_ENABLED || UPDATE_CONFIG.DEVELOPMENT_MODE) return;
   const server = configuredServer();
   if (!server) { warn('Update server is not configured.'); return; }
   const lastChecked = Number(localStorage.getItem(CHECKED_KEY) || 0);
-  if (Date.now() - lastChecked < UPDATE_CONFIG.UPDATE_CHECK_INTERVAL_MS) return;
+  if (!force && Date.now() - lastChecked < UPDATE_CONFIG.UPDATE_CHECK_INTERVAL_MS) return;
   localStorage.setItem(CHECKED_KEY, String(Date.now()));
   const current = localStorage.getItem(VERSION_KEY) || UPDATE_CONFIG.BUNDLED_VERSION;
   log('Checking for updates...', current);
@@ -193,7 +193,7 @@ async function registerUpdater() {
     const registration = await navigator.serviceWorker.ready;
     const activeVersion = localStorage.getItem(VERSION_KEY);
     if (activeVersion) registration.active?.postMessage({ type: 'MARK_HEALTHY', version: activeVersion });
-    checkForUpdate();
+    checkForUpdate(true);
   } catch (error) {
     warn('Service worker unavailable; continuing with bundled app.', error);
   }
