@@ -154,7 +154,7 @@ async function downloadRelease(remote, server, backdrop) {
 }
 
 async function checkForUpdate(force = false) {
-  if (!UPDATE_CONFIG.UPDATE_ENABLED || UPDATE_CONFIG.DEVELOPMENT_MODE) return;
+  if (!UPDATE_CONFIG.UPDATE_ENABLED || UPDATE_CONFIG.DEVELOPMENT_MODE || !window.Capacitor?.isNativePlatform?.()) return;
   const server = configuredServer();
   if (!server) { warn('Update server is not configured.'); return; }
   const lastChecked = Number(localStorage.getItem(CHECKED_KEY) || 0);

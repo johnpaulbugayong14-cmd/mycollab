@@ -3,6 +3,7 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 
 const CACHE_NAME = 'task-manager-v6';
 const UPDATE_META_CACHE = 'mycollab-update-meta-v1';
+const IS_GITHUB_PAGES = self.location.hostname.endsWith('.github.io');
 const ACTIVE_KEY = new Request('/__mycollab_active_version__');
 const PREVIOUS_KEY = new Request('/__mycollab_previous_version__');
 const PENDING_KEY = new Request('/__mycollab_pending_version__');
@@ -114,10 +115,25 @@ self.addEventListener('fetch', event => {
 
   event.respondWith((async () => {
     const releaseCacheName = await activeReleaseCache();
-    if (releaseCacheName) {
+    if (releaseCacheName && !IS_GITHUB_PAGES) {
       const releaseCache = await caches.open(releaseCacheName);
       const releaseResponse = await releaseCache.match(event.request, { ignoreSearch: true });
       if (releaseResponse) return releaseResponse;
+    }
+
+    if (IS_GITHUB_PAGES) {
+      try {
+        const response = await fetch(event.request, { cache: 'no-store' });
+        if (response?.ok) {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone)).catch(error => console.warn('Failed to cache response:', error));
+        }
+        return response;
+      } catch {
+        const cachedResponse = await caches.match(event.request, { ignoreSearch: true });
+        if (cachedResponse) return cachedResponse;
+        return Response.error();
+      }
     }
 
     const bundledResponse = await caches.match(event.request, { ignoreSearch: true });
