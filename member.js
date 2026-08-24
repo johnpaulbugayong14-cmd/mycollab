@@ -2642,18 +2642,6 @@ window.submitTicket = async function () {
     });
     console.log('Ticket added successfully with submittedBy:', userEmail);
 
-    // Send notification to admin (non-blocking)
-    try {
-      const adminEmail = "johnpaulbugayong@gmail.com"; // Admin email
-      const notificationTitle = "New Support Ticket Submitted";
-      const notificationBody = `New ticket: "${title}" submitted by ${getUserName(userEmail)}`;
-      console.log('Sending notification...');
-      await sendNotificationToUsers([adminEmail], notificationTitle, notificationBody, 'ticket');
-      console.log('Notification process completed');
-    } catch (notificationError) {
-      console.warn("Notification process failed:", notificationError);
-    }
-
     // Clear form
     if (titleElement) titleElement.value = "";
     if (descriptionElement) descriptionElement.value = "";
@@ -2670,6 +2658,14 @@ window.submitTicket = async function () {
     if (submissionMessage) {
       submissionMessage.textContent = 'Ticket submitted successfully. It now appears in Ticket History.';
     }
+
+    // Notification delivery must not delay the member's ticket history update.
+    const adminEmail = "johnpaulbugayong@gmail.com";
+    const notificationTitle = "New Support Ticket Submitted";
+    const notificationBody = `New ticket: "${title}" submitted by ${getUserName(userEmail)}`;
+    void sendNotificationToUsers([adminEmail], notificationTitle, notificationBody, 'ticket')
+      .then(() => console.log('Notification process completed'))
+      .catch((notificationError) => console.warn("Notification process failed:", notificationError));
   } catch (error) {
     console.error("Error submitting ticket:", error);
     alert("Failed to submit ticket. Please try again.");
