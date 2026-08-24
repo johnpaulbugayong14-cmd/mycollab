@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Admin Dashboard - My Collab</title>
+  <meta name="application-name" content="My Collab">
+  <meta name="apple-mobile-web-app-title" content="My Collab">
+  <link rel="manifest" href="manifest.json?v=5">
+  <meta name="theme-color" content="#3b82f6">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="style.css?v=1">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    .survey-management-list {
+      display: grid;
+      gap: 0.9rem;
+    }
+    .survey-management-item {
+      padding: 1.1rem 1.2rem;
+      border: 1px solid #334155;
+      border-left: 4px solid #3b82f6;
+      border-radius: 0.7rem;
+      background: rgba(15, 23, 42, 0.72);
+      box-shadow: 0 8px 24px rgba(2, 6, 23, 0.18);
+    }
+    .survey-management-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .survey-management-title {
+      margin: 0;
+      color: #f8fafc;
+      font-size: 1.05rem;
+      overflow-wrap: anywhere;
+    }
+    .survey-management-meta,
+    .survey-management-target {
+      margin: 0.3rem 0 0;
+      color: #94a3b8;
+      font-size: 0.82rem;
+      overflow-wrap: anywhere;
+    }
+    .survey-management-target strong {
+      color: #cbd5e1;
+    }
+    .survey-management-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid rgba(71, 85, 105, 0.55);
+    }
+    .survey-management-actions button {
+      width: auto;
+      min-width: 0;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid transparent;
+      border-radius: 0.4rem;
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    .survey-feedback-list {
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid rgba(71, 85, 105, 0.55);
+    }
+    body.admin-loading .nav-btn,
+    body.admin-loading .content-section {
+      display: none !important;
+    }
+    #walletMember .wallet-member-option {
+      display: flex;
+      align-items: flex-start;
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      box-sizing: border-box;
+    }
+    #walletMember .wallet-member-option input[type="checkbox"] {
+      width: 1rem !important;
+      min-width: 1rem;
+      height: 1rem;
+      padding: 0 !important;
+      margin: 0.2rem 0 0;
+      flex: 0 0 1rem;
+    }
+    #walletMember .wallet-member-option span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+  </style>
+  <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
+</head>
+<body class="admin-loading">
+
+<!-- Mobile Navigation Toggle -->
+<button class="mobile-nav-toggle" onclick="toggleMobileSidebar()"><i class="fas fa-bars"></i></button>
+
+<!-- Mobile Overlay -->
+<div class="sidebar-overlay" onclick="closeMobileSidebar()"></div>
+
+<div class="app-container">
+  <!-- Sidebar Navigation -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h2><i class="fas fa-chart-bar"></i> Admin</h2>
+      <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+    </div>
+    <ul class="nav-list">
+      <li><button class="nav-btn active" onclick="showSection('create-task')"><i class="fas fa-plus"></i> Create Task</button></li>
+      <li><button class="nav-btn" onclick="showSection('create-poll')"><i class="fas fa-poll"></i> Create Poll</button></li>
+      <li><button class="nav-btn" onclick="showSection('create-survey')"><i class="fas fa-clipboard-check"></i> Create Survey</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-surveys')"><i class="fas fa-list-check"></i> Manage Surveys</button></li>
+      <li><button class="nav-btn" onclick="showSection('create-announcement')"><i class="fas fa-bullhorn"></i> Announcement</button></li>
+      <li><button class="nav-btn" onclick="showSection('create-in-app-notification')"><i class="fas fa-bell"></i> In-App Notice</button></li>
+      <li><button class="nav-btn" onclick="showSection('create-resource')"><i class="fas fa-book"></i> Resource</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-in-app-notifications')"><i class="fas fa-bell"></i> Manage Notices</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-polls')"><i class="fas fa-poll"></i> Manage Polls</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-announcements')"><i class="fas fa-bullhorn"></i> Manage Announcements</button></li>
+      <li><button class="nav-btn" onclick="showSection('support-tickets')"><i class="fas fa-ticket-alt"></i> Support Tickets</button></li>
+      <li><button class="nav-btn" onclick="showSection('maintenance')"><i class="fas fa-tools"></i> Maintenance</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-resources')"><i class="fas fa-book"></i> Manage Resources</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-members')"><i class="fas fa-users-cog"></i> Manage Members</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-wallet')"><i class="fas fa-wallet"></i> Member Wallets</button></li>
+      <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-chart-line"></i> Progress Report</button></li>
+      <li><button class="nav-btn" onclick="showSection('task-analytics')"><i class="fas fa-chart-bar"></i> Analytics</button></li>
+      <li><button class="nav-btn" onclick="showSection('all-tasks')"><i class="fas fa-clipboard-list"></i> All Tasks</button></li>
+      <li><button class="nav-btn" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
+      <li><button class="nav-btn" onclick="showSection('live-chat')"><i class="fas fa-comments"></i> Live Chat</button></li>
+    </ul>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="content-header">
+      <h1 id="page-title"><i class="fas fa-chart-bar"></i> Admin Dashboard</h1>
+      <div class="header-actions">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div id="adminHeaderProfilePicture" onclick="document.getElementById('adminProfileInputHeader').click()" style="width: 40px; height: 40px; border-radius: 50%; background: #1f2937; border: 2px solid #4b5563; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
+            <i class="fas fa-user" style="color: #9ca3af; font-size: 1rem;"></i>
+          </div>
+          <div id="welcome" class="welcome-header">welcome, boss pi!</div>
+          <input type="file" id="adminProfileInputHeader" accept="image/*" style="display: none;" onchange="handleAdminProfileUpload(event)" />
+        </div>
+        <button onclick="signOutUser()" class="logout-btn header-logout">Logout</button>
+      </div>
+    </div>
+    
+    <div class="content-sections">
+      <!-- Create New Task Section -->
+      <section id="create-task" class="content-section active">
+        <div class="card">
+          <h2>Create New Task</h2>
+          
+          <form onsubmit="event.preventDefault(); createTask();">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="title">Task Title</label>
+                <input id="title" type="text" placeholder="Enter task title" required>
+              </div>
+              
+              <div class="form-group">
+                <label for="deadline">Deadline</label>
+                <input id="deadline" type="date" required>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="description">Description</label>
+              <textarea id="description" placeholder="Enter task description" rows="4"></textarea>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="assignedTo">Assign To</label>
+                <select id="assignedTo" required>
+                  <option value="">Select a member</option>
+                </select>
+              </div>
+              
+              <div class="form-group">
+                <label for="linkInput">Link</label>
+                <input id="linkInput" type="url" placeholder="https://example.com/resource" autocomplete="off">
+                <p style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">Optional: add a reference link for this task.</p>
+              </div>
+            </div>
+            
+            <button type="submit" class="btn-success"><i class="fas fa-check"></i> Create Task</button>
+          </form>
+        </div>
+      </section>
+      
+      <!-- Create New Poll Section -->
+      <section id="create-poll" class="content-section">
+        <div class="card">
+          <h2>Create New Poll</h2>
+          
+          <form onsubmit="event.preventDefault(); createPoll();">
+            <div class="form-group">
+              <label for="pollQuestion">Poll Question</label>
+              <input id="pollQuestion" type="text" placeholder="Enter poll question" required>
+            </div>
+            
+            <div id="pollOptions">
+              <div class="form-group">
+                <label>Option 1</label>
+                <input type="text" class="poll-option-input" placeholder="Enter option" required>
+              </div>
+              <div class="form-group">
+                <label>Option 2</label>
+                <input type="text" class="poll-option-input" placeholder="Enter option" required>
+              </div>
+            </div>
+            
+            <button type="button" onclick="addPollOption()" style="background: #6b7280; margin-bottom: 1rem;">+ Add Option</button>
+            <button type="submit" class="btn-secondary"><i class="fas fa-poll"></i> Create Poll</button>
+          </form>
+        </div>
+      </section>
+      
+      <!-- Create Announcement Section -->
+      <section id="create-announcement" class="content-section">
+        <div class="card">
+          <h2>Create Announcement</h2>
+    
+    <form onsubmit="event.preventDefault(); createAnnouncement();">
+      <div class="form-group">
+        <label for="announcementTitle">Title</label>
+        <input id="announcementTitle" type="text" placeholder="Enter announcement title" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="announcementContent">Content</label>
+          <textarea id="announcementContent" placeholder="Enter announcement content" rows="6" required style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; line-height:1.6; resize:vertical;"></textarea>
+      </div>
+      
+      <div class="form-group">
+        <label>Assign To</label>
+        <div id="announcementAssignTo" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+          <!-- Checkboxes will be populated by JavaScript -->
+        </div>
+      </div>
+      
+            <button type="submit" class="btn-warning"><i class="fas fa-bullhorn"></i> Create Announcement</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Create Survey Section -->
+      <section id="create-survey" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-clipboard-check"></i> Create Survey</h2>
+          <form onsubmit="event.preventDefault(); createSurvey();">
+            <div class="form-group">
+              <label for="surveyTitle">Survey title</label>
+              <input id="surveyTitle" type="text" placeholder="Enter survey title" required>
+            </div>
+            <div class="form-group">
+              <label for="surveyDescription">Instructions</label>
+                <textarea id="surveyDescription" rows="3" placeholder="Tell members what this survey is about" style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; line-height:1.6; resize:vertical;"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="surveyMode">Answer format</label>
+              <select id="surveyMode" required onchange="updateSurveyFormatPreview()">
+                <option value="text">Text box per question</option>
+                <option value="likert">Likert scale (1 to 5)</option>
+              </select>
+              <div id="surveyFormatPreview" style="margin-top: 0.75rem; padding: 0.85rem 1rem; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 0.5rem; background: rgba(59, 130, 246, 0.08); color: #cbd5e1;"></div>
+            </div>
+            <div class="form-group">
+              <label style="display:flex; align-items:center; gap:0.5rem;">
+                <input id="surveyIncludeSuggestion" type="checkbox" onchange="updateSurveyFormatPreview()" style="width:auto; margin:0;">
+                Include optional suggestion box
+              </label>
+              <p style="font-size:0.85rem; color:#94a3b8; margin-top:0.35rem;">Members may share an additional recommendation before submitting.</p>
+            </div>
+            <div class="form-group">
+              <label>Questions</label>
+              <div id="surveyQuestions" style="display: grid; gap: 0.75rem;"></div>
+              <button type="button" onclick="addSurveyQuestion()" style="margin-top: 0.75rem; background: #6b7280; color: white; border: none; padding: 0.55rem 0.8rem; border-radius: 0.375rem; cursor: pointer;"><i class="fas fa-plus"></i> Add question</button>
+            </div>
+            <div class="form-group">
+              <label>Target members</label>
+              <div id="surveyAssignTo" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+              <p style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.35rem;">Selected members must complete the survey before returning to the member dashboard.</p>
+            </div>
+            <button type="submit" class="btn-warning"><i class="fas fa-paper-plane"></i> Push Survey</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Create In-App Notification Section -->
+      <section id="create-in-app-notification" class="content-section">
+        <div class="card">
+          <h2>Create In-App Notification</h2>
+
+          <form onsubmit="event.preventDefault(); createInAppNotification();">
+            <div class="form-group">
+              <label for="inAppNotificationTitle">Title</label>
+              <input id="inAppNotificationTitle" type="text" placeholder="Enter notification title" required>
+            </div>
+
+            <div class="form-group">
+              <label for="inAppNotificationMessage">Message</label>
+              <textarea id="inAppNotificationMessage" placeholder="Enter the message members should see" rows="6" required></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>Display To</label>
+              <div id="inAppNotificationRecipients" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                <!-- Checkboxes will be populated by JavaScript -->
+              </div>
+              <p style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.35rem;">Leave all unchecked to send this to everyone.</p>
+            </div>
+
+            <div class="form-group">
+              <label>Display Frequency</label>
+              <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; margin-top:0.35rem;">
+                <label style="display:flex; align-items:center; gap:0.5rem;"><input type="radio" name="inAppDisplayMode" value="once" checked> Display once</label>
+                <label style="display:flex; align-items:center; gap:0.5rem;"><input type="radio" name="inAppDisplayMode" value="until"> Display until</label>
+                <input id="inAppDisplayUntilDate" type="datetime-local" style="background: #0f172a; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.35rem; display:none;" />
+                <label style="display:flex; align-items:center; gap:0.5rem;"><input type="radio" name="inAppDisplayMode" value="always"> Display always</label>
+              </div>
+              <p style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.35rem;">Choose how long this in-app notice should appear to members.</p>
+            </div>
+
+            <button type="submit" class="btn-warning"><i class="fas fa-bell"></i> Create In-App Notification</button>
+          </form>
+        </div>
+      </section>
+      
+      <!-- Manage In-App Notifications Section -->
+      <section id="manage-in-app-notifications" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-bell"></i> Manage In-App Notices</h2>
+          <div id="inAppNotificationsList">
+            <p style="color: #94a3b8; text-align: center;">Loading in-app notices...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Manage Surveys Section -->
+      <section id="manage-surveys" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-list-check"></i> Manage Surveys</h2>
+          <p style="margin: -0.75rem 0 1.25rem; color: #94a3b8;">Review survey participation and member feedback from one place.</p>
+          <div id="surveysList" class="survey-management-list">
+            <p style="color: #94a3b8; text-align: center;">Loading surveys...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Create Resource Section -->
+      <section id="create-resource" class="content-section">
+        <div class="card">
+          <h2>Create Resource</h2>
+    
+    <form onsubmit="event.preventDefault(); createResource();">
+      <div class="form-group">
+        <label for="resourceTitle">Title</label>
+        <input id="resourceTitle" type="text" placeholder="Enter resource title" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="resourceDescription">Description</label>
+        <textarea id="resourceDescription" placeholder="Enter resource description" rows="4" required></textarea>
+      </div>
+      
+      <div class="form-group">
+        <label for="resourceLink">Link</label>
+        <input id="resourceLink" type="url" placeholder="https://example.com/resource" required>
+        <p style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">URL of the resource (required).</p>
+      </div>
+      
+          <button type="submit" class="btn-success"><i class="fas fa-book"></i> Create Resource</button>
+        </form>
+      </div>
+      </section>
+      
+      <!-- Manage Polls Section -->
+      <section id="manage-polls" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-poll"></i> Manage Polls</h2>
+          <div id="pollsList">
+            <p style="color: #94a3b8; text-align: center;">Loading polls...</p>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Manage Announcements Section -->
+      <section id="manage-announcements" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-bullhorn"></i> Manage Announcements</h2>
+          <div id="announcementsList">
+            <p style="color: #94a3b8; text-align: center;">Loading announcements...</p>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Support Tickets Section -->
+      <section id="support-tickets" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-ticket-alt"></i> Support Tickets</h2>
+          <div id="ticketsList">
+            <p style="color: #94a3b8; text-align: center;">Loading tickets...</p>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Manage Resources Section -->
+      <section id="manage-resources" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-book"></i> Manage Resources</h2>
+          <div id="resourcesList">
+            <p style="color: #94a3b8; text-align: center;">Loading resources...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Manage Members Section -->
+      <section id="manage-members" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-users-cog"></i> Manage Members</h2>
+          <p style="color: #94a3b8; margin-bottom: 1rem;">Promote a member to admin with access limited to the admin privilege set, or restrict a member from signing in to their account.</p>
+          <div style="margin-bottom: 1.25rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.75rem; background: #0f172a;">
+            <h3 style="margin: 0 0 0.75rem 0; color: #f8fafc;">Create New Member Account</h3>
+            <div style="display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+              <div>
+                <label for="newMemberEmail" style="display: block; color: #cbd5e1; margin-bottom: 0.35rem; font-size: 0.9rem;">Email</label>
+                <input id="newMemberEmail" type="email" placeholder="member@email.com" style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1px solid #4b5563; background: #0f172a; color: #f8fafc;" />
+              </div>
+              <div>
+                <label for="newMemberName" style="display: block; color: #cbd5e1; margin-bottom: 0.35rem; font-size: 0.9rem;">Display Name</label>
+                <input id="newMemberName" type="text" placeholder="Jane Doe" style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1px solid #4b5563; background: #0f172a; color: #f8fafc;" />
+              </div>
+              <div>
+                <label for="newMemberPassword" style="display: block; color: #cbd5e1; margin-bottom: 0.35rem; font-size: 0.9rem;">Password</label>
+                <input id="newMemberPassword" type="password" placeholder="At least 6 characters" style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1px solid #4b5563; background: #0f172a; color: #f8fafc;" />
+              </div>
+              <div>
+                <label for="newMemberRole" style="display: block; color: #cbd5e1; margin-bottom: 0.35rem; font-size: 0.9rem;">Role</label>
+                <select id="newMemberRole" style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1px solid #4b5563; background: #0f172a; color: #f8fafc;">
+                  <option value="member">Member</option>
+                  <option value="limited-admin">Limited Admin</option>
+                </select>
+              </div>
+            </div>
+            <div id="newMemberAccountMessage" style="margin-top: 0.75rem; color: #94a3b8;"></div>
+            <button type="button" onclick="createMemberAccountFromAdmin()" class="btn-success" style="margin-top: 0.75rem;">Create Account</button>
+          </div>
+          <div id="memberManagementPanel">
+            <p style="color: #94a3b8; text-align: center;">Loading members...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Member Wallets Section -->
+      <section id="manage-wallet" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-wallet"></i> Member Wallets</h2>
+          <p style="color: #94a3b8; margin-bottom: 1rem;">Credit deposits or deduct disbursed amounts from a member wallet. Every adjustment is recorded in the member transaction history.</p>
+          <div style="padding: 1rem; border: 1px solid #374151; border-radius: 0.75rem; background: #0f172a;">
+            <div style="display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+              <div>
+                <label style="display: block; color: #cbd5e1; margin-bottom: 0.35rem;">Target members</label>
+                <div id="walletMember" style="display: grid; gap: 0.5rem; max-height: 12rem; overflow-y: auto; padding: 0.65rem; border: 1px solid #4b5563; border-radius: 0.5rem; background: #111827;"></div>
+              </div>
+              <div>
+                <label for="walletDepositAmount" style="display: block; color: #cbd5e1; margin-bottom: 0.35rem;">Deposit to be credited</label>
+                <input id="walletDepositAmount" type="number" min="0.01" step="0.01" placeholder="0.00" style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1px solid #4b5563; background: #0f172a; color: #f8fafc;" />
+              </div>
+              <div>
+                <label for="walletDeductionAmount" style="display: block; color: #cbd5e1; margin-bottom: 0.35rem;">Deduction to be disbursed</label>
+                <input id="walletDeductionAmount" type="number" min="0.01" step="0.01" placeholder="0.00" style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1px solid #4b5563; background: #0f172a; color: #f8fafc;" />
+              </div>
+            </div>
+            <label for="walletDescription" style="display: block; color: #cbd5e1; margin: 0.75rem 0 0.35rem;">Description</label>
+            <textarea id="walletDescription" rows="2" placeholder="Reason for this balance adjustment" style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1px solid #4b5563; background: #0f172a; color: #f8fafc;"></textarea>
+            <div id="walletAdjustmentMessage" style="margin-top: 0.75rem; color: #94a3b8;"></div>
+            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.75rem;">
+              <button type="button" onclick="adjustMemberWallet('credit')" class="btn-success"><i class="fas fa-plus"></i> Credit deposit</button>
+              <button type="button" onclick="adjustMemberWallet('debit')" style="background: #dc2626; color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer;"><i class="fas fa-minus"></i> Deduct balance</button>
+            </div>
+          </div>
+          <h3 style="margin: 1.5rem 0 0.75rem;">Current member balances</h3>
+          <div id="walletBalancesList">
+            <p style="color: #94a3b8; text-align: center;">Loading member balances...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Maintenance Mode Section -->
+      <section id="maintenance" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-tools"></i> Maintenance Mode</h2>
+          <p style="color: #94a3b8;">When enabled, members will see a maintenance notice and can only submit support tickets or view ticket status.</p>
+
+          <div style="margin-top: 1rem; display: flex; align-items: center; gap: 1rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem;">
+              <input type="checkbox" id="maintenanceEnabled">
+              <span>Enable Maintenance</span>
+            </label>
+            <button id="saveMaintenanceBtn" class="btn-secondary" style="background: #3b82f6; color: white;">Save</button>
+          </div>
+
+          <div style="margin-top: 1rem;">
+            <label for="maintenanceMessage">Message shown to members</label>
+            <textarea id="maintenanceMessage" rows="4" style="width: 100%; margin-top: 0.5rem;" placeholder="E.g. We're performing maintenance. You can submit a support ticket or view ticket status."></textarea>
+          </div>
+
+          <div id="maintenanceStatus" style="margin-top: 1rem; color: #94a3b8;"></div>
+        </div>
+      </section>
+      
+      <!-- Progress Report Section -->
+      <section id="progress-report" class="content-section">
+        <div class="card">
+          <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 1rem;">
+            <h2 style="margin: 0;"><i class="fas fa-chart-line"></i> My Collab Progress Report</h2>
+            <button type="button" id="addProgressSectionButton" class="btn-secondary" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; border-radius: 0.5rem;">
+              <i class="fas fa-plus"></i> Add Section
+            </button>
+          </div>
+          <div id="progressReportPanel">
+            <p style="color: #94a3b8; text-align: center;">No progress report created as of the moment.</p>
+          </div>
+          <button type="button" onclick="saveProgressReport()" class="btn-success" style="margin-top: 1rem;"><i class="fas fa-save"></i> Save Progress</button>
+        </div>
+      </section>
+      
+      <!-- Task Analytics Section -->
+      <section id="task-analytics" class="content-section">
+        <div class="card analytics-card">
+          <h2><i class="fas fa-chart-bar"></i> Task Analytics</h2>
+          <div class="analytics-list-container" style="display: flex; flex-direction: column; gap: 1rem; padding-top: 1rem;">
+            <div id="taskAnalyticsList" class="analytics-list" style="display: grid; gap: 1rem;"></div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- All Tasks Section -->
+      <section id="all-tasks" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-clipboard-list"></i> All Tasks</h2>
+          <div id="tasks"></div>
+        </div>
+      </section>
+
+      <!-- Video Conference Section -->
+      <section id="video-conference" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-video"></i> Video Conference</h2>
+
+          <!-- Admin schedule form -->
+          <div id="admin-schedule-panel" style="margin-bottom: 2rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #1e293b;">
+            <h3 style="margin-bottom: 1rem; color: #f8fafc;">Schedule a Meeting</h3>
+            <form id="adminMeetingForm" style="display: flex; flex-direction: column; gap: 1rem;">
+              <input type="text" id="adminMeetingTitle" placeholder="Meeting Title" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc;">
+              <div style="display: flex; gap: 1rem;">
+                <input type="date" id="adminMeetingDate" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc; flex: 1;">
+                <input type="time" id="adminMeetingTime" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc; flex: 1;">
+              </div>
+              <button type="submit" style="padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">Schedule Meeting</button>
+            </form>
+          </div>
+
+                  <div style="margin-bottom: 2rem; text-align: center;">
+            <button onclick="startInstantMeeting()" style="padding: 0.75rem 1.5rem; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem;">
+              <i class="fas fa-bolt"></i> Start Instant Meeting
+            </button>
+          </div>
+
+          <!-- Scheduled Meetings List -->
+          <div id="adminMeetingsList" style="margin-bottom: 2rem;">
+            <h3 style="margin-bottom: 1rem; color: #f8fafc;">Scheduled Meetings</h3>
+            <div id="adminMeetingsContainer"></div>
+          </div>
+
+          <div id="jaas-container" style="height: 600px; border-radius: 8px; overflow: hidden; border: 1px solid #374151;"></div>
+        </div>
+      </section>
+
+      <!-- Live Chat Section -->
+      <section id="live-chat" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-comments"></i> Live Chat</h2>
+          <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #0f172a;">
+            <form id="adminCreateChatForm" style="display: flex; gap: 0.75rem; align-items: center; justify-content: flex-start;">
+              <button type="submit" style="padding: 0.75rem 1.25rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer;">Create Chat Room</button>
+            </form>
+          </div>
+
+          <div id="adminChatRoomsList" style="margin-bottom: 2rem;">
+            <h3 style="margin-bottom: 0.75rem; color: #f8fafc;">Chat Rooms</h3>
+            <div id="adminChatRoomsContainer"></div>
+          </div>
+
+          <div id="adminChatRoomPanel" style="display: none; width: 100%; box-sizing: border-box; overflow: hidden;">
+            <div style="width: 100%; display: flex; flex-direction: column;">
+              <div style="display: flex; justify-content: flex-start; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                <button onclick="closeAdminChatPanel()" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(96, 165, 250, 0.12); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">
+                  ←
+                </button>
+                <div>
+                  <h3 id="adminActiveChatTitle" style="margin: 0; color: #f8fafc;"></h3>
+                  <p id="adminActiveChatMeta" style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.9rem;"></p>
+                </div>
+              </div>
+              <div id="adminChatMessages" style="flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 1rem; padding-right: 0.5rem; border: 1px solid #374151; border-radius: 12px; padding: 1rem; background: #020617;"></div>
+              <div id="adminChatReplyPreview" style="display: none; margin-bottom: 0.75rem; padding: 0.85rem 1rem; border-radius: 14px; border: 1px solid #374151; background: #111827; color: #e5e7eb;"></div>
+              <form id="adminChatMessageForm" style="display: flex; gap: 0.5rem; align-items: stretch; position: relative; flex-wrap: wrap;">
+                <div style="flex: 1 1 auto; min-width: 0; position: relative;">
+                  <input id="adminChatMessageInput" type="text" placeholder="Write a message..." style="width: 100%; min-width: 0; padding: 1rem; border-radius: 9999px; border: 1px solid #374151; background: #020617; color: #f8fafc;">
+                  <div id="adminMentionDropdown" class="mention-dropdown"></div>
+                </div>
+                <button type="button" onclick="triggerAdminChatImageInput()" style="flex: 0 0 auto; width: auto; min-width: 56px; max-width: 56px; padding: 0 0.85rem; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 9999px; cursor: pointer;">📷</button>
+                <input id="adminChatImageInput" type="file" accept="image/*" style="display: none;" onchange="handleAdminChatImageInputChange(event)">
+                <button type="submit" style="flex: 0 0 auto; width: auto; min-width: 120px; max-width: 180px; padding: 0 1.25rem; background: #10b981; color: white; border: none; border-radius: 9999px; cursor: pointer;">Send</button>
+              </form>
+              <div id="adminChatImagePreview" style="display:none; margin-top: 0.75rem;"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<div id="taskAnalyticsModalOverlay" class="analytics-modal-overlay" onclick="hideMemberTaskDetails()">
+  <div class="analytics-modal" onclick="event.stopPropagation()">
+    <div class="analytics-modal-header">
+      <h3 style="margin: 0; color: #f8fafc;">Task Details</h3>
+      <button type="button" class="analytics-modal-close" onclick="hideMemberTaskDetails()">×</button>
+    </div>
+    <p id="taskAnalyticsDetailsMessage" style="color: #94a3b8; margin-top: 0.75rem;">Select a member to view pending, needs action, or overdue tasks.</p>
+    <div id="taskAnalyticsDetailsList" style="display: grid; gap: 0.75rem; margin-top: 0.75rem;"></div>
+  </div>
+</div>
+
+<script>
+// Navigation functions
+function showSection(sectionId) {
+  // Hide all sections
+  const sections = document.querySelectorAll('.content-section');
+  sections.forEach(section => section.classList.remove('active'));
+  
+  // Show selected section
+  const targetSection = document.getElementById(sectionId);
+  if (targetSection) {
+    targetSection.classList.add('active');
+  }
+  
+  // Update active nav button
+  const navButtons = document.querySelectorAll('.nav-btn');
+  navButtons.forEach(btn => btn.classList.remove('active'));
+  
+  // Find and activate the corresponding nav button
+  const activeBtn = document.querySelector(`[onclick="showSection('${sectionId}')"]`);
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+  }
+  
+  // Update page title
+  const titles = {
+    'create-task': '<i class="fas fa-plus"></i> Create Task',
+    'create-poll': '<i class="fas fa-poll"></i> Create Poll',
+    'create-announcement': '<i class="fas fa-bullhorn"></i> Create Announcement',
+    'create-resource': '<i class="fas fa-book"></i> Create Resource',
+    'manage-polls': '<i class="fas fa-poll"></i> Manage Polls',
+    'manage-announcements': '<i class="fas fa-bullhorn"></i> Manage Announcements',
+    'support-tickets': '<i class="fas fa-ticket-alt"></i> Support Tickets',
+    'maintenance': '<i class="fas fa-tools"></i> Maintenance Mode',
+    'manage-resources': '<i class="fas fa-book"></i> Manage Resources',
+    'manage-members': '<i class="fas fa-users-cog"></i> Manage Members',
+    'manage-wallet': '<i class="fas fa-wallet"></i> Member Wallets',
+    'progress-report': '<i class="fas fa-chart-line"></i> Progress Report',
+    'task-analytics': '<i class="fas fa-chart-bar"></i> Task Analytics',
+    'all-tasks': '<i class="fas fa-clipboard-list"></i> All Tasks',
+    'video-conference': '<i class="fas fa-video"></i> Video Conference',
+    'live-chat': '<i class="fas fa-comments"></i> Live Chat'
+  };
+  
+  const pageTitle = document.getElementById('page-title');
+  if (pageTitle && titles[sectionId]) {
+    pageTitle.innerHTML = titles[sectionId];
+  }
+
+  if (sectionId === 'live-chat') {
+    if (typeof loadLiveChatRooms === 'function') {
+      loadLiveChatRooms();
+    }
+  }
+  
+  // Trigger chart update when analytics is shown
+  if (sectionId === 'task-analytics') {
+    setTimeout(() => {
+      if (window.updateChart && window.lastMemberProgress !== undefined) {
+        window.updateChart(window.lastMemberProgress);
+      }
+    }, 50); // Faster response when switching tabs
+  }
+  
+  // Close mobile sidebar after selection
+  closeMobileSidebar();
+}
+
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.querySelector('.sidebar-overlay');
+  const appContainer = document.querySelector('.app-container');
+  const isOpen = sidebar.classList.toggle('open');
+  sidebar.classList.remove('collapsed');
+  appContainer.classList.toggle('has-open-sidebar', isOpen);
+  overlay.classList.toggle('show', isOpen && window.innerWidth <= 1024);
+}
+
+function toggleMobileSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.querySelector('.sidebar-overlay');
+  
+  const isOpen = sidebar.classList.toggle('open');
+  document.querySelector('.app-container').classList.toggle('has-open-sidebar', isOpen);
+  overlay.classList.toggle('show', isOpen);
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.querySelector('.sidebar-overlay');
+  
+  sidebar.classList.remove('open');
+  document.querySelector('.app-container').classList.remove('has-open-sidebar');
+  overlay.classList.remove('show');
+}
+</script>
+<script type="module">
+  import { requireAuth } from "./auth.js?v=7";
+  await requireAuth(['admin']);
+</script>
+<script type="module" src="admin.js?v=5"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+
+<script type="module">
+import { collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { db } from "./firebase.js";
+
+const members = [
+  { uid: "everyone", name: "Everyone" },
+  { uid: "kingfordnabor@gmail.com", name: "Kingford Nabor" },
+  { uid: "allancorral@gmail.com", name: "Allan Corral" },
+  { uid: "phricksborebor@gmail.com", name: "Phricks Borebor" },
+  { uid: "moezarperez@gmail.com", name: "Moezar Perez" },
+  { uid: "rogelioledda@gmail.com", name: "Rogelio Ledda" }
+];
+
+const JAASTOKEN_ROOM_PREFIX = 'vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/';
+const PROJECT_DISCUSSION_ROOM = 'ProjectDiscussion';
+let jaasApi = null;
+let currentMeetingId = null;
+
+function buildJaasRoomName(roomName) {
+  if (!roomName) return roomName;
+  return roomName.startsWith(JAASTOKEN_ROOM_PREFIX) ? roomName : `${JAASTOKEN_ROOM_PREFIX}${roomName}`;
+}
+
+function initializeJitsiConference(roomName = null) {
+  if (jaasApi) {
+    jaasApi.dispose();
+  }
+
+  const container = document.querySelector('#jaas-container');
+  if (!container) return;
+
+  const room = buildJaasRoomName(roomName || PROJECT_DISCUSSION_ROOM);
+
+  const apiOptions = {
+    roomName: room,
+    parentNode: container,
+    width: '100%',
+    height: '100%',
+    configOverwrite: {
+      prejoinPageEnabled: false,
+      disableDeepLinking: true,
+      startWithAudioMuted: true,
+      startWithVideoMuted: true,
+      disableInitialGUM: true, // Prevent automatic media access to avoid autoplay errors
+      enableClosePage: false,
+      disableThirdPartyRequests: false,
+      analytics: {
+        disabled: true
+      }
+    },
+    interfaceConfigOverwrite: {
+      TOOLBAR_BUTTONS: [
+        'microphone', 'camera', 'desktop', 'fullscreen',
+        'hangup', 'profile', 'chat', 'settings',
+        'raisehand', 'videoquality', 'filmstrip',
+        'tileview', 'help'
+      ],
+      DISABLE_VIDEO_BACKGROUND: true,
+      HIDE_INVITE_MORE_HEADER: true
+    }
+  };
+
+  jaasApi = new JitsiMeetExternalAPI("8x8.vc", apiOptions);
+
+  // Add error handling for Jitsi
+  jaasApi.addEventListener('errorOccurred', (error) => {
+    console.error('Jitsi conference error:', error);
+  });
+
+  jaasApi.addEventListener('readyToClose', async () => {
+    if (jaasApi) {
+      jaasApi.dispose();
+      jaasApi = null;
+    }
+
+    if (currentMeetingId) {
+      try {
+        await endAdminMeeting(currentMeetingId);
+      } catch (error) {
+        console.error('Failed to end meeting on close:', error);
+      }
+      currentMeetingId = null;
+    }
+
+    // Reload the page to ensure fresh state when conference ends
+    window.location.reload();
+  });
+}
+
+function startMeeting(meetingId, roomName) {
+  currentMeetingId = meetingId || null;
+  const schedulePanel = document.getElementById('admin-schedule-panel');
+  const meetingsList = document.getElementById('adminMeetingsList');
+  const container = document.getElementById('jaas-container');
+
+  if (schedulePanel) schedulePanel.style.display = 'none';
+  if (meetingsList) meetingsList.style.display = 'none';
+  if (container) container.style.display = 'block';
+
+  initializeJitsiConference(roomName);
+}
+
+let adminMeetingsUnsubscribe = null;
+
+async function saveAdminMeeting(meeting) {
+  const docRef = await addDoc(collection(db, 'meetings'), meeting);
+  return docRef;
+}
+
+function loadAdminMeetings() {
+  if (adminMeetingsUnsubscribe) {
+    adminMeetingsUnsubscribe();
+  }
+
+  adminMeetingsUnsubscribe = onSnapshot(collection(db, 'meetings'), (snapshot) => {
+    const meetings = [];
+    snapshot.forEach(docSnap => {
+      meetings.push({ id: docSnap.id, ...docSnap.data() });
+    });
+
+    meetings.sort((a, b) => {
+      const aDate = new Date(`${a.date}T${a.time}`);
+      const bDate = new Date(`${b.date}T${b.time}`);
+      return aDate - bDate;
+    });
+
+    renderAdminMeetings(meetings);
+  }, (error) => {
+    console.error('Admin meetings listener error:', error);
+  });
+}
+
+function renderAdminMeetings(meetings) {
+  const container = document.getElementById('adminMeetingsContainer');
+  if (!container) return;
+
+  if (meetings.length === 0) {
+    container.innerHTML = '<p style="color: #94a3b8; text-align: center;">No meetings scheduled yet.</p>';
+    return;
+  }
+
+  container.innerHTML = '';
+
+  meetings.forEach((meeting) => {
+    const meetingDiv = document.createElement('div');
+    meetingDiv.style.cssText = `
+      border: 1px solid #374151;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      background: #1e293b;
+    `;
+
+    const meetingDateTime = new Date(`${meeting.date}T${meeting.time}`);
+    const now = new Date();
+    const isUpcoming = meetingDateTime > now;
+    const isToday = meetingDateTime.toDateString() === now.toDateString();
+    const isOngoing = isToday && meetingDateTime <= now && (now - meetingDateTime) < (2 * 60 * 60 * 1000);
+    const isFinished = !isUpcoming && !isOngoing;
+
+    const currentStatus = meeting.status || 'Active';
+    let statusColor = '#3b82f6';
+    let canJoin = false;
+
+    if (currentStatus === 'Completed') {
+      statusColor = '#6b7280';
+      canJoin = true;
+    } else if (currentStatus === 'Cancelled') {
+      statusColor = '#ef4444';
+    } else if (isOngoing) {
+      statusColor = '#10b981';
+      canJoin = true;
+    } else if (isFinished) {
+      statusColor = '#6b7280';
+      canJoin = true;
+    }
+
+    const showEndButton = currentStatus === 'Active';
+
+    meetingDiv.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+        <h4 style="margin: 0; color: #f8fafc;">${meeting.title}</h4>
+        <span style="background: ${statusColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem;">
+          ${currentStatus}
+        </span>
+      </div>
+      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.5rem;">
+        <i class="fas fa-calendar"></i> ${meetingDateTime.toLocaleDateString()} at ${meetingDateTime.toLocaleTimeString()}
+      </div>
+      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.5rem;">
+        <i class="fas fa-user"></i> Assigned to: ${members.find(m => m.uid === meeting.assignedTo)?.name || 'Unassigned'}
+      </div>
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button ${canJoin ? '' : 'disabled'} onclick="startMeeting('${meeting.id}', '${meeting.roomName}')" style="background: ${canJoin ? '#10b981' : '#6b7280'}; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: ${canJoin ? 'pointer' : 'not-allowed'}; font-size: 0.85rem;">
+          <i class="fas fa-sign-in-alt"></i> ${canJoin ? 'Join Meeting' : 'Not Started'}
+        </button>
+        ${showEndButton ? `<button onclick="endAdminMeeting('${meeting.id}')" style="background: #f59e0b; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; font-size: 0.85rem;"><i class="fas fa-stop-circle"></i> End Meeting</button>` : ''}
+        <button onclick="deleteAdminMeeting('${meeting.id}')" style="background: #dc2626; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; font-size: 0.85rem;">
+          <i class="fas fa-trash"></i> Delete
+        </button>
+      </div>
+    `;
+
+    container.appendChild(meetingDiv);
+  });
+}
+
+async function deleteAdminMeeting(meetingId) {
+  await deleteDoc(doc(db, 'meetings', meetingId));
+  loadAdminMeetings();
+}
+
+async function endAdminMeeting(meetingId) {
+  await updateDoc(doc(db, 'meetings', meetingId), {
+    status: 'Completed'
+  });
+}
+
+function initializeAdminMeetingForm() {
+  const meetingForm = document.getElementById('adminMeetingForm');
+  if (!meetingForm || meetingForm.dataset.isBound) return;
+
+  meetingForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const title = document.getElementById('adminMeetingTitle').value;
+    const date = document.getElementById('adminMeetingDate').value;
+    const time = document.getElementById('adminMeetingTime').value;
+    const assignedTo = 'everyone';
+    const roomName = buildJaasRoomName(PROJECT_DISCUSSION_ROOM);
+
+    const meeting = {
+      title,
+      date,
+      time,
+      assignedTo,
+      roomName,
+      type: 'scheduled',
+      status: 'Active',
+      emailNotificationSent: false,
+      createdAt: Date.now()
+    };
+
+    const docRef = await saveAdminMeeting(meeting);
+    loadAdminMeetings();
+    meetingForm.reset();
+
+    // Send notification emails to all members
+    try {
+      const memberEmails = [
+        'kingfordnabor@gmail.com',
+        'allancorral@gmail.com',
+        'phricksborebor@gmail.com',
+        'moezarperez@gmail.com',
+        'rogelioledda@gmail.com'
+      ];
+
+      for (const email of memberEmails) {
+        const member = members.find(m => m.uid === email);
+        const name = member ? member.name : email;
+
+        // Trigger email via server
+        await fetch('https://mytaskprofessional-jpteams.vercel.app/api/trigger-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email,
+            name,
+            type: 'meeting',
+            title,
+            meetingDate: date,
+            meetingTime: time
+          })
+        });
+      }
+    } catch (error) {
+      console.error('Failed to send meeting notifications:', error);
+    }
+  });
+
+  meetingForm.dataset.isBound = 'true';
+}
+
+async function startInstantMeeting() {
+  const now = new Date();
+  const roomName = buildJaasRoomName(PROJECT_DISCUSSION_ROOM);
+  const meeting = {
+    title: 'Instant Meeting',
+    date: now.toISOString().slice(0, 10),
+    time: now.toTimeString().slice(0, 5),
+    assignedTo: 'everyone',
+    roomName,
+    type: 'instant',
+    status: 'Active',
+    emailNotificationSent: false,
+    createdAt: Date.now()
+  };
+
+  const docRef = await saveAdminMeeting(meeting);
+  currentMeetingId = docRef.id;
+
+  // Send notification emails to all members
+  try {
+    const memberEmails = [
+      'kingfordnabor@gmail.com',
+      'allancorral@gmail.com',
+      'phricksborebor@gmail.com',
+      'moezarperez@gmail.com',
+      'rogelioledda@gmail.com'
+    ];
+
+    for (const email of memberEmails) {
+      const member = members.find(m => m.uid === email);
+      const name = member ? member.name : email;
+
+      // Trigger email via server
+      await fetch('https://mytaskprofessional-jpteams.vercel.app/api/trigger-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email,
+          name,
+          type: 'meeting',
+          title: meeting.title,
+          meetingDate: meeting.date,
+          meetingTime: meeting.time
+        })
+      });
+    }
+  } catch (error) {
+    console.error('Failed to send instant meeting notifications:', error);
+  }
+
+  startMeeting(docRef.id, roomName);
+}
+
+window.loadMeetings = loadMeetings;
+window.initializeAdminMeetingForm = initializeAdminMeetingForm;
+window.startMeeting = startMeeting;
+window.startInstantMeeting = startInstantMeeting;
+window.deleteAdminMeeting = deleteAdminMeeting;
+window.updateMeetingStatus = updateMeetingStatus;
+window.deleteMeeting = deleteMeeting;
+window.joinMeeting = joinMeeting;
+
+if (document.readyState !== 'loading') {
+  loadMeetings();
+} else {
+  document.addEventListener('DOMContentLoaded', loadMeetings);
+}
+
+const startInstantMeetingBtn = document.getElementById('startInstantMeetingBtn');
+if (startInstantMeetingBtn) {
+  startInstantMeetingBtn.disabled = false;
+  startInstantMeetingBtn.addEventListener('click', () => {
+    if (typeof window.startInstantMeeting === 'function') {
+      window.startInstantMeeting();
+    } else {
+      alert('Meeting system is still loading. Please try again in a moment.');
+    }
+  });
+}
+
+// Ensure scheduled meeting form is initialized on page load
+if (document.readyState !== 'loading') {
+  initializeAdminMeetingForm();
+} else {
+  document.addEventListener('DOMContentLoaded', initializeAdminMeetingForm);
+}
+
+
+async function updateMeetingStatus(meetingId) {
+  const statusSelect = document.getElementById(`status-${meetingId}`);
+  const newStatus = statusSelect.value;
+  
+  await updateDoc(doc(db, 'meetings', meetingId), {
+    status: newStatus
+  });
+  
+  // Status will be updated via onSnapshot listener
+}
+
+async function deleteMeeting(meetingId) {
+  if (confirm('Are you sure you want to delete this meeting?')) {
+    await deleteDoc(doc(db, 'meetings', meetingId));
+    // Meeting will be removed via onSnapshot listener
+  }
+}
+
+function joinMeeting(roomName) {
+  startMeeting(roomName);
+}
+
+function loadMeetings() {
+  loadAdminMeetings();
+}
+
+function renderMeetings(meetings) {
+  renderAdminMeetings(meetings);
+}
+
+// Initialize Jitsi when video conference section becomes active
+function showSection(sectionId) {
+  if (document.body.classList.contains('admin-loading')) {
+    return;
+  }
+
+  if (typeof window.hasValidAdminRole === 'function' && typeof adminRole !== 'undefined' && !window.hasValidAdminRole(adminRole)) {
+    return;
+  }
+
+  // Hide all sections
+  const sections = document.querySelectorAll('.content-section');
+  sections.forEach(section => section.classList.remove('active'));
+  
+  // Show selected section
+  const targetSection = document.getElementById(sectionId);
+  if (targetSection) {
+    targetSection.classList.add('active');
+    
+    // Initialize Jitsi conference when video conference section is shown
+    if (sectionId === 'video-conference') {
+      loadMeetings();
+      initializeAdminMeetingForm();
+      setTimeout(initializeJitsiConference, 100);
+    }
+  }
+  
+  // Update active nav button
+  const navButtons = document.querySelectorAll('.nav-btn');
+  navButtons.forEach(btn => btn.classList.remove('active'));
+  
+  // Find and activate the corresponding nav button
+  const activeBtn = document.querySelector(`[onclick="showSection('${sectionId}')"]`);
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+  }
+
+  localStorage.setItem('adminSelectedSection', sectionId);
+  
+  // Update page title
+  const titles = {
+    'create-task': '<i class="fas fa-plus"></i> Create Task',
+    'create-poll': '<i class="fas fa-poll"></i> Create Poll',
+    'create-announcement': '<i class="fas fa-bullhorn"></i> Create Announcement',
+    'create-in-app-notification': '<i class="fas fa-bell"></i> In-App Notification',
+    'create-resource': '<i class="fas fa-book"></i> Create Resource',
+    'manage-in-app-notifications': '<i class="fas fa-bell"></i> Manage Notices',
+    'manage-polls': '<i class="fas fa-poll"></i> Manage Polls',
+    'manage-announcements': '<i class="fas fa-bullhorn"></i> Manage Announcements',
+    'support-tickets': '<i class="fas fa-ticket-alt"></i> Support Tickets',
+    'manage-resources': '<i class="fas fa-book"></i> Manage Resources',
+    'progress-report': '<i class="fas fa-chart-line"></i> Progress Report',
+    'task-analytics': '<i class="fas fa-chart-bar"></i> Task Analytics',
+    'all-tasks': '<i class="fas fa-clipboard-list"></i> All Tasks',
+    'video-conference': '<i class="fas fa-video"></i> Video Conference',
+    'live-chat': '<i class="fas fa-comments"></i> Live Chat'
+  };
+  
+  const pageTitle = document.getElementById('page-title');
+  if (pageTitle && titles[sectionId]) {
+    pageTitle.innerHTML = titles[sectionId];
+  }
+  
+  // Trigger chart update when analytics is shown
+  if (sectionId === 'task-analytics') {
+    setTimeout(() => {
+      if (window.updateChart && window.lastMemberProgress !== undefined) {
+        window.updateChart(window.lastMemberProgress);
+      }
+    }, 50); // Faster response when switching tabs
+  }
+  if (sectionId === 'live-chat') {
+    if (typeof loadLiveChatRooms === 'function') {
+      loadLiveChatRooms();
+    }
+  }
+  
+  // Close mobile sidebar after selection
+  closeMobileSidebar();
+}
+</script>
+
+<script type="module" src="update-manager.js"></script>
+</body>
+</html>
