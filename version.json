@@ -1,0 +1,10 @@
+{
+  "version": "1.1.20",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.20/",
+  "required": true,
+  "releaseNotes": [
+    "Render newly submitted member tickets immediately despite delayed Firestore snapshots.",
+    "Fix mobile ticket-history refresh and overlay rendering.",
+    "Prevent the empty ticket message from appearing when ticket history is available."
+  ]
+}
