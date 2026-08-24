@@ -1033,7 +1033,7 @@ window.openMaintenanceOverlaySection = function(sectionId) {
     actionTitle.textContent = 'View Ticket Status';
     actionContent.innerHTML = `
       <div style="margin-bottom:1rem;">
-        <button type="button" onclick="loadTicketHistory('maintenanceTicketHistory', 'maintenanceTicketHistoryEmptyState')" style="background:#3b82f6; color:white; border:none; padding:0.75rem 1.25rem; border-radius:0.75rem; cursor:pointer;">Refresh Tickets</button>
+        <button type="button" onclick="loadTicketHistory('maintenanceTicketHistory', 'maintenanceTicketHistoryEmptyState', true)" style="background:#3b82f6; color:white; border:none; padding:0.75rem 1.25rem; border-radius:0.75rem; cursor:pointer;">Refresh Tickets</button>
       </div>
       <div id="maintenanceTicketHistory"></div>
       <p id="maintenanceTicketHistoryEmptyState" style="text-align:center; color:#cbd5e1; padding:2rem;">No ticket history yet. Submit a ticket above and check back for updates.</p>

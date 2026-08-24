@@ -33,6 +33,8 @@ let surveyGateUnsubscribe = null;
 let memberStatusUnsubscribe = null;
 let memberRosterUnsubscribe = null;
 let memberStatusDocs = {};
+let latestTicketSnapshotDocs = null;
+let ticketHistoryTarget = { containerId: 'ticketHistory', emptyStateId: 'ticketHistoryEmptyState' };
 let previousTaskMap = new Map();
 let previousPollMap = new Map();
 let previousAnnouncementMap = new Map();
@@ -4251,7 +4253,7 @@ function ensureTicketHistorySection() {
   ticketCard.innerHTML = `
     <h2 style="margin-bottom: 1rem;">🎟️ Ticket History</h2>
     <div style="margin-bottom: 1rem;">
-      <button onclick="loadTicketHistory()" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">Refresh Tickets</button>
+      <button onclick="loadTicketHistory('ticketHistory', 'ticketHistoryEmptyState', true)" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">Refresh Tickets</button>
     </div>
     <div id="ticketHistory"></div>
     <p id="ticketHistoryEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
@@ -4291,6 +4293,67 @@ function renderSubmittedTicketImmediately(ticketId, ticket) {
   if (emptyState) emptyState.style.display = 'none';
 }
 
+function renderTicketHistory(containerId, emptyStateId, docs) {
+  const container = document.getElementById(containerId);
+  const emptyState = document.getElementById(emptyStateId);
+  if (!container) return;
+
+  let ticketHtml = '';
+  let ticketCount = 0;
+  const currentEmail = normalizeEmail(userEmail);
+  const snapshotIds = new Set(docs.map(ticketDoc => ticketDoc.id));
+  const mergedDocs = [...docs];
+
+  optimisticTicketHistory.forEach((ticket, ticketId) => {
+    if (!snapshotIds.has(ticketId)) mergedDocs.push({ id: ticketId, data: () => ticket });
+  });
+
+  mergedDocs.sort((a, b) => {
+    const timeA = a.data().createdAt?.toMillis ? a.data().createdAt.toMillis() : (a.data().createdAt || 0);
+    const timeB = b.data().createdAt?.toMillis ? b.data().createdAt.toMillis() : (b.data().createdAt || 0);
+    return timeB - timeA;
+  });
+
+  mergedDocs.forEach(ticketDoc => {
+    const ticket = ticketDoc.data();
+    if (!ticketMatchesMember(ticket, currentEmail)) return;
+
+    const previousTicket = previousTicketMap.get(ticketDoc.id);
+    ticketCount++;
+    if (ticketNotificationsInitialized && !previousTicket) {
+      const recipientEmail = ticket.assignedTo || ticket.submittedBy;
+      if (normalizeEmail(recipientEmail) === currentEmail) {
+        showAdminUpdateNotification('Ticket Created', `A new ticket has been created: "${ticket.title}"`);
+      }
+    }
+    previousTicketMap.set(ticketDoc.id, ticket);
+    const createdDate = ticket.createdAt?.toDate?.() ? ticket.createdAt.toDate().toLocaleDateString() : "Unknown date";
+    const status = ticket.status || "open";
+    const statusLabel = status === "pending validation" ? "Pending Validation" : status.charAt(0).toUpperCase() + status.slice(1);
+    const responses = Array.isArray(ticket.responses) ? ticket.responses : [];
+    const responseHtml = responses.length > 0 ?
+      responses.map(response => `
+        <div style="margin-bottom: 0.5rem; padding: 0.5rem; border: 1px solid #4b5563; border-radius: 0.25rem; background: #1f2937;">
+          <strong>${escapeHtml(response.author || 'Admin')}:</strong> <span style="white-space: pre-wrap; word-break: break-word;">${escapeHtml(response.content || '')}</span>
+        </div>
+      `).join('') : '<p style="color: #9ca3af; margin: 0;">No admin feedback yet.</p>';
+
+    ticketHtml += `
+      <div data-ticket-id="${escapeHtml(ticketDoc.id)}" style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.5rem; background: #1e293b;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <h4 style="margin: 0; color: #f3f4f6;">${escapeHtml(ticket.title || 'Support request')}</h4>
+          <span style="padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; font-weight: 600; background: ${status === 'open' ? '#ef4444' : status === 'pending validation' ? '#f59e0b' : '#10b981'}; color: white;">${escapeHtml(statusLabel)}</span>
+        </div>
+        <p style="margin: 0 0 0.5rem 0; color: #94a3b8; font-size: 0.8rem;">Assigned: ${createdDate}</p>
+        <p style="margin: 0 0 0.5rem 0; color: #d1d5db; white-space: pre-wrap; word-break: break-word;">${escapeHtml(ticket.description || '')}</p>
+        <div style="padding: 0.5rem; background: #0f172a; border-radius: 0.25rem;"><h5 style="margin: 0 0 0.5rem 0; color: #f3f4f6; font-size: 0.9rem;">Admin Feedback</h5>${responseHtml}</div>
+      </div>`;
+  });
+
+  container.innerHTML = ticketCount > 0 ? ticketHtml : '';
+  if (emptyState) emptyState.style.display = ticketCount > 0 ? 'none' : 'block';
+}
+
 function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticketHistoryEmptyState", forceRefresh = false) {
   console.log('=== loadTicketHistory CALLED - STARTING ===', containerId, emptyStateId);
 
@@ -4315,6 +4378,9 @@ function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticket
     return;
   }
 
+  ticketHistoryTarget = { containerId, emptyStateId };
+  if (latestTicketSnapshotDocs) renderTicketHistory(containerId, emptyStateId, latestTicketSnapshotDocs);
+
   if (forceRefresh && ticketHistoryUnsubscribe) {
     ticketHistoryUnsubscribe();
     ticketHistoryUnsubscribe = null;
@@ -4323,87 +4389,10 @@ function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticket
 
   if (emptyState) emptyState.style.display = "none";
   ticketHistoryUnsubscribe = onSnapshot(collection(db, "tickets"), (snapshot) => {
-        console.log('=== TICKETS SNAPSHOT RECEIVED ===');
-        console.log('Found', snapshot.size, 'tickets');
-      let ticketHtml = '';
-      let ticketCount = 0;
-
-      // Collect all tickets first
       const docs = [];
-      snapshot.forEach(doc => docs.push(doc));
-      const snapshotIds = new Set(docs.map(ticketDoc => ticketDoc.id));
-      optimisticTicketHistory.forEach((ticket, ticketId) => {
-        if (snapshotIds.has(ticketId)) {
-          optimisticTicketHistory.delete(ticketId);
-          return;
-        }
-        docs.push({ id: ticketId, data: () => ticket });
-      });
-      
-      // Sort by createdAt descending (newest first)
-      docs.sort((a, b) => {
-        const timeA = a.data().createdAt?.toMillis ? a.data().createdAt.toMillis() : (a.data().createdAt || 0);
-        const timeB = b.data().createdAt?.toMillis ? b.data().createdAt.toMillis() : (b.data().createdAt || 0);
-        return timeB - timeA;
-      });
-
-      docs.forEach(doc => {
-        const ticket = doc.data();
-        console.log('Processing ticket:', ticket);
-
-        const currentEmail = normalizeEmail(userEmail);
-        if (!ticketMatchesMember(ticket, currentEmail)) {
-          console.log('Skipping ticket - not submitted by or assigned to current user');
-          return;
-        }
-
-        const previousTicket = previousTicketMap.get(doc.id);
-        ticketCount++;
-
-        if (ticketNotificationsInitialized && !previousTicket) {
-          const recipientEmail = ticket.assignedTo || ticket.submittedBy;
-          const shouldNotify = normalizeEmail(recipientEmail) === normalizeEmail(userEmail);
-          if (shouldNotify) {
-            showAdminUpdateNotification('Ticket Created', `A new ticket has been created: "${ticket.title}"`);
-          }
-        }
-        previousTicketMap.set(doc.id, ticket);
-
-        const createdDate = ticket.createdAt?.toDate?.() ? ticket.createdAt.toDate().toLocaleDateString() : "Unknown date";
-        const status = ticket.status || "open";
-        const statusLabel = status === "pending validation" ? "Pending Validation" : status.charAt(0).toUpperCase() + status.slice(1);
-
-        const responses = Array.isArray(ticket.responses) ? ticket.responses : [];
-        const responseHtml = responses.length > 0 ?
-          responses.map(response => `
-            <div style="margin-bottom: 0.5rem; padding: 0.5rem; border: 1px solid #4b5563; border-radius: 0.25rem; background: #1f2937;">
-              <strong>${response.author || 'Admin'}:</strong> <span style="white-space: pre-wrap; word-break: break-word;">${response.content}</span>
-            </div>
-          `).join('') : '<p style="color: #9ca3af; margin: 0;">No admin feedback yet.</p>';
-
-        ticketHtml += `
-          <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.5rem; background: #1e293b;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-              <h4 style="margin: 0; color: #f3f4f6;">${ticket.title}</h4>
-              <span style="padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; font-weight: 600; background: ${status === 'open' ? '#ef4444' : status === 'pending validation' ? '#f59e0b' : '#10b981'}; color: white;">${statusLabel}</span>
-            </div>
-            <p style="margin: 0 0 0.5rem 0; color: #94a3b8; font-size: 0.8rem;">Assigned: ${createdDate}</p>
-            <p style="margin: 0 0 0.5rem 0; color: #d1d5db; white-space: pre-wrap; word-break: break-word;">${ticket.description}</p>
-            <div style="padding: 0.5rem; background: #0f172a; border-radius: 0.25rem;">
-              <h5 style="margin: 0 0 0.5rem 0; color: #f3f4f6; font-size: 0.9rem;">Admin Feedback</h5>
-              ${responseHtml}
-            </div>
-          </div>
-        `;
-      });
-
-      if (ticketCount > 0) {
-        container.innerHTML = ticketHtml;
-      } else {
-        // Keep the static message if no tickets
-        container.innerHTML = '<div style="padding: 1rem; border: 1px solid #374151; border-radius: 0.5rem; background: #1e293b; margin-bottom: 1rem;"><h4 style="margin: 0 0 0.5rem 0; color: #f3f4f6;">Ticket History Section</h4><p style="margin: 0; color: #d1d5db;">No tickets found.</p></div>';
-      }
-      if (emptyState) emptyState.style.display = ticketCount > 0 ? "none" : "block";
+      snapshot.forEach(ticketDoc => docs.push(ticketDoc));
+      latestTicketSnapshotDocs = docs;
+      renderTicketHistory(ticketHistoryTarget.containerId, ticketHistoryTarget.emptyStateId, docs);
       ticketNotificationsInitialized = true;
     }, (error) => {
       console.error('Error loading tickets:', error);
