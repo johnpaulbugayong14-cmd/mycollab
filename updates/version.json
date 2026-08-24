@@ -1,10 +1,10 @@
 {
-  "version": "1.1.23",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.23/",
+  "version": "1.1.24",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.24/",
   "required": true,
   "releaseNotes": [
-    "Use Firestore real-time updates as the single ticket-history source.",
-    "Prevent stale polling responses from overwriting newer ticket updates.",
-    "Reconnect ticket history automatically when the real-time listener disconnects."
+    "Render ticket updates in both standard and mobile history sections.",
+    "Show newly submitted mobile tickets immediately without reopening the app.",
+    "Keep ticket history synchronized through the Firestore real-time listener."
   ]
 }
