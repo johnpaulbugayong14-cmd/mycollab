@@ -1,10 +1,10 @@
 {
-  "version": "1.1.21",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.21/",
+  "version": "1.1.22",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.22/",
   "required": true,
   "releaseNotes": [
+    "Prevent a false ticket submission failure after successful creation.",
     "Refresh member ticket history every second for immediate mobile updates.",
-    "Render newly submitted tickets immediately without restarting the app.",
     "Fix mobile ticket-history refresh and empty-state rendering."
   ]
 }
