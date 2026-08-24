@@ -2658,10 +2658,18 @@ window.submitTicket = async function () {
     if (titleElement) titleElement.value = "";
     if (descriptionElement) descriptionElement.value = "";
 
-    loadTicketHistory();
-    alert("✅ Ticket submitted successfully! The admin will review it soon." + 
-          (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 
-           "\n\n📱 Note: Push notifications are disabled in local development." : ""));
+    loadTicketHistory('ticketHistory', 'ticketHistoryEmptyState', true);
+    const form = titleElement?.closest('form');
+    let submissionMessage = document.getElementById('ticketSubmissionMessage');
+    if (!submissionMessage && form) {
+      submissionMessage = document.createElement('p');
+      submissionMessage.id = 'ticketSubmissionMessage';
+      submissionMessage.style.cssText = 'margin:0.75rem 0 0; color:#86efac;';
+      form.appendChild(submissionMessage);
+    }
+    if (submissionMessage) {
+      submissionMessage.textContent = 'Ticket submitted successfully. It now appears in Ticket History.';
+    }
   } catch (error) {
     console.error("Error submitting ticket:", error);
     alert("Failed to submit ticket. Please try again.");
@@ -4246,7 +4254,7 @@ function ensureTicketHistorySection() {
   }
 }
 
-function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticketHistoryEmptyState") {
+function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticketHistoryEmptyState", forceRefresh = false) {
   console.log('=== loadTicketHistory CALLED - STARTING ===', containerId, emptyStateId);
 
   const container = document.getElementById(containerId);
@@ -4270,6 +4278,10 @@ function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticket
     return;
   }
 
+  if (forceRefresh && ticketHistoryUnsubscribe) {
+    ticketHistoryUnsubscribe();
+    ticketHistoryUnsubscribe = null;
+  }
   if (ticketHistoryUnsubscribe) return;
 
   if (emptyState) emptyState.style.display = "none";
