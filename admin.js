@@ -86,7 +86,10 @@ import {
   getDocs,
   arrayUnion,
   query,
-  orderBy
+  orderBy,
+  runTransaction,
+  serverTimestamp,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 import { db } from "./firebase.js";
@@ -300,6 +303,7 @@ const adminRoleAllowedSections = {
     'maintenance',
     'manage-resources',
     'manage-members',
+    'manage-wallet',
     'progress-report',
     'task-analytics',
     'all-tasks',
@@ -882,6 +886,105 @@ function loadMembers() {
   }
 }
 
+function loadWalletMembers() {
+  const container = document.getElementById('walletMember');
+  if (!container) return;
+  const walletMembers = members.filter(member => member.uid !== 'everyone' && !isHiddenMember(member));
+  container.innerHTML = walletMembers.length
+    ? walletMembers.map(member => `<label class="wallet-member-option" style="gap:0.5rem; color:#f8fafc;"><input type="checkbox" value="${escapeHtml(member.uid)}" class="wallet-member-checkbox"><span>${escapeHtml(member.name)}<small style="display:block; color:#94a3b8;">${escapeHtml(member.uid)}</small></span></label>`).join('')
+    : '<span style="color:#94a3b8;">No members available</span>';
+}
+
+function renderWalletBalances() {
+  const container = document.getElementById('walletBalancesList');
+  if (!container) return;
+  const walletMembers = members.filter(member => member.uid !== 'everyone' && !isHiddenMember(member));
+  container.innerHTML = walletMembers.length
+    ? walletMembers.map(member => {
+      const balance = Number(member.walletBalance) || 0;
+      return `<div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:0.75rem 0; border-bottom:1px solid #374151;">
+        <span style="color:#f8fafc; overflow-wrap:anywhere;">${escapeHtml(member.name)}<small style="display:block; color:#94a3b8; margin-top:0.2rem;">${escapeHtml(member.uid)}</small></span>
+        <span style="text-align:right;"><strong style="color:${balance < 0 ? '#f87171' : '#4ade80'}; white-space:nowrap;">${balance.toFixed(2)}</strong><span style="display:flex; gap:0.35rem; margin-top:0.35rem;"><button type="button" data-email="${escapeHtml(member.uid)}" onclick="deleteWalletHistory(this.dataset.email)" style="background:transparent; color:#fca5a5; border:1px solid #7f1d1d; padding:0.25rem 0.45rem; border-radius:0.35rem; cursor:pointer; font-size:0.75rem;">Delete history</button><button type="button" data-email="${escapeHtml(member.uid)}" onclick="resetMemberWallet(this.dataset.email)" style="background:#7f1d1d; color:#fff; border:1px solid #991b1b; padding:0.25rem 0.45rem; border-radius:0.35rem; cursor:pointer; font-size:0.75rem;">Reset wallet</button></span></span>
+      </div>`;
+    }).join('')
+    : '<p style="color: #94a3b8; text-align: center;">No members available.</p>';
+}
+
+window.adjustMemberWallet = async function (type) {
+  const memberEmails = Array.from(document.querySelectorAll('.wallet-member-checkbox:checked'))
+    .map(input => normalizeEmail(input.value))
+    .filter(Boolean);
+  const amountInput = document.getElementById(type === 'credit' ? 'walletDepositAmount' : 'walletDeductionAmount');
+  const descriptionInput = document.getElementById('walletDescription');
+  const message = document.getElementById('walletAdjustmentMessage');
+  const amount = Number(amountInput?.value);
+  const description = descriptionInput?.value?.trim();
+
+  if (!memberEmails.length || !Number.isFinite(amount) || amount <= 0 || !description) {
+    if (message) { message.textContent = 'Choose at least one member, enter a positive amount, and provide a description.'; message.style.color = '#fca5a5'; }
+    return;
+  }
+
+  if (message) { message.textContent = 'Saving wallet adjustment...'; message.style.color = '#fbbf24'; }
+  try {
+    const signedAmount = type === 'credit' ? amount : -amount;
+    for (const memberEmail of memberEmails) {
+      const memberRef = doc(db, 'userRoles', memberEmail);
+      const transactionRef = doc(collection(db, 'userRoles', memberEmail, 'walletTransactions'));
+      await runTransaction(db, async (transaction) => {
+        const memberSnapshot = await transaction.get(memberRef);
+        const currentBalance = Number(memberSnapshot.data()?.walletBalance) || 0;
+        const nextBalance = currentBalance + signedAmount;
+        transaction.set(memberRef, { walletBalance: nextBalance, updatedAt: serverTimestamp() }, { merge: true });
+        transaction.set(transactionRef, { type, amount, description, performedBy: adminEmail || 'Administrator', createdAt: serverTimestamp(), balanceAfter: nextBalance });
+      });
+    }
+    if (message) { message.textContent = `${type === 'credit' ? 'Deposit credited' : 'Balance deducted'} for ${memberEmails.length} member${memberEmails.length === 1 ? '' : 's'}.`; message.style.color = '#86efac'; }
+    if (amountInput) amountInput.value = '';
+    if (descriptionInput) descriptionInput.value = '';
+  } catch (error) {
+    console.error('Wallet adjustment failed:', error);
+    if (message) { message.textContent = error.message || 'Unable to save wallet adjustment.'; message.style.color = '#fca5a5'; }
+  }
+};
+
+window.deleteWalletHistory = async function (memberEmail) {
+  const normalizedEmail = normalizeEmail(memberEmail);
+  if (!normalizedEmail || !confirm(`Delete all wallet transaction history for ${normalizedEmail}? The current balance will not change.`)) return;
+
+  try {
+    const snapshot = await getDocs(collection(db, 'userRoles', normalizedEmail, 'walletTransactions'));
+    for (let index = 0; index < snapshot.docs.length; index += 500) {
+      const batch = writeBatch(db);
+      snapshot.docs.slice(index, index + 500).forEach(transactionDoc => batch.delete(transactionDoc.ref));
+      await batch.commit();
+    }
+    alert(`Wallet transaction history deleted for ${normalizedEmail}.`);
+  } catch (error) {
+    console.error('Wallet history deletion failed:', error);
+    alert(`Failed to delete wallet history: ${error.message}`);
+  }
+};
+
+window.resetMemberWallet = async function (memberEmail) {
+  const normalizedEmail = normalizeEmail(memberEmail);
+  if (!normalizedEmail || !confirm(`Reset the wallet for ${normalizedEmail}? This deletes all transaction history and sets the balance to 0.00.`)) return;
+
+  try {
+    const historySnapshot = await getDocs(collection(db, 'userRoles', normalizedEmail, 'walletTransactions'));
+    for (let index = 0; index < historySnapshot.docs.length; index += 500) {
+      const batch = writeBatch(db);
+      historySnapshot.docs.slice(index, index + 500).forEach(transactionDoc => batch.delete(transactionDoc.ref));
+      await batch.commit();
+    }
+    await setDoc(doc(db, 'userRoles', normalizedEmail), { walletBalance: 0, updatedAt: serverTimestamp() }, { merge: true });
+    alert(`Wallet reset for ${normalizedEmail}.`);
+  } catch (error) {
+    console.error('Wallet reset failed:', error);
+    alert(`Failed to reset wallet: ${error.message}`);
+  }
+};
+
 function loadAnnouncementAssignTo() {
   const container = document.getElementById("announcementAssignTo");
   if (!container) return;
@@ -1134,6 +1237,7 @@ async function loadMemberRoles() {
       }
 
       if (typeof data.role === 'string' && data.role) member.role = data.role;
+      member.walletBalance = Number(data.walletBalance) || 0;
       member.accessAllowed = typeof data.accessAllowed === 'boolean' ? data.accessAllowed : member.accessAllowed;
       member.accessReason = typeof data.accessReason === 'string' ? data.accessReason : member.accessReason;
       member.lastActive = parseDateValue(data.lastActive) || member.lastActive;
@@ -1176,6 +1280,7 @@ function subscribeToMemberRoles() {
       }
 
       if (typeof data.role === 'string' && data.role) member.role = data.role;
+      member.walletBalance = Number(data.walletBalance) || 0;
       member.accessAllowed = typeof data.accessAllowed === 'boolean' ? data.accessAllowed : member.accessAllowed;
       member.accessReason = typeof data.accessReason === 'string' ? data.accessReason : member.accessReason;
       member.lastActive = parseDateValue(data.lastActive) || member.lastActive;
@@ -1184,10 +1289,12 @@ function subscribeToMemberRoles() {
     });
 
     loadMembers();
+    loadWalletMembers();
     loadAnnouncementAssignTo();
     loadSurveyAssignTo();
     loadInAppNotificationRecipients();
     renderMemberManagementPanel();
+    renderWalletBalances();
 
     if (document.getElementById('task-analytics')?.classList.contains('active')) {
       members
@@ -1434,6 +1541,7 @@ async function createMemberAccountFromAdmin() {
     if (passwordInput) passwordInput.value = '';
     await refreshMentionMembers();
     loadMembers();
+    loadWalletMembers();
     loadAnnouncementAssignTo();
     loadInAppNotificationRecipients();
     await loadMemberRoles();
@@ -1636,6 +1744,7 @@ window.deleteInAppNotification = async function (id) {
 
 // Only run loaders when their target elements are present to avoid null DOM errors
 if (document.getElementById('assignedTo')) loadMembers();
+if (document.getElementById('walletMember')) loadWalletMembers();
 if (document.getElementById('announcementAssignTo')) loadAnnouncementAssignTo();
 if (document.getElementById('surveyAssignTo')) {
   loadSurveyAssignTo();

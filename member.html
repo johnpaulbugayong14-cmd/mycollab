@@ -14,6 +14,9 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <link rel="stylesheet" href="style.css?v=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
   <style>
     @keyframes restrictedPulse {
@@ -267,7 +270,9 @@
       font-size: clamp(2rem, 3vw, 3rem);
       line-height: 1.2;
       color: #f8fafc;
-      letter-spacing: -0.04em;
+      font-family: 'Inter', sans-serif;
+      font-weight: 400;
+      letter-spacing: 0;
       word-break: break-word;
     }
     .home-flashcard {
@@ -415,6 +420,10 @@
         font-size: 0.8rem;
       }
     }
+    #memberWalletBalance.negative-wallet-balance {
+      color: #f87171 !important;
+      -webkit-text-fill-color: #f87171 !important;
+    }
   </style>
 </head>
 <body>
@@ -457,16 +466,16 @@
     <ul class="nav-list" id="member-nav-list">
       <li><button class="nav-btn active" onclick="showSection('home')"><i class="fas fa-house"></i> Home</button></li>
       <li><button class="nav-btn" onclick="showSection('my-tasks')"><i class="fas fa-clipboard-list"></i> My Tasks</button></li>
+      <li><button class="nav-btn" onclick="showSection('my-balance')"><i class="fas fa-wallet"></i> My Balance</button></li>
       <li><button class="nav-btn" onclick="showSection('ticket-history')"><i class="fas fa-ticket-alt"></i> Ticket History</button></li>
-      <li><button class="nav-btn" onclick="showSection('member-status')"><i class="fas fa-users"></i> Member Status</button></li>
       <li><button class="nav-btn" onclick="showSection('active-polls')"><i class="fas fa-chart-bar"></i> Active Polls</button></li>
       <li><button class="nav-btn" onclick="showSection('announcements')"><i class="fas fa-bullhorn"></i> Announcements</button></li>
       <li><button class="nav-btn" onclick="showSection('submit-ticket')"><i class="fas fa-headset"></i> Submit Ticket</button></li>
-      <li><button class="nav-btn" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
       <li><button class="nav-btn" onclick="showSection('live-chat')"><i class="fas fa-comments"></i> Live Chat</button></li>
+      <li><button class="nav-btn" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
       <li><button class="nav-btn" onclick="showSection('resources')"><i class="fas fa-book"></i> Resources</button></li>
       <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-file-alt"></i> Progress Report</button></li>
-      <li><button class="nav-btn" onclick="showSection('appearance')"><i class="fas fa-palette"></i> Appearance</button></li>
+      <li><button class="nav-btn" onclick="showSection('member-status')"><i class="fas fa-users"></i> Member Status</button></li>
     </ul>
   </nav>
 
@@ -509,6 +518,21 @@
         <div class="card home-dashboard">
           <h2 id="home-greeting" class="home-greeting">Hello there, Member!</h2>
           <div id="home-flashcard" class="home-flashcard" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <!-- My Balance Section -->
+      <section id="my-balance" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-wallet"></i> My Balance</h2>
+          <div style="margin: 1rem 0 1.5rem; padding: 1.25rem; border: 1px solid #2563eb; border-radius: 0.75rem; background: linear-gradient(135deg, #172554, #1e3a8a);">
+            <p style="margin: 0 0 0.35rem; color: #bfdbfe;">Available wallet balance</p>
+            <strong id="memberWalletBalance" style="font-size: 2rem; color: #fff;">0.00</strong>
+          </div>
+          <h3 style="margin-bottom: 0.75rem;">Transaction history</h3>
+          <div id="memberWalletHistory" aria-live="polite">
+            <p style="color: #94a3b8; text-align: center;">Loading transaction history...</p>
+          </div>
         </div>
       </section>
 
@@ -710,51 +734,6 @@
         </div>
       </section>
 
-      <!-- Appearance Section -->
-      <section id="appearance" class="content-section">
-        <div class="card">
-          <h2 style="margin-bottom: 1rem;"><i class="fas fa-palette"></i> Appearance</h2>
-          <p style="color: #94a3b8; margin-bottom: 1rem;">Design your interface colors. Changes sync to your account across devices.</p>
-          <div style="display: grid; gap: 1rem; max-width: 520px;">
-            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
-              <span>First color</span>
-              <input id="memberGradientStart" type="color" value="#0f172a" aria-label="First gradient color" style="width: 3.25rem; height: 2.25rem; padding: 0.15rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; cursor: pointer;">
-            </label>
-            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
-              <span>Second color</span>
-              <input id="memberGradientEnd" type="color" value="#1e293b" aria-label="Second gradient color" style="width: 3.25rem; height: 2.25rem; padding: 0.15rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; cursor: pointer;">
-            </label>
-            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
-              <span>Gradient direction</span>
-              <select id="memberGradientDirection" aria-label="Gradient direction" style="max-width: 220px; padding: 0.6rem 0.75rem; border: 1px solid #64748b; border-radius: 0.5rem; background: #0f172a; color: #f8fafc;">
-                <option value="135deg">Diagonal</option>
-                <option value="90deg">Left to right</option>
-                <option value="180deg">Top to bottom</option>
-                <option value="45deg">Soft diagonal</option>
-              </select>
-            </label>
-            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
-              <span>Sidebar color</span>
-              <input id="memberSidebarColor" type="color" value="#0f172a" aria-label="Sidebar color" style="width: 3.25rem; height: 2.25rem; padding: 0.15rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; cursor: pointer;">
-            </label>
-            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
-              <span>Header color</span>
-              <input id="memberHeaderColor" type="color" value="#0f172a" aria-label="Header color" style="width: 3.25rem; height: 2.25rem; padding: 0.15rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; cursor: pointer;">
-            </label>
-            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
-              <span>Card color</span>
-              <input id="memberCardColor" type="color" value="#1e293b" aria-label="Card color" style="width: 3.25rem; height: 2.25rem; padding: 0.15rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; cursor: pointer;">
-            </label>
-            <label style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #e2e8f0;">
-              <span>Accent color</span>
-              <input id="memberAccentColor" type="color" value="#3b82f6" aria-label="Accent color" style="width: 3.25rem; height: 2.25rem; padding: 0.15rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; cursor: pointer;">
-            </label>
-            <div id="memberGradientPreview" style="height: 96px; border-radius: 0.75rem; border: 1px solid rgba(148, 163, 184, 0.35); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);" aria-label="Gradient preview"></div>
-            <button type="button" onclick="resetMemberGradientTheme()" style="width: fit-content; padding: 0.65rem 0.9rem; border: 1px solid #64748b; border-radius: 0.5rem; background: transparent; color: #e2e8f0; cursor: pointer;"><i class="fas fa-rotate-left"></i> Reset gradient</button>
-          </div>
-        </div>
-      </section>
-
     </div>
     <div id="notificationBanner" class="notification-banner" style="display:none;"></div>
   </main>
@@ -771,18 +750,21 @@
 // Navigation functions
 function toggleSidebar() {
   const sidebar = document.querySelector('.sidebar');
-  sidebar.classList.toggle('collapsed');
-  
+  const overlay = document.querySelector('.sidebar-overlay');
   const appContainer = document.querySelector('.app-container');
-  appContainer.classList.toggle('has-collapsed-sidebar');
+  const isOpen = sidebar.classList.toggle('open');
+  sidebar.classList.remove('collapsed');
+  appContainer.classList.toggle('has-open-sidebar', isOpen);
+  overlay.classList.toggle('show', isOpen && window.innerWidth <= 1024);
 }
 
 function toggleMobileSidebar() {
   const sidebar = document.querySelector('.sidebar');
   const overlay = document.querySelector('.sidebar-overlay');
   
-  sidebar.classList.toggle('open');
-  overlay.classList.toggle('show');
+  const isOpen = sidebar.classList.toggle('open');
+  document.querySelector('.app-container').classList.toggle('has-open-sidebar', isOpen);
+  overlay.classList.toggle('show', isOpen);
 }
 
 function closeMobileSidebar() {
@@ -790,6 +772,7 @@ function closeMobileSidebar() {
   const overlay = document.querySelector('.sidebar-overlay');
   
   sidebar.classList.remove('open');
+  document.querySelector('.app-container').classList.remove('has-open-sidebar');
   overlay.classList.remove('show');
 }
 
@@ -825,17 +808,17 @@ function renderMemberNavigation(isRestricted) {
   navList.innerHTML = `
     <li><button class="nav-btn active" onclick="showSection('home')"><i class="fas fa-house"></i> Home</button></li>
     <li><button class="nav-btn" onclick="showSection('my-tasks')"><i class="fas fa-clipboard-list"></i> My Tasks</button></li>
+    <li><button class="nav-btn" onclick="showSection('my-balance')"><i class="fas fa-wallet"></i> My Balance</button></li>
     <li><button class="nav-btn" onclick="showSection('ticket-history')"><i class="fas fa-ticket-alt"></i> Ticket History</button></li>
-    <li><button class="nav-btn" onclick="showSection('member-status')"><i class="fas fa-users"></i> Member Status</button></li>
     <li><button class="nav-btn" onclick="showSection('active-polls')"><i class="fas fa-chart-bar"></i> Active Polls</button></li>
     <li><button class="nav-btn" onclick="showSection('announcements')"><i class="fas fa-bullhorn"></i> Announcements</button></li>
     <li><button class="nav-btn" onclick="showSection('submit-ticket')"><i class="fas fa-headset"></i> Submit Ticket</button></li>
-    <li><button class="nav-btn" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
     <li><button class="nav-btn" onclick="showSection('live-chat')"><i class="fas fa-comments"></i> Live Chat</button></li>
+    <li><button class="nav-btn" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
     ${limitedAdminNavigation}
     <li><button class="nav-btn" onclick="showSection('resources')"><i class="fas fa-book"></i> Resources</button></li>
     <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-file-alt"></i> Progress Report</button></li>
-    <li><button class="nav-btn" onclick="showSection('appearance')"><i class="fas fa-palette"></i> Appearance</button></li>
+    <li><button class="nav-btn" onclick="showSection('member-status')"><i class="fas fa-users"></i> Member Status</button></li>
   `;
   applyLimitedAdminNavigationVisibility();
   window.applyMemberThemeTextColors?.();
@@ -869,7 +852,7 @@ function renderMemberNavigation(isRestricted) {
 
   applyLimitedAdminNavigationVisibility();
 </script>
-<script type="module" src="member.js?v=7"></script>
+<script type="module" src="member.js?v=9"></script>
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js");
@@ -996,7 +979,6 @@ function showSection(sectionId) {
     'live-chat': '<i class="fas fa-comments"></i> Live Chat',
     'resources': '<i class="fas fa-book"></i> Resources',
     'progress-report': '<i class="fas fa-file-alt"></i> Progress Report',
-    'appearance': '<i class="fas fa-palette"></i> Appearance'
   };
 
   const pageTitle = document.getElementById('page-title');

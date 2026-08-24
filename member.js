@@ -24,6 +24,8 @@ let dismissedInAppNotificationIds = new Set(getDismissedInAppNotifications());
 let inAppNotificationQueue = [];
 let inAppNotificationDisplaying = false;
 let accessStatusUnsubscribe = null;
+let walletUnsubscribe = null;
+let walletTransactionsUnsubscribe = null;
 let memberGradientUnsubscribe = null;
 let surveyGateUnsubscribe = null;
 let memberStatusUnsubscribe = null;
@@ -2026,6 +2028,54 @@ function watchMemberAccessState() {
   });
 }
 
+function formatWalletDate(value) {
+  const date = value?.toDate ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Unknown date' : date.toLocaleString();
+}
+
+function renderWalletHistory(transactions) {
+  const history = document.getElementById('memberWalletHistory');
+  if (!history) return;
+  if (!transactions.length) {
+    history.innerHTML = '<p style="color: #94a3b8; text-align: center;">No transactions yet.</p>';
+    return;
+  }
+  history.innerHTML = transactions.map((transaction) => {
+    const amount = Number(transaction.amount) || 0;
+    const isCredit = transaction.type === 'credit';
+    return `<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; padding:0.85rem 0; border-bottom:1px solid #374151;">
+      <div><strong style="color:#f8fafc;">${escapeHtml(transaction.description || (isCredit ? 'Balance credited' : 'Balance deducted'))}</strong><div style="color:#94a3b8; font-size:0.85rem; margin-top:0.25rem;">${formatWalletDate(transaction.createdAt)}</div></div>
+      <strong style="color:${isCredit ? '#4ade80' : '#f87171'}; white-space:nowrap;">${isCredit ? '+' : '-'}${amount.toFixed(2)}</strong>
+    </div>`;
+  }).join('');
+}
+
+function watchMemberWallet() {
+  if (!userEmail) return;
+  walletUnsubscribe?.();
+  walletTransactionsUnsubscribe?.();
+  const normalizedEmail = normalizeEmail(userEmail);
+  walletUnsubscribe = onSnapshot(doc(db, 'userRoles', normalizedEmail), (snapshot) => {
+    const balance = Number(snapshot.data()?.walletBalance) || 0;
+    const balanceEl = document.getElementById('memberWalletBalance');
+    if (balanceEl) {
+      balanceEl.textContent = balance.toFixed(2);
+      const balanceColor = balance < 0 ? '#f87171' : '#fff';
+      balanceEl.classList.toggle('negative-wallet-balance', balance < 0);
+      balanceEl.style.setProperty('color', balanceColor, 'important');
+      balanceEl.style.setProperty('-webkit-text-fill-color', balanceColor, 'important');
+    }
+  }, (error) => console.warn('Unable to watch wallet balance:', error));
+  const transactionsQuery = query(collection(db, 'userRoles', normalizedEmail, 'walletTransactions'), orderBy('createdAt', 'desc'));
+  walletTransactionsUnsubscribe = onSnapshot(transactionsQuery, (snapshot) => {
+    renderWalletHistory(snapshot.docs.map(transactionDoc => ({ id: transactionDoc.id, ...transactionDoc.data() })));
+  }, (error) => {
+    console.warn('Unable to watch wallet history:', error);
+    const history = document.getElementById('memberWalletHistory');
+    if (history) history.innerHTML = '<p style="color:#f87171; text-align:center;">Unable to load transaction history.</p>';
+  });
+}
+
 async function updateMemberPresence(isOnline = true, options = {}) {
   if (!userEmail) return;
 
@@ -3923,6 +3973,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     initializeNotifications();
 
     watchMemberAccessState();
+    watchMemberWallet();
     startMemberPresenceHeartbeat();
     void refreshMentionMembers();
     subscribeToMemberRoster();

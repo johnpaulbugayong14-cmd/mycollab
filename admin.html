@@ -78,6 +78,26 @@
     body.admin-loading .content-section {
       display: none !important;
     }
+    #walletMember .wallet-member-option {
+      display: flex;
+      align-items: flex-start;
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      box-sizing: border-box;
+    }
+    #walletMember .wallet-member-option input[type="checkbox"] {
+      width: 1rem !important;
+      min-width: 1rem;
+      height: 1rem;
+      padding: 0 !important;
+      margin: 0.2rem 0 0;
+      flex: 0 0 1rem;
+    }
+    #walletMember .wallet-member-option span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
   </style>
   <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
 </head>
@@ -111,6 +131,7 @@
       <li><button class="nav-btn" onclick="showSection('maintenance')"><i class="fas fa-tools"></i> Maintenance</button></li>
       <li><button class="nav-btn" onclick="showSection('manage-resources')"><i class="fas fa-book"></i> Manage Resources</button></li>
       <li><button class="nav-btn" onclick="showSection('manage-members')"><i class="fas fa-users-cog"></i> Manage Members</button></li>
+      <li><button class="nav-btn" onclick="showSection('manage-wallet')"><i class="fas fa-wallet"></i> Member Wallets</button></li>
       <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-chart-line"></i> Progress Report</button></li>
       <li><button class="nav-btn" onclick="showSection('task-analytics')"><i class="fas fa-chart-bar"></i> Analytics</button></li>
       <li><button class="nav-btn" onclick="showSection('all-tasks')"><i class="fas fa-clipboard-list"></i> All Tasks</button></li>
@@ -443,6 +464,41 @@
         </div>
       </section>
 
+      <!-- Member Wallets Section -->
+      <section id="manage-wallet" class="content-section">
+        <div class="card">
+          <h2><i class="fas fa-wallet"></i> Member Wallets</h2>
+          <p style="color: #94a3b8; margin-bottom: 1rem;">Credit deposits or deduct disbursed amounts from a member wallet. Every adjustment is recorded in the member transaction history.</p>
+          <div style="padding: 1rem; border: 1px solid #374151; border-radius: 0.75rem; background: #0f172a;">
+            <div style="display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+              <div>
+                <label style="display: block; color: #cbd5e1; margin-bottom: 0.35rem;">Target members</label>
+                <div id="walletMember" style="display: grid; gap: 0.5rem; max-height: 12rem; overflow-y: auto; padding: 0.65rem; border: 1px solid #4b5563; border-radius: 0.5rem; background: #111827;"></div>
+              </div>
+              <div>
+                <label for="walletDepositAmount" style="display: block; color: #cbd5e1; margin-bottom: 0.35rem;">Deposit to be credited</label>
+                <input id="walletDepositAmount" type="number" min="0.01" step="0.01" placeholder="0.00" style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1px solid #4b5563; background: #0f172a; color: #f8fafc;" />
+              </div>
+              <div>
+                <label for="walletDeductionAmount" style="display: block; color: #cbd5e1; margin-bottom: 0.35rem;">Deduction to be disbursed</label>
+                <input id="walletDeductionAmount" type="number" min="0.01" step="0.01" placeholder="0.00" style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1px solid #4b5563; background: #0f172a; color: #f8fafc;" />
+              </div>
+            </div>
+            <label for="walletDescription" style="display: block; color: #cbd5e1; margin: 0.75rem 0 0.35rem;">Description</label>
+            <textarea id="walletDescription" rows="2" placeholder="Reason for this balance adjustment" style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1px solid #4b5563; background: #0f172a; color: #f8fafc;"></textarea>
+            <div id="walletAdjustmentMessage" style="margin-top: 0.75rem; color: #94a3b8;"></div>
+            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.75rem;">
+              <button type="button" onclick="adjustMemberWallet('credit')" class="btn-success"><i class="fas fa-plus"></i> Credit deposit</button>
+              <button type="button" onclick="adjustMemberWallet('debit')" style="background: #dc2626; color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer;"><i class="fas fa-minus"></i> Deduct balance</button>
+            </div>
+          </div>
+          <h3 style="margin: 1.5rem 0 0.75rem;">Current member balances</h3>
+          <div id="walletBalancesList">
+            <p style="color: #94a3b8; text-align: center;">Loading member balances...</p>
+          </div>
+        </div>
+      </section>
+
       <!-- Maintenance Mode Section -->
       <section id="maintenance" class="content-section">
         <div class="card">
@@ -627,6 +683,7 @@ function showSection(sectionId) {
     'maintenance': '<i class="fas fa-tools"></i> Maintenance Mode',
     'manage-resources': '<i class="fas fa-book"></i> Manage Resources',
     'manage-members': '<i class="fas fa-users-cog"></i> Manage Members',
+    'manage-wallet': '<i class="fas fa-wallet"></i> Member Wallets',
     'progress-report': '<i class="fas fa-chart-line"></i> Progress Report',
     'task-analytics': '<i class="fas fa-chart-bar"></i> Task Analytics',
     'all-tasks': '<i class="fas fa-clipboard-list"></i> All Tasks',
@@ -660,18 +717,21 @@ function showSection(sectionId) {
 
 function toggleSidebar() {
   const sidebar = document.querySelector('.sidebar');
-  sidebar.classList.toggle('collapsed');
-  
+  const overlay = document.querySelector('.sidebar-overlay');
   const appContainer = document.querySelector('.app-container');
-  appContainer.classList.toggle('has-collapsed-sidebar');
+  const isOpen = sidebar.classList.toggle('open');
+  sidebar.classList.remove('collapsed');
+  appContainer.classList.toggle('has-open-sidebar', isOpen);
+  overlay.classList.toggle('show', isOpen && window.innerWidth <= 1024);
 }
 
 function toggleMobileSidebar() {
   const sidebar = document.querySelector('.sidebar');
   const overlay = document.querySelector('.sidebar-overlay');
   
-  sidebar.classList.toggle('open');
-  overlay.classList.toggle('show');
+  const isOpen = sidebar.classList.toggle('open');
+  document.querySelector('.app-container').classList.toggle('has-open-sidebar', isOpen);
+  overlay.classList.toggle('show', isOpen);
 }
 
 function closeMobileSidebar() {
@@ -679,6 +739,7 @@ function closeMobileSidebar() {
   const overlay = document.querySelector('.sidebar-overlay');
   
   sidebar.classList.remove('open');
+  document.querySelector('.app-container').classList.remove('has-open-sidebar');
   overlay.classList.remove('show');
 }
 </script>
@@ -686,7 +747,7 @@ function closeMobileSidebar() {
   import { requireAuth } from "./auth.js?v=7";
   await requireAuth(['admin']);
 </script>
-<script type="module" src="admin.js?v=4"></script>
+<script type="module" src="admin.js?v=5"></script>
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js");

@@ -21,6 +21,46 @@ body {
   min-height: 100vh;
   line-height: 1.6;
   overflow-x: hidden;
+  isolation: isolate;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+body::before {
+  background: linear-gradient(315deg, rgba(101, 0, 94, 0.72) 3%, rgba(60, 132, 206, 0.72) 38%, rgba(48, 238, 226, 0.62) 68%, rgba(255, 25, 25, 0.58) 98%);
+  background-size: 400% 400%;
+  animation: mycollab-gradient 15s ease infinite;
+}
+
+body::after {
+  top: auto;
+  height: 12em;
+  background: rgb(255 255 255 / 18%);
+  border-radius: 1000% 1000% 0 0;
+  opacity: 0.6;
+  animation: mycollab-wave 10s -3s linear infinite;
+  transform: translate3d(0, 0, 0);
+}
+
+@keyframes mycollab-gradient {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 100%; }
+  100% { background-position: 0% 0%; }
+}
+
+@keyframes mycollab-wave {
+  2% { transform: translateX(1px); }
+  25% { transform: translateX(-25%); }
+  50% { transform: translateX(-50%); }
+  75% { transform: translateX(-25%); }
+  100% { transform: translateX(1px); }
 }
 
 body.member-theme .sidebar {
@@ -268,6 +308,13 @@ h2 {
   }
 }
 
+/* Let the navigation share the animated page background. */
+.sidebar,
+body.member-theme .sidebar {
+  background: transparent !important;
+  backdrop-filter: none;
+}
+
 @media (max-width: 900px) {
   .sidebar {
     width: 220px;
@@ -293,6 +340,88 @@ h2 {
 
   .footer-right {
     text-align: center;
+  }
+}
+
+/* Off-canvas dashboard navigation */
+.sidebar {
+  width: 280px;
+  max-width: 280px;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+  z-index: 2100;
+}
+
+.sidebar.open {
+  transform: translateX(0);
+}
+
+.sidebar.collapsed {
+  width: 280px;
+}
+
+.sidebar.collapsed .sidebar-header {
+  justify-content: space-between;
+  padding: 1.5rem;
+}
+
+.sidebar.collapsed .sidebar-header h2,
+.sidebar.collapsed .sidebar-toggle,
+.sidebar.collapsed .nav-btn,
+.sidebar.collapsed .sidebar-footer {
+  display: flex;
+}
+
+.main-content,
+.app-container.has-collapsed-sidebar .main-content {
+  margin-left: 0;
+  transition: margin-left 0.3s ease;
+}
+
+.app-container.has-open-sidebar .main-content {
+  margin-left: 280px;
+}
+
+.mobile-nav-toggle {
+  display: inline-flex;
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 2200;
+}
+
+.sidebar-overlay {
+  display: block;
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.72);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  z-index: 2099;
+}
+
+.sidebar-overlay.show {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+@media (min-width: 1025px) {
+  .sidebar-overlay {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .sidebar {
+    width: min(280px, 86vw);
+    max-width: 280px;
+  }
+
+  .app-container.has-open-sidebar .main-content {
+    margin-left: 0;
   }
 }
 
@@ -1400,8 +1529,8 @@ canvas {
   }
 
   .sidebar {
-    width: 100%; /* Maximize mode: full width on mobile */
-    max-width: 100%; /* Full screen width */
+    width: 280px;
+    max-width: min(280px, 86vw);
     transform: translateX(-100%);
     z-index: 2100; /* Highest layer */
     background: #0f172a; /* Solid background for max readability */
@@ -1622,4 +1751,86 @@ canvas {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* Final off-canvas navigation rules */
+.sidebar {
+  width: 280px;
+  max-width: 280px;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+  z-index: 2100;
+}
+
+.sidebar.open {
+  transform: translateX(0);
+}
+
+.sidebar.collapsed {
+  width: 280px;
+}
+
+.sidebar.collapsed .sidebar-header {
+  justify-content: space-between;
+  padding: 1.5rem;
+}
+
+.sidebar.collapsed .sidebar-header h2,
+.sidebar.collapsed .sidebar-toggle,
+.sidebar.collapsed .nav-btn,
+.sidebar.collapsed .sidebar-footer {
+  display: flex;
+}
+
+.main-content,
+.app-container.has-collapsed-sidebar .main-content {
+  margin-left: 0;
+  transition: margin-left 0.3s ease;
+}
+
+.app-container.has-open-sidebar .main-content {
+  margin-left: 280px;
+}
+
+.mobile-nav-toggle {
+  display: inline-flex;
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 2200;
+}
+
+.sidebar-overlay {
+  display: block;
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.72);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  z-index: 2099;
+}
+
+.sidebar-overlay.show {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+@media (min-width: 1025px) {
+  .sidebar-overlay {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .sidebar {
+    width: min(280px, 86vw);
+    max-width: 280px;
+  }
+
+  .app-container.has-open-sidebar .main-content {
+    margin-left: 0;
+  }
 }
