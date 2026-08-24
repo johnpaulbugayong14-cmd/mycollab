@@ -12,6 +12,55 @@
   <link rel="stylesheet" href="style.css?v=1">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✓</text></svg>">
   <style>
+    body.index-page {
+      background: #00adef;
+    }
+
+    body.index-page .container {
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      max-width: none;
+      background: linear-gradient(135deg, #00adef 0%, #0076e5 100%);
+    }
+
+    body.index-page .container::before,
+    body.index-page .container::after {
+      content: '';
+      position: absolute;
+      width: 1200px;
+      height: 1200px;
+      left: -600px;
+      top: -250px;
+      border-radius: 50%;
+      background: rgb(255 255 255 / 10%);
+      pointer-events: none;
+      z-index: 0;
+      animation: index-circle-scale 3s cubic-bezier(.6, 0, .4, 1) infinite alternate;
+    }
+
+    body.index-page .container::after {
+      width: 600px;
+      height: 600px;
+      left: -300px;
+      top: 50px;
+      background: rgb(255 255 255 / 18%);
+      animation-delay: 0.3s;
+      box-shadow:
+        150px 150px 0 150px rgb(255 255 255 / 8%),
+        300px 300px 0 300px rgb(255 255 255 / 5%);
+    }
+
+    @keyframes index-circle-scale {
+      from { transform: scale(1); }
+      to { transform: scale(1.1); }
+    }
+
+    body.index-page .container > .card {
+      position: relative;
+      z-index: 1;
+    }
+
     /* Match login card animations but scoped to this page's container */
     .container {
       display: flex;
@@ -79,7 +128,7 @@
     }
   </style>
 </head>
-<body>
+<body class="index-page">
 
 <div class="container">
   <div class="card" style="max-width: 560px; margin: 0 auto;">

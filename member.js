@@ -24,6 +24,7 @@ let dismissedInAppNotificationIds = new Set(getDismissedInAppNotifications());
 let inAppNotificationQueue = [];
 let inAppNotificationDisplaying = false;
 let accessStatusUnsubscribe = null;
+let ticketHistoryUnsubscribe = null;
 let walletUnsubscribe = null;
 let walletTransactionsUnsubscribe = null;
 let memberGradientUnsubscribe = null;
@@ -801,7 +802,7 @@ function renderHomeFlashcard(items = []) {
     const values = Array.isArray(item.detail) ? item.detail : [item.detail];
     const cleaned = values.filter((entry) => {
       if (entry && typeof entry === 'object') {
-        return String(entry.progressName || entry.memberName || entry.resourceTitle || entry.roomName || '').trim() !== '';
+        return String(entry.progressName || entry.memberName || entry.resourceTitle || entry.roomName || entry.title || entry.ticketTitle || '').trim() !== '';
       }
       return entry !== null && entry !== undefined && String(entry).trim() !== '';
     });
@@ -857,6 +858,40 @@ function renderHomeFlashcard(items = []) {
             <div><strong>Room:</strong> ${escapeHtml(chat.roomName || 'Live chat')}</div>
             <div><strong>From:</strong> ${escapeHtml(getFriendlyName(chat.senderName || 'Member'))}</div>
             <div><strong>Message:</strong> ${escapeHtml(chat.messageText || '[Image]')}</div>
+          </div>
+        `;
+      }).join('');
+      return;
+    }
+
+    if (item.title === 'Announcements') {
+      flashText.innerHTML = cleaned.map((entry) => {
+        const announcement = typeof entry === 'object'
+          ? entry
+          : { title: 'Announcement', body: entry };
+        return `
+          <div class="flash-item flash-announcement">
+            <div class="flash-announcement-title">${escapeHtml(announcement.title || 'Announcement')}</div>
+            <div class="flash-announcement-body">${escapeHtml(announcement.body || announcement.content || announcement.description || 'No details provided.')}</div>
+          </div>
+        `;
+      }).join('');
+      return;
+    }
+
+    if (item.title === 'Tickets') {
+      flashText.innerHTML = cleaned.map((entry) => {
+        const ticket = typeof entry === 'object'
+          ? entry
+          : { title: entry, status: 'open' };
+        const status = String(ticket.status || 'open');
+        const statusLabel = status === 'pending validation'
+          ? 'Pending Validation'
+          : status.charAt(0).toUpperCase() + status.slice(1);
+        return `
+          <div class="flash-item flash-ticket">
+            <div><strong>Ticket:</strong> ${escapeHtml(ticket.title || ticket.ticketTitle || 'Support request')}</div>
+            <div><strong>Status:</strong> ${escapeHtml(statusLabel)}</div>
           </div>
         `;
       }).join('');
@@ -1132,9 +1167,11 @@ function getLatestHomeDashboardItems(taskItems, announcementItems, pollItems, ti
     {
       title: 'Announcements',
       detail: formatList(announcementItems, (item) => {
-        const text = item.content || item.description || item.title || 'New update';
-        const dateText = formatAnnouncementDate(item.createdAt || item.date || item.timestamp || item.postedAt);
-        return `Announcement: ${dateText} — ${text}`;
+        return {
+          type: 'announcement',
+          title: item.title || 'Announcement',
+          body: item.content || item.description || 'No details provided.'
+        };
       }, 'No new announcements.')
     },
     {
@@ -1143,7 +1180,11 @@ function getLatestHomeDashboardItems(taskItems, announcementItems, pollItems, ti
     },
     {
       title: 'Tickets',
-      detail: formatList(ticketItems, (ticket) => ticket.title || ticket.name || 'Support request', 'No active tickets awaiting review.')
+      detail: formatList(ticketItems, (ticket) => ({
+        type: 'ticket',
+        title: ticket.title || ticket.name || 'Support request',
+        status: ticket.status || 'open'
+      }), 'No active tickets awaiting review.')
     },
     {
       title: 'Resources',
@@ -2617,6 +2658,7 @@ window.submitTicket = async function () {
     if (titleElement) titleElement.value = "";
     if (descriptionElement) descriptionElement.value = "";
 
+    loadTicketHistory();
     alert("✅ Ticket submitted successfully! The admin will review it soon." + 
           (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 
            "\n\n📱 Note: Push notifications are disabled in local development." : ""));
@@ -3974,6 +4016,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
 
     watchMemberAccessState();
     watchMemberWallet();
+    loadTicketHistory();
     startMemberPresenceHeartbeat();
     void refreshMentionMembers();
     subscribeToMemberRoster();
@@ -4221,14 +4264,16 @@ function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticket
 
   console.log('Container found, userEmail:', userEmail);
 
-  // Show the section immediately with a static message
-  if (emptyState) emptyState.style.display = "none";
-  container.innerHTML = '<div style="padding: 1rem; border: 2px solid #ff0000; border-radius: 0.5rem; background: #ffcccc; margin-bottom: 1rem;"><h4 style="margin: 0 0 0.5rem 0; color: #000000;">🎟️ TICKET HISTORY SECTION IS NOW VISIBLE!</h4><p style="margin: 0; color: #000000; font-weight: bold;">This section is working! User Email: ' + (userEmail || 'NULL') + '. Tickets will load here when available.</p></div>';
+  if (!userEmail) {
+    if (emptyState) emptyState.style.display = "block";
+    container.innerHTML = '<p style="color:#94a3b8; text-align:center;">Loading your ticket history...</p>';
+    return;
+  }
 
-  // Optional: Still try to load from Firebase in background
-  if (userEmail) {
-      // Use real-time listener like admin
-      const unsubscribe = onSnapshot(collection(db, "tickets"), (snapshot) => {
+  if (ticketHistoryUnsubscribe) return;
+
+  if (emptyState) emptyState.style.display = "none";
+  ticketHistoryUnsubscribe = onSnapshot(collection(db, "tickets"), (snapshot) => {
         console.log('=== TICKETS SNAPSHOT RECEIVED ===');
         console.log('Found', snapshot.size, 'tickets');
       let ticketHtml = '';
@@ -4249,7 +4294,8 @@ function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticket
         const ticket = doc.data();
         console.log('Processing ticket:', ticket);
 
-        if (userEmail && ticket.submittedBy !== userEmail && ticket.assignedTo !== userEmail) {
+        const currentEmail = normalizeEmail(userEmail);
+        if (normalizeEmail(ticket.submittedBy) !== currentEmail && normalizeEmail(ticket.assignedTo) !== currentEmail) {
           console.log('Skipping ticket - not submitted by or assigned to current user');
           return;
         }
@@ -4259,7 +4305,7 @@ function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticket
 
         if (ticketNotificationsInitialized && !previousTicket) {
           const recipientEmail = ticket.assignedTo || ticket.submittedBy;
-          const shouldNotify = recipientEmail === userEmail;
+          const shouldNotify = normalizeEmail(recipientEmail) === normalizeEmail(userEmail);
           if (shouldNotify) {
             showAdminUpdateNotification('Ticket Created', `A new ticket has been created: "${ticket.title}"`);
           }
@@ -4300,15 +4346,13 @@ function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticket
         // Keep the static message if no tickets
         container.innerHTML = '<div style="padding: 1rem; border: 1px solid #374151; border-radius: 0.5rem; background: #1e293b; margin-bottom: 1rem;"><h4 style="margin: 0 0 0.5rem 0; color: #f3f4f6;">Ticket History Section</h4><p style="margin: 0; color: #d1d5db;">No tickets found.</p></div>';
       }
+      if (emptyState) emptyState.style.display = ticketCount > 0 ? "none" : "block";
       ticketNotificationsInitialized = true;
     }, (error) => {
       console.error('Error loading tickets:', error);
-      // Keep the static message on error
+      if (emptyState) emptyState.style.display = "block";
+      container.innerHTML = '<p style="color:#f87171; text-align:center;">Unable to load ticket history right now. Please try again.</p>';
     });
-
-    // Store unsubscribe function if needed for cleanup
-    window.ticketHistoryUnsubscribe = unsubscribe;
-  }
 }
 
 window.toggleCompletedTasks = function() {
