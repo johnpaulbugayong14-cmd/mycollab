@@ -378,6 +378,13 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function ticketMatchesMember(ticket, currentEmail) {
+  const memberEmail = normalizeEmail(currentEmail);
+  const ownerValues = [ticket.submittedBy, ticket.submittedByEmail, ticket.assignedTo]
+    .flatMap(value => Array.isArray(value) ? value : [value]);
+  return ownerValues.some(value => normalizeEmail(value) === memberEmail);
+}
+
 async function compressImage(file, maxWidth = 400, quality = 0.7) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -4345,7 +4352,7 @@ function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticket
         console.log('Processing ticket:', ticket);
 
         const currentEmail = normalizeEmail(userEmail);
-        if (normalizeEmail(ticket.submittedBy) !== currentEmail && normalizeEmail(ticket.assignedTo) !== currentEmail) {
+        if (!ticketMatchesMember(ticket, currentEmail)) {
           console.log('Skipping ticket - not submitted by or assigned to current user');
           return;
         }
