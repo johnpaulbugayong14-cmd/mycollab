@@ -1,8 +1,8 @@
 {
-  "version": "1.1.17",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.17/",
+  "version": "1.1.18",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.18/",
   "required": true,
   "releaseNotes": [
-    "Prevent notification delivery from blocking immediate member ticket history updates."
+    "Render newly submitted member tickets immediately despite delayed Firestore snapshots."
   ]
 }
