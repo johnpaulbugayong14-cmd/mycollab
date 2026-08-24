@@ -25,6 +25,7 @@ let inAppNotificationQueue = [];
 let inAppNotificationDisplaying = false;
 let accessStatusUnsubscribe = null;
 let ticketHistoryUnsubscribe = null;
+const optimisticTicketHistory = new Map();
 let walletUnsubscribe = null;
 let walletTransactionsUnsubscribe = null;
 let memberGradientUnsubscribe = null;
@@ -2629,7 +2630,7 @@ window.submitTicket = async function () {
   try {
     console.log('Adding ticket to Firestore...');
     console.log('Submitting ticket with userEmail:', userEmail);
-    await addDoc(collection(db, "tickets"), {
+    const createdTicketRef = await addDoc(collection(db, "tickets"), {
       title: title,
       description: description,
       submittedBy: userEmail,
@@ -2646,6 +2647,15 @@ window.submitTicket = async function () {
     if (titleElement) titleElement.value = "";
     if (descriptionElement) descriptionElement.value = "";
 
+    renderSubmittedTicketImmediately(createdTicketRef.id, {
+      title,
+      description,
+      submittedBy: userEmail,
+      assignedTo: userEmail,
+      status: 'open',
+      createdAt: new Date(),
+      responses: []
+    });
     loadTicketHistory('ticketHistory', 'ticketHistoryEmptyState', true);
     const form = titleElement?.closest('form');
     let submissionMessage = document.getElementById('ticketSubmissionMessage');
@@ -4250,6 +4260,30 @@ function ensureTicketHistorySection() {
   }
 }
 
+function renderSubmittedTicketImmediately(ticketId, ticket) {
+  const container = document.getElementById('ticketHistory');
+  const emptyState = document.getElementById('ticketHistoryEmptyState');
+  if (!container) return;
+  optimisticTicketHistory.set(ticketId, ticket);
+
+  const ticketElement = document.createElement('div');
+  ticketElement.dataset.ticketId = ticketId;
+  ticketElement.style.cssText = 'margin-bottom:1rem; padding:1rem; border:1px solid #374151; border-radius:0.5rem; background:#1e293b;';
+  ticketElement.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+      <h4 style="margin:0; color:#f3f4f6;">${escapeHtml(ticket.title)}</h4>
+      <span style="padding:0.25rem 0.5rem; border-radius:0.25rem; font-size:0.8rem; font-weight:600; background:#ef4444; color:white;">Open</span>
+    </div>
+    <p style="margin:0 0 0.5rem; color:#94a3b8; font-size:0.8rem;">Assigned: ${new Date().toLocaleDateString()}</p>
+    <p style="margin:0 0 0.5rem; color:#d1d5db; white-space:pre-wrap; word-break:break-word;">${escapeHtml(ticket.description)}</p>
+    <div style="padding:0.5rem; background:#0f172a; border-radius:0.25rem;">
+      <h5 style="margin:0 0 0.5rem; color:#f3f4f6; font-size:0.9rem;">Admin Feedback</h5>
+      <p style="color:#9ca3af; margin:0;">No admin feedback yet.</p>
+    </div>`;
+  container.prepend(ticketElement);
+  if (emptyState) emptyState.style.display = 'none';
+}
+
 function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticketHistoryEmptyState", forceRefresh = false) {
   console.log('=== loadTicketHistory CALLED - STARTING ===', containerId, emptyStateId);
 
@@ -4290,6 +4324,14 @@ function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticket
       // Collect all tickets first
       const docs = [];
       snapshot.forEach(doc => docs.push(doc));
+      const snapshotIds = new Set(docs.map(ticketDoc => ticketDoc.id));
+      optimisticTicketHistory.forEach((ticket, ticketId) => {
+        if (snapshotIds.has(ticketId)) {
+          optimisticTicketHistory.delete(ticketId);
+          return;
+        }
+        docs.push({ id: ticketId, data: () => ticket });
+      });
       
       // Sort by createdAt descending (newest first)
       docs.sort((a, b) => {
