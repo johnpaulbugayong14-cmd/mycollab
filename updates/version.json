@@ -1,10 +1,10 @@
 {
-  "version": "1.1.26",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.26/",
+  "version": "1.1.27",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.27/",
   "required": true,
   "releaseNotes": [
-    "Reconnect ticket history when the mobile app resumes or comes online.",
-    "Invalidate stale cached member code and service-worker assets.",
-    "Keep ticket creation and status updates synchronized in real time."
+    "Use reliable Firestore long polling for Capacitor mobile WebViews.",
+    "Fix real-time ticket creation and status synchronization in members.",
+    "Keep manual refresh and live ticket-history updates responsive."
   ]
 }
