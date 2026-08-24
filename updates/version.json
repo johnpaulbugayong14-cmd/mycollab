@@ -1,8 +1,8 @@
 {
-  "version": "1.1.16",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.16/",
+  "version": "1.1.17",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.17/",
   "required": true,
   "releaseNotes": [
-    "Refresh member ticket history immediately after ticket submission."
+    "Prevent notification delivery from blocking immediate member ticket history updates."
   ]
 }
