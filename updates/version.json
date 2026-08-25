@@ -1,10 +1,10 @@
 {
-  "version": "1.1.32",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.32/",
+  "version": "1.1.33",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.33/",
   "required": true,
   "releaseNotes": [
-    "Force immediate Firestore refresh after a member submits a ticket.",
-    "Re-render ticket history and status changes without restarting the app.",
-    "Keep the mobile member view synced with latest server state after resume and refresh events."
+    "Fix stale service-worker caching that kept old ticket-history logic on mobile.",
+    "Force fresh Firestore reads after member ticket submission and refresh events.",
+    "Ensure status updates and new tickets appear without restarting the app."
   ]
 }
