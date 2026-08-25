@@ -1,10 +1,10 @@
 {
-  "version": "1.1.30",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.30/",
+  "version": "1.1.31",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.31/",
   "required": true,
   "releaseNotes": [
-    "Synchronize each submitted ticket through a direct Firestore document listener.",
-    "Reflect ticket status and response changes immediately in mobile history.",
-    "Invalidate stale Android member bundles and service-worker caches."
+    "Refresh ticket history reliably from the newest server snapshot.",
+    "Restart the live Firestore listener after a manual refresh or resume event.",
+    "Ensure the app recognizes the latest mobile release metadata and cache state."
   ]
 }
