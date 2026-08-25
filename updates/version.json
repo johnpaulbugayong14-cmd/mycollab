@@ -1,10 +1,10 @@
 {
-  "version": "1.1.28",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.28/",
+  "version": "1.1.29",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.29/",
   "required": true,
   "releaseNotes": [
-    "Reconnect ticket history on native Capacitor app resume.",
-    "Force fresh Firestore data after mobile lifecycle and network changes.",
-    "Invalidate stale mobile app and member bundle caches."
+    "Synchronize ticket history immediately after submission and status changes.",
+    "Reload ticket history whenever members navigate back to the section.",
+    "Prevent stale Firestore snapshots from overwriting newer mobile data."
   ]
 }
