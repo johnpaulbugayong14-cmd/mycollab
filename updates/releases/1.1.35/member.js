@@ -40,18 +40,6 @@ let ticketHistoryTarget = { containerId: 'ticketHistory', emptyStateId: 'ticketH
 let ticketHistoryRefreshTimer = null;
 let previousTaskMap = new Map();
 let previousPollMap = new Map();
-
-function refreshTicketHistoryFromExternalEvent() {
-  if (!userEmail) return;
-  loadTicketHistory('ticketHistory', 'ticketHistoryEmptyState', true);
-  void refreshTicketHistoryNow();
-}
-
-window.addEventListener('storage', (event) => {
-  if (event.key === 'mycollab-ticket-refresh' && event.newValue) {
-    refreshTicketHistoryFromExternalEvent();
-  }
-});
 let previousAnnouncementMap = new Map();
 let previousTicketMap = new Map();
 let taskNotificationsInitialized = false;
@@ -2691,8 +2679,6 @@ window.submitTicket = async function () {
     optimisticTicketHistory.set(createdTicketRef.id, createdTicket);
     renderSubmittedTicketImmediately(createdTicketRef.id, createdTicket);
     watchCreatedTicket(createdTicketRef.id);
-    localStorage.setItem('mycollab-ticket-refresh', String(Date.now()));
-    loadTicketHistory('ticketHistory', 'ticketHistoryEmptyState', true);
     await refreshTicketHistoryNow();
 
     const form = titleElement?.closest('form');
@@ -4296,18 +4282,13 @@ function ensureTicketHistorySection() {
 
 function renderSubmittedTicketImmediately(ticketId, ticket) {
   optimisticTicketHistory.set(ticketId, ticket);
-  const mergedDocs = Array.isArray(latestTicketSnapshotDocs) ? [...latestTicketSnapshotDocs] : [];
-  if (!mergedDocs.some(doc => doc.id === ticketId)) {
-    mergedDocs.push({ id: ticketId, data: () => ticket });
-  }
-  latestTicketSnapshotDocs = mergedDocs;
   const activeTargets = [
     ['ticketHistory', 'ticketHistoryEmptyState'],
     ['maintenanceTicketHistory', 'maintenanceTicketHistoryEmptyState']
   ];
   activeTargets.forEach(([containerId, emptyStateId]) => {
     if (document.getElementById(containerId)) {
-      renderTicketHistory(containerId, emptyStateId, mergedDocs);
+      renderTicketHistory(containerId, emptyStateId, latestTicketSnapshotDocs || []);
     }
   });
 }
@@ -4409,9 +4390,8 @@ function watchCreatedTicket(ticketId) {
     optimisticTicketHistory.set(ticketId, ticketSnapshot.data());
     const currentDocs = (latestTicketSnapshotDocs || []).filter(ticketDoc => ticketDoc.id !== ticketId);
     currentDocs.push(ticketSnapshot);
-    latestTicketSnapshotDocs = currentDocs;
     renderAllTicketHistory(currentDocs);
-    loadTicketHistory('ticketHistory', 'ticketHistoryEmptyState', true);
+    void refreshTicketHistoryNow();
   }, (error) => {
     console.warn('Unable to watch newly created ticket:', error);
     ticketDocumentUnsubscribes.delete(ticketId);
