@@ -1,10 +1,10 @@
 {
-  "version": "1.1.33",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.33/",
+  "version": "1.1.35",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.35/",
   "required": true,
   "releaseNotes": [
-    "Fix stale service-worker caching that kept old ticket-history logic on mobile.",
-    "Force fresh Firestore reads after member ticket submission and refresh events.",
-    "Ensure status updates and new tickets appear without restarting the app."
+    "Fix scoped service-worker metadata keys so app update activation works correctly under the GitHub Pages app path.",
+    "Remove the native-only gate so browser-based app updates can check for and install the fix.",
+    "Align the app bundle metadata so the updater can detect the new release and install it reliably."
   ]
 }
