@@ -3980,6 +3980,7 @@ window.respondToTicket = async function(ticketId) {
       await sendNotificationToUsers([recipientEmail], notificationTitle, notificationBody, 'ticket');
     }
 
+    localStorage.setItem('mycollab-ticket-refresh', String(Date.now()));
     document.getElementById(`responseInput-${ticketId}`).value = "";
     alert("Response sent successfully and notification queued.");
   } catch (error) {
@@ -4022,6 +4023,7 @@ window.changeTicketStatus = async function(ticketId, newStatus) {
       await sendNotificationToUsers([recipientEmail], notificationTitle, notificationBody, 'ticket');
     }
 
+    localStorage.setItem('mycollab-ticket-refresh', String(Date.now()));
     alert(`Ticket status changed to ${newStatus}! Notification queued.`);
   } catch (error) {
     console.error("Error changing ticket status:", error);
