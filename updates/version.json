@@ -1,10 +1,10 @@
 {
-  "version": "1.1.38",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.38/",
+  "version": "1.1.39",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.39/",
   "required": true,
   "releaseNotes": [
-    "Fix Android ticket-history synchronization by reconnecting the Firestore listener after app resume, focus changes, and refresh events.",
-    "Ensure newly created tickets appear in Ticket History immediately and continue refreshing from the latest backend state.",
-    "Propagate admin ticket status and response updates to Android without requiring an app restart."
+    "Fix the Firestore ticket-history listener lifecycle so Android/Capacitor reconnects correctly after app resume and page visibility changes.",
+    "Keep member ticket history continuously synchronized with Firestore instead of relying on stale startup data.",
+    "Ensure new tickets and status updates appear without requiring a full app restart."
   ]
 }
