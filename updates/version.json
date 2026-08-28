@@ -1,10 +1,10 @@
 {
-  "version": "1.1.36",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.36/",
+  "version": "1.1.38",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.38/",
   "required": true,
   "releaseNotes": [
-    "Fix stale ticket history in the member app so newly submitted tickets appear immediately without restart.",
-    "Trigger a real-time refresh when admin responses or status updates happen so member ticket status stays in sync live.",
-    "Keep the app updater path isolated from the public website while packaging the fix for app-side detection."
+    "Fix Android ticket-history synchronization by reconnecting the Firestore listener after app resume, focus changes, and refresh events.",
+    "Ensure newly created tickets appear in Ticket History immediately and continue refreshing from the latest backend state.",
+    "Propagate admin ticket status and response updates to Android without requiring an app restart."
   ]
 }
