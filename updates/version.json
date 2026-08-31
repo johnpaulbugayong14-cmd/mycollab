@@ -1,10 +1,10 @@
 {
-  "version": "1.1.40",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.40/",
+  "version": "1.1.44",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.44/",
   "required": true,
   "releaseNotes": [
-    "Add Firestore ticket synchronization diagnostics for Android/Capacitor release testing.",
-    "Capture callback, change, auth, and initialization details around ticket creation and remote status updates.",
-    "Use runtime logs to identify whether the issue is Firestore transport, listener behavior, or UI state rendering."
+    "Resolved Critical Identity Hijack: Disabled forced anonymous sign-in that was overwriting real member sessions.",
+    "Fixed Ticket History sync lag and crash on Android.",
+    "Ensured reliable real-time updates after app resume."
   ]
 }
