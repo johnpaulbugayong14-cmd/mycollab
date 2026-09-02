@@ -1298,16 +1298,28 @@ function renderMemberTasks(snapshot) {
 
   const completedTasks = tasks.filter((task) => ['done', 'completed'].includes(String(task.status || '').trim().toLowerCase()));
   const activeTasks = tasks.filter((task) => !['done', 'completed'].includes(String(task.status || '').trim().toLowerCase()));
+  const deadlineWarnings = [];
 
   container.innerHTML = activeTasks.map((task) => {
     const status = String(task.status || 'pending').trim().toLowerCase();
     const deadline = task.deadline ? new Date(task.deadline).toLocaleDateString() : 'No deadline';
     const warning = getDeadlineWarning(task.deadline, status);
+    if (warning.message && !shownDeadlineTaskIds.has(task.id)) {
+      deadlineWarnings.push({ title: task.title || 'Untitled task', status: warning.message.replace('⚠️ ', ''), deadline });
+      shownDeadlineTaskIds.add(task.id);
+    }
+    const statusClass = status === 'pending validation'
+      ? 'status-validation'
+      : status === 'done' || status === 'completed'
+        ? 'status-completed'
+        : status === 'needs action' || status === 'needs_action'
+          ? 'status-needs-action'
+          : 'status-pending';
     return `
       <div class="task-item${warning.class ? ` ${warning.class}` : ''}">
         <div class="task-header">
           <h4 class="task-title">${escapeHtml(task.title || 'Untitled task')}</h4>
-          <span class="task-status">${escapeHtml(status === 'pending validation' ? 'Pending Validation' : status.charAt(0).toUpperCase() + status.slice(1))}</span>
+          <span class="task-status ${statusClass}">${escapeHtml(status === 'pending validation' ? 'Pending Validation' : status.charAt(0).toUpperCase() + status.slice(1))}</span>
         </div>
         <p>${escapeHtml(task.description || '')}</p>
         <div class="task-meta">Deadline: ${escapeHtml(deadline)}${warning.message ? ` · ${escapeHtml(warning.message)}` : ''}</div>
@@ -1334,6 +1346,7 @@ function renderMemberTasks(snapshot) {
   if (completedTasksToggleBtn) {
     completedTasksToggleBtn.textContent = `${completedTasksCollapsed ? 'Show' : 'Hide'} completed tasks (${completedTasks.length})`;
   }
+  if (deadlineWarnings.length) showTaskDeadlineModal(deadlineWarnings);
 }
 
 function loadMemberTasks() {
