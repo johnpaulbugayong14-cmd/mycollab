@@ -4050,6 +4050,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     // Initialize notifications
     initializeNotifications();
 
+    loadHomeDashboard();
     watchMemberAccessState();
     watchMemberWallet();
     startMemberPresenceHeartbeat();
