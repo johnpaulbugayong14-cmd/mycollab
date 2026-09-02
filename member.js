@@ -1277,6 +1277,83 @@ function getLatestHomeDashboardItems(taskItems, announcementItems, pollItems, ti
   return items;
 }
 
+function getTaskCreatedAtMillis(task) {
+  const createdAt = task?.createdAt;
+  if (typeof createdAt === 'number') return createdAt;
+  if (createdAt?.toMillis) return createdAt.toMillis();
+  const parsed = Date.parse(String(createdAt || ''));
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function renderMemberTasks(snapshot) {
+  if (!container) return;
+
+  const tasks = snapshot.docs
+    .map((taskDoc) => ({ id: taskDoc.id, ...taskDoc.data() }))
+    .filter((task) => {
+      const assignedTo = Array.isArray(task.assignedTo) ? task.assignedTo : [task.assignedTo];
+      return assignedTo.some((assignee) => normalizeEmail(assignee) === normalizeEmail(userEmail) || normalizeEmail(assignee) === 'everyone');
+    })
+    .sort((firstTask, secondTask) => getTaskCreatedAtMillis(secondTask) - getTaskCreatedAtMillis(firstTask));
+
+  const completedTasks = tasks.filter((task) => ['done', 'completed'].includes(String(task.status || '').trim().toLowerCase()));
+  const activeTasks = tasks.filter((task) => !['done', 'completed'].includes(String(task.status || '').trim().toLowerCase()));
+
+  container.innerHTML = activeTasks.map((task) => {
+    const status = String(task.status || 'pending').trim().toLowerCase();
+    const deadline = task.deadline ? new Date(task.deadline).toLocaleDateString() : 'No deadline';
+    const warning = getDeadlineWarning(task.deadline, status);
+    return `
+      <div class="task-item${warning.class ? ` ${warning.class}` : ''}">
+        <div class="task-header">
+          <h4 class="task-title">${escapeHtml(task.title || 'Untitled task')}</h4>
+          <span class="task-status">${escapeHtml(status === 'pending validation' ? 'Pending Validation' : status.charAt(0).toUpperCase() + status.slice(1))}</span>
+        </div>
+        <p>${escapeHtml(task.description || '')}</p>
+        <div class="task-meta">Deadline: ${escapeHtml(deadline)}${warning.message ? ` · ${escapeHtml(warning.message)}` : ''}</div>
+        <div class="task-actions">
+          ${task.linkURL ? `<a href="${escapeHtml(task.linkURL)}" target="_blank" rel="noopener">Open task link</a>` : ''}
+          ${status !== 'pending validation' ? `<button type="button" onclick="markDone('${escapeHtml(task.id)}')">Mark done</button>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  if (emptyState) emptyState.style.display = activeTasks.length ? 'none' : 'block';
+  if (completedTasksSection) completedTasksSection.style.display = completedTasks.length ? 'block' : 'none';
+  if (completedTasksList) {
+    completedTasksList.innerHTML = completedTasks.map((task) => `
+      <div class="task-item">
+        <div class="task-header">
+          <h4 class="task-title">${escapeHtml(task.title || 'Untitled task')}</h4>
+          <span class="task-status">Completed</span>
+        </div>
+        <p>${escapeHtml(task.description || '')}</p>
+      </div>`).join('');
+    completedTasksList.style.display = completedTasksCollapsed ? 'none' : 'block';
+  }
+  if (completedTasksToggleBtn) {
+    completedTasksToggleBtn.textContent = `${completedTasksCollapsed ? 'Show' : 'Hide'} completed tasks (${completedTasks.length})`;
+  }
+}
+
+function loadMemberTasks() {
+  if (!userEmail) return;
+  onSnapshot(collection(db, 'tasks'), renderMemberTasks, (error) => {
+    console.error('Member tasks listener error:', error);
+    if (emptyState) emptyState.style.display = 'block';
+  });
+}
+
+window.toggleCompletedTasks = function () {
+  completedTasksCollapsed = !completedTasksCollapsed;
+  localStorage.setItem('completedTasksCollapsed', String(completedTasksCollapsed));
+  if (completedTasksList) completedTasksList.style.display = completedTasksCollapsed ? 'none' : 'block';
+  if (completedTasksToggleBtn) {
+    const taskCount = completedTasksList?.querySelectorAll('.task-item').length || 0;
+    completedTasksToggleBtn.textContent = `${completedTasksCollapsed ? 'Show' : 'Hide'} completed tasks (${taskCount})`;
+  }
+};
+
 async function refreshHomeDashboard() {
   const homeGreeting = document.getElementById('home-greeting');
   const currentName = userEmail ? await getWelcomeName(userEmail) : 'User';
@@ -4056,6 +4133,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     // Initialize notifications
     initializeNotifications();
 
+    loadMemberTasks();
     loadHomeDashboard();
     watchMemberAccessState();
     watchMemberWallet();
