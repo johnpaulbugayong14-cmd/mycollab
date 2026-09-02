@@ -1,0 +1,10 @@
+{
+  "version": "1.1.46",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.46/",
+  "required": true,
+  "releaseNotes": [
+    "Show newly submitted member tickets immediately in ticket history.",
+    "Keep ticket history visible in both the standard page and maintenance overlay.",
+    "Display the submitted ticket date before Firestore synchronization completes."
+  ]
+}
