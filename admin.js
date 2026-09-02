@@ -2370,6 +2370,8 @@ onSnapshot(collection(db, "tasks"), (snap) => {
 
 // Add feedback to a task (admin)
 window.addTaskFeedback = async function(taskId) {
+  if (window.submittingTaskFeedback) return;
+  window.submittingTaskFeedback = true;
   try {
     const input = document.getElementById(`feedback-input-${taskId}`);
     if (!input) return;
@@ -2392,17 +2394,11 @@ window.addTaskFeedback = async function(taskId) {
     });
 
     input.value = '';
-    const list = document.getElementById(`feedback-list-${taskId}`);
-    if (list) {
-      const item = document.createElement('div');
-      item.style.cssText = 'padding:0.5rem; border:1px solid #334155; border-radius:6px; margin-bottom:0.5rem; background:#041024;';
-      const time = new Date(feedback.createdAt).toLocaleString();
-      item.innerHTML = `<div style="font-weight:600; color:#f3f4f6;">${feedback.author} <span style=\"font-weight:400; color:#94a3b8; font-size:0.85rem; margin-left:0.5rem;\">${time}</span></div><div style=\"color:#cbd5e1; margin-top:0.25rem; white-space: pre-wrap; word-break: break-word;\">${feedback.message}</div>`;
-      list.insertBefore(item, list.firstChild);
-    }
   } catch (error) {
     console.error('Failed to add feedback:', error);
     alert('Failed to add feedback. See console for details.');
+  } finally {
+    window.submittingTaskFeedback = false;
   }
 };
 

@@ -1038,6 +1038,40 @@ button:active {
   margin-left: 0.5rem;
 }
 
+.task-feedback {
+  margin-top: 0.85rem;
+  padding: 0.75rem;
+  border-left: 3px solid #60a5fa;
+  border-radius: 4px;
+  background: rgba(30, 41, 59, 0.72);
+  color: #cbd5e1;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.task-feedback > strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #93c5fd;
+}
+
+.task-feedback-item {
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.task-feedback-item + .task-feedback-item {
+  margin-top: 0.5rem;
+}
+
+.task-feedback-item span {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
 .task-item.warning-near .task-warning {
   color: #f59e0b;
 }

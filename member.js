@@ -1285,6 +1285,21 @@ function getTaskCreatedAtMillis(task) {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function renderTaskFeedback(task) {
+  const feedbacks = Array.isArray(task.feedbacks) ? task.feedbacks : [];
+  if (!feedbacks.length) return '';
+
+  return `
+    <div class="task-feedback">
+      <strong>Admin Feedback</strong>
+      ${feedbacks.map((feedback) => {
+        const feedbackDate = parseDateValue(feedback.createdAt);
+        const dateText = feedbackDate ? feedbackDate.toLocaleString() : '';
+        return `<div class="task-feedback-item"><div><strong>${escapeHtml(getUserName(feedback.author) || 'Admin')}</strong>${dateText ? ` <span>${escapeHtml(dateText)}</span>` : ''}</div><div>${escapeHtml(feedback.message || '')}</div></div>`;
+      }).join('')}
+    </div>`;
+}
+
 function renderMemberTasks(snapshot) {
   if (!container) return;
 
@@ -1322,6 +1337,7 @@ function renderMemberTasks(snapshot) {
           <span class="task-status ${statusClass}">${escapeHtml(status === 'pending validation' ? 'Pending Validation' : status.charAt(0).toUpperCase() + status.slice(1))}</span>
         </div>
         <p>${escapeHtml(task.description || '')}</p>
+        ${renderTaskFeedback(task)}
         <div class="task-meta">Deadline: ${escapeHtml(deadline)}${warning.message ? ` · ${escapeHtml(warning.message)}` : ''}</div>
         <div class="task-actions">
           ${task.linkURL ? `<a href="${escapeHtml(task.linkURL)}" target="_blank" rel="noopener">Open task link</a>` : ''}
@@ -1340,6 +1356,7 @@ function renderMemberTasks(snapshot) {
           <span class="task-status">Completed</span>
         </div>
         <p>${escapeHtml(task.description || '')}</p>
+        ${renderTaskFeedback(task)}
       </div>`).join('');
     completedTasksList.style.display = completedTasksCollapsed ? 'none' : 'block';
   }
