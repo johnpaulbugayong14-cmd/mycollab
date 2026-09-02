@@ -1,6 +1,6 @@
-import { collection, onSnapshot, doc, updateDoc, addDoc, getDoc, setDoc, deleteField, arrayUnion, getDocs, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, onSnapshot, doc, updateDoc, addDoc, getDoc, setDoc, deleteField, arrayUnion, getDocs, getDocsFromServer, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db, auth } from "./firebase.js";
-import { signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStoredUserEmail, signOutUser, getPasswordChangeRequired, getAccountPasswordHint, updateAccountPassword } from "./auth.js";
 import { initializeNotifications, sendNotificationToUsers, showLocalNotification } from "./notifications.js";
 
@@ -25,6 +25,7 @@ let inAppNotificationQueue = [];
 let inAppNotificationDisplaying = false;
 let accessStatusUnsubscribe = null;
 let ticketHistoryUnsubscribe = null;
+let ticketSyncState = 'inactive'; // 'inactive', 'starting', 'active', 'error'
 const optimisticTicketHistory = new Map();
 let walletUnsubscribe = null;
 let walletTransactionsUnsubscribe = null;
@@ -1357,12 +1358,11 @@ async function refreshHomeDashboard() {
   }
 
   try {
-    const ticketQuery = query(collection(db, 'tickets'), where('assignedTo', '==', userEmail));
-    const ticketsSnap = await getDocs(ticketQuery);
+    const ticketsSnap = await getDocs(collection(db, 'tickets'));
     ticketsSnap.forEach((docSnap) => {
       const ticket = { id: docSnap.id, ...docSnap.data() };
       const status = String(ticket.status || 'open').trim().toLowerCase();
-      if (status !== 'closed' && status !== 'resolved' && status !== 'completed' && status !== 'done') {
+      if (ticketMatchesMember(ticket, userEmail) && status !== 'closed' && status !== 'resolved' && status !== 'completed' && status !== 'done') {
         ticketRefs.push(ticket);
       }
     });
@@ -1555,7 +1555,7 @@ function subscribeToHomeFlashcardUpdates() {
   );
 
   homeFlashcardListeners.push(
-    onSnapshot(query(collection(db, 'tickets'), where('assignedTo', '==', userEmail)), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard ticket listener error:', error))
+    onSnapshot(collection(db, 'tickets'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard ticket listener error:', error))
   );
 }
 
@@ -2656,16 +2656,24 @@ window.submitTicket = async function () {
     if (titleElement) titleElement.value = "";
     if (descriptionElement) descriptionElement.value = "";
 
+    const createdAt = new Date();
     renderSubmittedTicketImmediately(createdTicketRef.id, {
       title,
       description,
       submittedBy: userEmail,
+      submittedByName: getUserName(userEmail),
       assignedTo: userEmail,
       status: 'open',
-      createdAt: new Date(),
+      createdAt,
       responses: []
     });
-    loadTicketHistory('ticketHistory', 'ticketHistoryEmptyState', true);
+
+    const activeTicketHistoryContainer = document.getElementById('maintenanceTicketHistory')
+      ? { containerId: 'maintenanceTicketHistory', emptyStateId: 'maintenanceTicketHistoryEmptyState' }
+      : { containerId: 'ticketHistory', emptyStateId: 'ticketHistoryEmptyState' };
+    ticketHistoryTarget = activeTicketHistoryContainer;
+    void startTicketHistorySync(activeTicketHistoryContainer.containerId, activeTicketHistoryContainer.emptyStateId);
+
     const form = titleElement?.closest('form');
     let submissionMessage = document.getElementById('ticketSubmissionMessage');
     if (!submissionMessage && form) {
@@ -4020,26 +4028,30 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
       console.log('Password change required; stopping member dashboard initialization.');
       return;
     }
-    console.log('User authenticated, setting up dashboard for:', userEmail);
-    if (!auth.currentUser) {
-      console.log('Auth not ready, signing in anonymously...');
-      await signInAnonymously(auth);
-      console.log('Auth ready');
-    }
+
+    console.log('User authenticated, waiting for Firebase SDK settlement...');
+    await new Promise((resolve) => {
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        unsubscribe();
+        resolve(user);
+      });
+      setTimeout(resolve, 3000);
+    });
+
+    console.log('Dashboard setup for:', userEmail, 'Current Auth:', auth.currentUser?.email || 'Anonymous');
+
     if (welcomeEl) {
       const welcomeName = await getWelcomeName(userEmail);
       welcomeEl.textContent = `Welcome, ${welcomeName}`;
     }
     await displayMemberProfilePicture(userEmail);
-    console.log('User logged in as:', userEmail);
-    console.log('Starting to load data from Firestore...');
+    console.log('Starting data synchronization...');
     
     // Initialize notifications
     initializeNotifications();
 
     watchMemberAccessState();
     watchMemberWallet();
-    loadTicketHistory();
     startMemberPresenceHeartbeat();
     void refreshMentionMembers();
     subscribeToMemberRoster();
@@ -4059,238 +4071,171 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     // Update date and time every second
     updateDateTime();
     setInterval(updateDateTime, 1000);
-    
-    // Load meetings
-    loadMeetings();
-    
-    // Load tasks
-    console.log('Setting up tasks listener...');
-    onSnapshot(collection(db, "tasks"), (snap) => {
-      console.log('Tasks snapshot received, docs count:', snap.size);
-      container.innerHTML = "";
-      let taskCount = 0;
-      let hiddenDoneCount = 0;
-      const deadlineWarnings = [];
 
-      const docs = [];
-      snap.forEach(doc => docs.push(doc));
-      // Sort tasks: high-priority statuses (pending, overdue, needs action, pending validation) first,
-      // then others, with 'done'/'completed' at the bottom. Within same priority, newest first.
-      function statusPriority(status) {
-        const s = String(status || '').toLowerCase().trim();
-        if (s === 'done' || s === 'completed') return 2;
-        if (s === 'pending' || s === 'overdue' || s === 'needs action' || s === 'needs_action' || s === 'pending validation' || s === 'pending_validation') return 0;
-        return 1;
-      }
-      function createdAtMillis(val) {
-        if (!val) return 0;
-        if (typeof val === 'number') return val;
-        if (val && typeof val.toMillis === 'function') return val.toMillis();
-        const parsed = Date.parse(String(val));
-        return isNaN(parsed) ? 0 : parsed;
-      }
+    // Initialize Ticket History Synchronization
+    void startTicketHistorySync();
 
-      docs.sort((a, b) => {
-        const ta = a.data();
-        const tb = b.data();
-        const pa = statusPriority(ta.status);
-        const pb = statusPriority(tb.status);
-        if (pa !== pb) return pa - pb;
-        const ca = createdAtMillis(ta.createdAt);
-        const cb = createdAtMillis(tb.createdAt);
-        return cb - ca;
-      });
-
-      const activeTasks = [];
-      const completedTasks = [];
-
-      docs.forEach(doc => {
-        const t = doc.data();
-        console.log('Processing task:', t.title, 'assigned to:', t.assignedTo, 'current user:', userEmail);
-        if (t.assignedTo !== "everyone" && t.assignedTo !== userEmail) return;
-
-        const status = String(t.status || '').toLowerCase().trim();
-        const isDoneStatus = status === 'done' || status === 'completed';
-
-        const previousTask = previousTaskMap.get(doc.id);
-        const taskUpdated = previousTask && previousTask.status !== t.status;
-        const feedbackUpdated = previousTask && Array.isArray(t.feedbacks) && Array.isArray(previousTask.feedbacks) && t.feedbacks.length > previousTask.feedbacks.length;
-        const taskCreated = !previousTask;
-
-        if (taskNotificationsInitialized && taskCreated) {
-          showAdminUpdateNotification('New Task Assigned', `A new task has been assigned: "${t.title}"`);
-        }
-
-        if (taskNotificationsInitialized && taskUpdated) {
-          showAdminUpdateNotification('Task Status Updated', `Task "${t.title}" status changed to ${t.status}.`);
-        }
-
-        if (taskNotificationsInitialized && feedbackUpdated) {
-          showAdminUpdateNotification('New Task Feedback', `New feedback was added for task: "${t.title}"`);
-        }
-
-        previousTaskMap.set(doc.id, t);
-
-        const warning = getDeadlineWarning(t.deadline, t.status);
-        const taskHtml = `
-          <div class="task-item ${warning.class} ${t.status === "needs action" ? "task-needs-action" : ""}">
-            <div class="task-header">
-              <h3 class="task-title">${t.title}</h3>
-              <span class="task-status ${t.status === "done" ? "status-completed" : t.status === "pending validation" ? "status-validation" : t.status === "needs action" ? "status-needs-action" : "status-pending"}">${t.status === "needs action" ? "Needs Action" : t.status}</span>
-              ${warning.message ? `<span class="task-warning">${warning.message}</span>` : ""}
-            </div>
-            ${t.description ? `<p style="color: #cbd5e1; margin: 0.75rem 0; white-space: pre-wrap; word-break: break-word;">${t.description}</p>` : ""}
-            ${t.status === "needs action" ? `<p style="color: #f59e0b; margin: 0.5rem 0; font-weight: bold;">⚠️ This task needs your immediate action from the admin.</p>` : ""}
-            <div class="task-meta">
-              <span>📅 ${t.deadline}</span>
-            </div>
-            ${t.linkURL ? `<a href="${t.linkURL}" target="_blank" style="display: inline-block; margin-top: 0.5rem;">🔗 Open Link</a>` : ""}
-            ${t.status === "pending" || t.status === "needs action" ? `<button onclick="markDone('${doc.id}')" class="btn-submit">Already Submitted</button>` : ""}
-            <div style="margin-top:0.75rem;">
-              <h4 style="margin:0 0 0.5rem 0; color:#f3f4f6;">Feedback</h4>
-              <div id="member-feedback-list-${doc.id}">
-                ${Array.isArray(t.feedbacks) && t.feedbacks.length > 0 ? t.feedbacks.map(f => {
-                  const time = f.createdAt && f.createdAt.toDate ? f.createdAt.toDate().toLocaleString() : (f.createdAt ? new Date(f.createdAt).toLocaleString() : '');
-                  const authorName = getUserName(f.author) || 'Admin';
-                  return `<div style="padding:0.5rem; border:1px solid #334155; border-radius:6px; margin-bottom:0.5rem; background:#041024;"><div style="font-weight:600; color:#f3f4f6;">${authorName} <span style="font-weight:400; color:#94a3b8; font-size:0.85rem; margin-left:0.5rem;">${time}</span></div><div style="color:#cbd5e1; margin-top:0.25rem; white-space: pre-wrap; word-break: break-word;">${f.message}</div></div>`;
-                }).join('') : '<p style="color:#94a3b8;">No feedback yet.</p>'}
-              </div>
-            </div>
-          </div>
-        `;
-
-        if (isDoneStatus) {
-          hiddenDoneCount++;
-          completedTasks.push(taskHtml);
-        } else {
-          activeTasks.push(taskHtml);
-          taskCount++;
-          if (warning.message) {
-            deadlineWarnings.push({
-              id: doc.id,
-              title: t.title,
-              deadline: t.deadline,
-              status: warning.message
-            });
-          }
-        }
-      });
-
-      if (deadlineWarnings.length > 0) {
-        const newDeadlineWarnings = deadlineWarnings.filter(warning => !shownDeadlineTaskIds.has(warning.id));
-        if (newDeadlineWarnings.length > 0) {
-          showTaskDeadlineModal(newDeadlineWarnings);
-          newDeadlineWarnings.forEach(warning => shownDeadlineTaskIds.add(warning.id));
-        }
-      }
-
-      if (completedTasks.length > 0) {
-        if (completedTasksSection) {
-          completedTasksSection.style.display = '';
-        }
-        if (completedTasksToggleBtn) {
-          completedTasksToggleBtn.textContent = completedTasksCollapsed
-            ? `Show completed tasks (${completedTasks.length})`
-            : `Hide completed tasks (${completedTasks.length})`;
-        }
-        if (completedTasksList) {
-          completedTasksList.innerHTML = completedTasks.join('');
-          completedTasksList.style.display = completedTasksCollapsed ? 'none' : 'block';
-        }
-      } else {
-        if (completedTasksSection) {
-          completedTasksSection.style.display = 'none';
-        }
-      }
-
-      container.innerHTML = activeTasks.join('');
-      if (emptyState) {
-        emptyState.style.display = taskCount === 0 ? "block" : "none";
-      }
-
-      if (taskCount === 0 && !emptyState) {
-        container.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No tasks assigned yet. Check back soon!</p>';
-      }
-
-      refreshHomeDashboard();
-    }, (error) => {
-      console.error('Tasks onSnapshot error:', error);
+    // Lifecycle awareness for reliable sync on Android
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && userEmail) startTicketHistorySync();
     });
-    
-    // Load polls, announcements, and in-app notifications
-    loadPolls();
-    loadAnnouncements();
-    loadHomeDashboard();
-    loadInAppNotifications();
-    checkMaintenance();
-    loadProgressReport();
-    loadResources();
-
-    // Always ensure chat room list stays synced after refresh
-    loadChatRooms();
+    if (window.Capacitor?.isNativePlatform?.()) {
+      import('@capacitor/app').then(({ App }) => {
+        App.addListener('resume', () => { if (userEmail) startTicketHistorySync(); });
+      });
+    }
   }
-  
-  // Ensure the ticket history section exists in the DOM
-  ensureTicketHistorySection();
-
-  // Always load ticket history (it handles authentication internally)
-  loadTicketHistory();
 })();
 
-console.log('=== MEMBER.JS FILE LOADED - CHECKING TICKET HISTORY ===');
-console.log('userEmail at module level:', userEmail);
-console.log('DOM ready state:', document.readyState);
+console.log('=== MEMBER.JS FILE LOADED ===');
 
-function ensureTicketHistorySection() {
-  if (document.getElementById("ticketHistory")) return;
+async function fetchCurrentTicketHistory(targetContainerId) {
+  if (!userEmail) {
+    console.log('[TicketSync] No userEmail; aborting fetch.');
+    return null;
+  }
+  const memberEmail = normalizeEmail(userEmail);
+  console.log(`[TicketSync] [DIAG] Authoritative server fetch starting for ${memberEmail}`);
 
-  const pageContainer = document.querySelector(".container");
-  if (!pageContainer) return;
+  try {
+    const ticketsRef = collection(db, "tickets");
+    // Use the basic collection reference for getDocsFromServer to avoid index requirements
+    const snapshot = await getDocsFromServer(ticketsRef);
+    console.log(`[TicketSync] [DIAG] Fetch complete. Total documents from server: ${snapshot.size}`);
 
-  const ticketCard = document.createElement("div");
-  ticketCard.className = "card";
-  ticketCard.style.marginTop = "2rem";
-  ticketCard.innerHTML = `
-    <h2 style="margin-bottom: 1rem;">🎟️ Ticket History</h2>
-    <div style="margin-bottom: 1rem;">
-      <button onclick="loadTicketHistory('ticketHistory', 'ticketHistoryEmptyState', true)" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">Refresh Tickets</button>
-    </div>
-    <div id="ticketHistory"></div>
-    <p id="ticketHistoryEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
-      No ticket history yet. Submit a ticket above and check back for updates.
-    </p>
-  `;
-
-  const submitCard = document.getElementById("ticketTitle")?.closest(".card");
-  if (submitCard && submitCard.parentNode) {
-    submitCard.parentNode.insertBefore(ticketCard, submitCard);
-  } else {
-    pageContainer.appendChild(ticketCard);
+    const docs = [];
+    let debugCount = 0;
+    snapshot.forEach(docSnap => {
+      const t = docSnap.data();
+      const subBy = normalizeEmail(t.submittedBy);
+      const assignTo = normalizeEmail(t.assignedTo);
+      const isMatch = subBy === memberEmail || assignTo === memberEmail;
+      if (isMatch) {
+        debugCount++;
+        docs.push(docSnap);
+        console.log(`[TicketSync] [DIAG] [FETCH] Matched ticket #${debugCount}: ID=${docSnap.id}, title=${t.title}, submittedBy=${subBy}, assignedTo=${assignTo}`);
+      }
+    });
+    console.log(`[TicketSync] [DIAG] Fetch result: ${debugCount} tickets match member email.`);
+    return docs;
+  } catch (error) {
+    console.error('[TicketSync] [DIAG] Server fetch FAILED:', error);
+    return null;
   }
 }
 
+function subscribeToTicketHistory() {
+  if (!userEmail) {
+    console.log('[TicketSync] [DIAG] No userEmail; listener not subscribed.');
+    return;
+  }
+
+  if (ticketHistoryUnsubscribe) {
+    console.log('[TicketSync] [DIAG] Unsubscribing previous listener...');
+    ticketHistoryUnsubscribe();
+    ticketHistoryUnsubscribe = null;
+  }
+
+  const memberEmail = normalizeEmail(userEmail);
+  console.log(`[TicketSync] [DIAG] Subscribing to ticket listener for ${memberEmail}...`);
+
+  const ticketsRef = collection(db, "tickets");
+  let listenerFiredCount = 0;
+  
+  ticketHistoryUnsubscribe = onSnapshot(ticketsRef, { includeMetadataChanges: true }, (snapshot) => {
+    listenerFiredCount++;
+    const isFromCache = snapshot.metadata.fromCache;
+    const hasPendingWrites = snapshot.metadata.hasPendingWrites;
+    console.log(`[TicketSync] [DIAG] [LISTENER_FIRE #${listenerFiredCount}] fromCache=${isFromCache}, hasPendingWrites=${hasPendingWrites}, docCount=${snapshot.size}`);
+
+    const docs = [];
+    let matchCount = 0;
+    snapshot.forEach(ticketDoc => {
+      const t = ticketDoc.data();
+      const subBy = normalizeEmail(t.submittedBy);
+      const assignTo = normalizeEmail(t.assignedTo);
+      const isMatch = subBy === memberEmail || assignTo === memberEmail;
+      if (isMatch) {
+        matchCount++;
+        docs.push(ticketDoc);
+        console.log(`[TicketSync] [DIAG] [LISTENER_MATCH #${matchCount}] ID=${ticketDoc.id}, title=${t.title}, submittedBy=${subBy}, assignedTo=${assignTo}`);
+      }
+    });
+
+    console.log(`[TicketSync] [DIAG] Listener snapshot: ${matchCount} matched tickets out of ${snapshot.size} total.`);
+    latestTicketSnapshotDocs = docs;
+    ticketSyncState = 'active';
+    console.log(`[TicketSync] [DIAG] Rendering to container: ${ticketHistoryTarget.containerId}`);
+    renderTicketHistory(ticketHistoryTarget.containerId, ticketHistoryTarget.emptyStateId, docs);
+    ticketNotificationsInitialized = true;
+  }, (error) => {
+    console.error('[TicketSync] [DIAG] Listener FAILED:', error);
+    ticketSyncState = 'error';
+    ticketHistoryUnsubscribe = null;
+  });
+
+  console.log(`[TicketSync] [DIAG] Listener subscription established.`);
+}
+
+async function startTicketHistorySync(containerId = "ticketHistory", emptyStateId = "ticketHistoryEmptyState") {
+  console.log(`[TicketSync] [DIAG] startTicketHistorySync called with containerId=${containerId}`);
+  
+  // Re-read userEmail from storage if lost
+  if (!userEmail) {
+    userEmail = await getStoredUserEmail();
+    console.log(`[TicketSync] [DIAG] userEmail restored from storage: ${userEmail}`);
+  }
+  if (!userEmail) {
+    console.log('[TicketSync] [DIAG] No userEmail available; sync aborted.');
+    return;
+  }
+
+  ticketHistoryTarget = { containerId, emptyStateId };
+  console.log(`[TicketSync] [DIAG] Target updated to container=${containerId}`);
+
+  // Force Auth refresh if on native platform to ensure token hasn't expired
+  if (window.Capacitor?.isNativePlatform?.() && !auth.currentUser) {
+    console.log('[TicketSync] [DIAG] Native platform detected and no auth user; forcing auth refresh...');
+     await new Promise(r => {
+        const u = onAuthStateChanged(auth, (user) => { u(); r(user); });
+        setTimeout(r, 2000);
+     });
+  }
+
+  console.log('[TicketSync] [DIAG] Fetching authoritative data from server...');
+  const authoritativeDocs = await fetchCurrentTicketHistory(containerId);
+  if (authoritativeDocs) {
+    console.log(`[TicketSync] [DIAG] Fetch succeeded; got ${authoritativeDocs.length} tickets.`);
+    latestTicketSnapshotDocs = authoritativeDocs;
+    renderTicketHistory(containerId, emptyStateId, authoritativeDocs);
+  } else {
+    console.log('[TicketSync] [DIAG] Fetch returned null; rendering empty.');
+  }
+  
+  console.log('[TicketSync] [DIAG] Establishing real-time listener...');
+  subscribeToTicketHistory();
+  console.log('[TicketSync] [DIAG] Sync lifecycle complete.');
+}
+
+function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticketHistoryEmptyState", forceRefresh = false) {
+  ticketHistoryTarget = { containerId, emptyStateId };
+  void startTicketHistorySync(containerId, emptyStateId);
+}
+
+window.loadTicketHistory = loadTicketHistory;
+
 function renderSubmittedTicketImmediately(ticketId, ticket) {
-  const container = document.getElementById('ticketHistory');
-  const emptyState = document.getElementById('ticketHistoryEmptyState');
-  if (!container) return;
   optimisticTicketHistory.set(ticketId, ticket);
 
-  const ticketElement = document.createElement('div');
-  ticketElement.dataset.ticketId = ticketId;
-  ticketElement.style.cssText = 'margin-bottom:1rem; padding:1rem; border:1px solid #374151; border-radius:0.5rem; background:#1e293b;';
-  ticketElement.innerHTML = `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-      <h4 style="margin:0; color:#f3f4f6;">${escapeHtml(ticket.title)}</h4>
-      <span style="padding:0.25rem 0.5rem; border-radius:0.25rem; font-size:0.8rem; font-weight:600; background:#ef4444; color:white;">Open</span>
-    </div>
-    <p style="margin:0 0 0.5rem; color:#94a3b8; font-size:0.8rem;">Assigned: ${new Date().toLocaleDateString()}</p>
-    <p style="margin:0 0 0.5rem; color:#d1d5db; white-space:pre-wrap; word-break:break-word;">${escapeHtml(ticket.description)}</p>
-    <div style="padding:0.5rem; background:#0f172a; border-radius:0.25rem;">
-      <h5 style="margin:0 0 0.5rem; color:#f3f4f6; font-size:0.9rem;">Admin Feedback</h5>
-      <p style="color:#9ca3af; margin:0;">No admin feedback yet.</p>
-    </div>`;
-  container.prepend(ticketElement);
-  if (emptyState) emptyState.style.display = 'none';
+  const targets = new Map([
+    ['ticketHistory', 'ticketHistoryEmptyState'],
+    [ticketHistoryTarget.containerId, ticketHistoryTarget.emptyStateId]
+  ]);
+  targets.forEach((emptyStateId, containerId) => {
+    if (document.getElementById(containerId)) {
+      renderTicketHistory(containerId, emptyStateId, latestTicketSnapshotDocs || []);
+    }
+  });
 }
 
 function renderTicketHistory(containerId, emptyStateId, docs) {
@@ -4327,7 +4272,10 @@ function renderTicketHistory(containerId, emptyStateId, docs) {
       }
     }
     previousTicketMap.set(ticketDoc.id, ticket);
-    const createdDate = ticket.createdAt?.toDate?.() ? ticket.createdAt.toDate().toLocaleDateString() : "Unknown date";
+    const createdAt = ticket.createdAt?.toDate?.() || ticket.createdAt;
+    const createdDate = createdAt instanceof Date && !Number.isNaN(createdAt.getTime())
+      ? createdAt.toLocaleDateString()
+      : "Unknown date";
     const status = ticket.status || "open";
     const statusLabel = status === "pending validation" ? "Pending Validation" : status.charAt(0).toUpperCase() + status.slice(1);
     const responses = Array.isArray(ticket.responses) ? ticket.responses : [];
@@ -4354,95 +4302,21 @@ function renderTicketHistory(containerId, emptyStateId, docs) {
   if (emptyState) emptyState.style.display = ticketCount > 0 ? 'none' : 'block';
 }
 
-function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticketHistoryEmptyState", forceRefresh = false) {
-  console.log('=== loadTicketHistory CALLED - STARTING ===', containerId, emptyStateId);
-
-  const container = document.getElementById(containerId);
-  const emptyState = document.getElementById(emptyStateId);
-  const ticketCard = container?.closest('.card');
-
-  if (!container) {
-    console.log('=== TICKET HISTORY CONTAINER NOT FOUND ===');
-    return;
-  }
-
-  if (ticketCard) {
-    ticketCard.style.display = "block";
-  }
-
-  console.log('Container found, userEmail:', userEmail);
-
-  if (!userEmail) {
-    if (emptyState) emptyState.style.display = "block";
-    container.innerHTML = '<p style="color:#94a3b8; text-align:center;">Loading your ticket history...</p>';
-    return;
-  }
-
-  ticketHistoryTarget = { containerId, emptyStateId };
-  if (latestTicketSnapshotDocs) renderTicketHistory(containerId, emptyStateId, latestTicketSnapshotDocs);
-
-  if (forceRefresh && ticketHistoryUnsubscribe) {
-    ticketHistoryUnsubscribe();
-    ticketHistoryUnsubscribe = null;
-  }
-  if (ticketHistoryUnsubscribe) return;
-
-  if (emptyState) emptyState.style.display = "none";
-  ticketHistoryUnsubscribe = onSnapshot(collection(db, "tickets"), (snapshot) => {
-      const docs = [];
-      snapshot.forEach(ticketDoc => docs.push(ticketDoc));
-      latestTicketSnapshotDocs = docs;
-      renderTicketHistory(ticketHistoryTarget.containerId, ticketHistoryTarget.emptyStateId, docs);
-      ticketNotificationsInitialized = true;
-    }, (error) => {
-      console.error('Error loading tickets:', error);
-      if (emptyState) emptyState.style.display = "block";
-      container.innerHTML = '<p style="color:#f87171; text-align:center;">Unable to load ticket history right now. Please try again.</p>';
-    });
-}
-
-window.toggleCompletedTasks = function() {
-  completedTasksCollapsed = !completedTasksCollapsed;
-  if (!completedTasksToggleBtn || !completedTasksList) return;
-
-  const completedCount = completedTasksList.children.length;
-  completedTasksToggleBtn.textContent = completedTasksCollapsed
-    ? `Show completed tasks (${completedCount})`
-    : `Hide completed tasks (${completedCount})`;
-  completedTasksList.style.display = completedTasksCollapsed ? 'none' : 'block';
-  localStorage.setItem('completedTasksCollapsed', completedTasksCollapsed ? 'true' : 'false');
-};
-
-window.toggleArchivedPolls = function() {
-  archivedPollsCollapsed = !archivedPollsCollapsed;
-  const archiveContent = document.getElementById('archivedPollsContent');
-  const archiveButtons = document.querySelectorAll('button[onclick="toggleArchivedPolls()"]');
-
-  if (archiveContent) {
-    archiveContent.style.display = archivedPollsCollapsed ? 'none' : 'block';
-  }
-
-  archiveButtons.forEach(button => {
-    button.textContent = `${archivedPollsCollapsed ? 'Show Archived Polls' : 'Hide Archived Polls'}`;
-  });
-
-  localStorage.setItem('archivedPollsCollapsed', archivedPollsCollapsed ? 'true' : 'false');
-};
-
-window.toggleArchivedAnnouncements = function() {
-  archivedAnnouncementsCollapsed = !archivedAnnouncementsCollapsed;
-  const archiveContent = document.getElementById('archivedAnnouncementsContent');
-  const archiveButtons = document.querySelectorAll('button[onclick="toggleArchivedAnnouncements()"]');
-
-  if (archiveContent) archiveContent.style.display = archivedAnnouncementsCollapsed ? 'none' : 'block';
-  archiveButtons.forEach(button => {
-    const count = button.textContent.match(/\((\d+)\)/)?.[1] || '0';
-    button.textContent = `${archivedAnnouncementsCollapsed ? 'Show' : 'Hide'} (${count})`;
-  });
-  localStorage.setItem('archivedAnnouncementsCollapsed', archivedAnnouncementsCollapsed ? 'true' : 'false');
-};
-
 // Make loadTicketHistory available globally
 window.loadTicketHistory = loadTicketHistory;
 
+window.forceRefreshTicketHistory = async function() {
+  console.log('[TicketSync] [DIAG] FORCE REFRESH called by user.');
+  // Completely reset and restart the ticket sync
+  if (ticketHistoryUnsubscribe) {
+    console.log('[TicketSync] [DIAG] Unsubscribing old listener before force refresh...');
+    ticketHistoryUnsubscribe();
+    ticketHistoryUnsubscribe = null;
+  }
+  latestTicketSnapshotDocs = null;
+  ticketSyncState = 'inactive';
+  console.log('[TicketSync] [DIAG] State reset; restarting sync...');
+  await startTicketHistorySync();
+  console.log('[TicketSync] [DIAG] FORCE REFRESH complete.');
+};
 
