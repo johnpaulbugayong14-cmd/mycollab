@@ -1370,6 +1370,12 @@ async function refreshHomeDashboard() {
     console.warn('Unable to load tickets for home dashboard:', error);
   }
 
+  ticketRefs.sort((firstTicket, secondTicket) => {
+    const firstCreatedAt = parseDateValue(firstTicket.createdAt)?.getTime() || 0;
+    const secondCreatedAt = parseDateValue(secondTicket.createdAt)?.getTime() || 0;
+    return secondCreatedAt - firstCreatedAt;
+  });
+
   try {
     const resourcesSnap = await getDocs(collection(db, 'resources'));
     resourcesSnap.forEach(docSnap => {
