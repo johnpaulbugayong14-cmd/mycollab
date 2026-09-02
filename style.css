@@ -1023,6 +1023,14 @@ button:active {
   color: #f1f5f9;
 }
 
+.task-description {
+  margin: 0.5rem 0 0;
+  color: #e2e8f0;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .task-status {
   display: inline-block;
   padding: 0.25rem 0.75rem;
@@ -1058,6 +1066,7 @@ button:active {
 .task-feedback-item {
   padding-top: 0.5rem;
   border-top: 1px solid rgba(148, 163, 184, 0.16);
+  color: #f1f5f9;
   font-size: 0.9rem;
   line-height: 1.45;
 }
@@ -1070,6 +1079,24 @@ button:active {
   color: #94a3b8;
   font-size: 0.8rem;
   font-weight: 400;
+}
+
+.task-feedback-author strong {
+  color: #f8fafc;
+}
+
+#completedTasksList {
+  color: #e2e8f0 !important;
+}
+
+#completedTasksList .task-item {
+  background: #172033;
+  border-color: #475569;
+}
+
+#completedTasksList .task-status {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
 }
 
 .task-item.warning-near .task-warning {

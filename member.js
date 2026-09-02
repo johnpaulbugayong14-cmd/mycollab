@@ -1286,7 +1286,15 @@ function getTaskCreatedAtMillis(task) {
 }
 
 function renderTaskFeedback(task) {
-  const feedbacks = Array.isArray(task.feedbacks) ? task.feedbacks : [];
+  const feedbacks = Array.isArray(task.feedbacks) ? [...task.feedbacks] : [];
+  const latestFeedback = task.latestFeedback;
+  if (latestFeedback?.message && !feedbacks.some((feedback) => (
+    feedback.message === latestFeedback.message
+    && feedback.author === latestFeedback.author
+    && String(feedback.createdAt) === String(latestFeedback.createdAt)
+  ))) {
+    feedbacks.push(latestFeedback);
+  }
   if (!feedbacks.length) return '';
 
   return `
@@ -1295,7 +1303,7 @@ function renderTaskFeedback(task) {
       ${feedbacks.map((feedback) => {
         const feedbackDate = parseDateValue(feedback.createdAt);
         const dateText = feedbackDate ? feedbackDate.toLocaleString() : '';
-        return `<div class="task-feedback-item"><div><strong>${escapeHtml(getUserName(feedback.author) || 'Admin')}</strong>${dateText ? ` <span>${escapeHtml(dateText)}</span>` : ''}</div><div>${escapeHtml(feedback.message || '')}</div></div>`;
+        return `<div class="task-feedback-item"><div class="task-feedback-author"><strong>${escapeHtml(getUserName(feedback.author) || 'Admin')}</strong>${dateText ? ` <span>${escapeHtml(dateText)}</span>` : ''}</div><div>${escapeHtml(feedback.message || '')}</div></div>`;
       }).join('')}
     </div>`;
 }
@@ -1336,7 +1344,7 @@ function renderMemberTasks(snapshot) {
           <h4 class="task-title">${escapeHtml(task.title || 'Untitled task')}</h4>
           <span class="task-status ${statusClass}">${escapeHtml(status === 'pending validation' ? 'Pending Validation' : status.charAt(0).toUpperCase() + status.slice(1))}</span>
         </div>
-        <p>${escapeHtml(task.description || '')}</p>
+        <p class="task-description">${escapeHtml(task.description || '')}</p>
         ${renderTaskFeedback(task)}
         <div class="task-meta">Deadline: ${escapeHtml(deadline)}${warning.message ? ` · ${escapeHtml(warning.message)}` : ''}</div>
         <div class="task-actions">
@@ -1355,7 +1363,7 @@ function renderMemberTasks(snapshot) {
           <h4 class="task-title">${escapeHtml(task.title || 'Untitled task')}</h4>
           <span class="task-status">Completed</span>
         </div>
-        <p>${escapeHtml(task.description || '')}</p>
+        <p class="task-description">${escapeHtml(task.description || '')}</p>
         ${renderTaskFeedback(task)}
       </div>`).join('');
     completedTasksList.style.display = completedTasksCollapsed ? 'none' : 'block';
