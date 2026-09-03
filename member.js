@@ -1301,9 +1301,7 @@ function renderTaskFeedback(task) {
     <div class="task-feedback">
       <strong>Admin Feedback</strong>
       ${feedbacks.map((feedback) => {
-        const feedbackDate = parseDateValue(feedback.createdAt);
-        const dateText = feedbackDate ? feedbackDate.toLocaleString() : '';
-        return `<div class="task-feedback-item"><div class="task-feedback-author"><strong>${escapeHtml(getUserName(feedback.author) || 'Admin')}</strong>${dateText ? ` <span>${escapeHtml(dateText)}</span>` : ''}</div><div>${escapeHtml(feedback.message || '')}</div></div>`;
+        return `<div class="task-feedback-item"><div>${escapeHtml(feedback.message || '')}</div></div>`;
       }).join('')}
     </div>`;
 }
@@ -2758,6 +2756,27 @@ window.submitTicket = async function () {
   }
 
   try {
+    if (!auth.currentUser) {
+      await new Promise((resolve) => {
+        let settled = false;
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+          if (settled) return;
+          settled = true;
+          unsubscribe();
+          resolve(currentUser);
+        });
+        setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          unsubscribe();
+          resolve(null);
+        }, 5000);
+      });
+    }
+    if (!auth.currentUser) {
+      await signInAnonymously(auth);
+    }
+
     console.log('Adding ticket to Firestore...');
     console.log('Submitting ticket with userEmail:', userEmail);
     const createdTicketRef = await addDoc(collection(db, "tickets"), {
@@ -2793,7 +2812,8 @@ window.submitTicket = async function () {
       ? { containerId: 'maintenanceTicketHistory', emptyStateId: 'maintenanceTicketHistoryEmptyState' }
       : { containerId: 'ticketHistory', emptyStateId: 'ticketHistoryEmptyState' };
     ticketHistoryTarget = activeTicketHistoryContainer;
-    void startTicketHistorySync(activeTicketHistoryContainer.containerId, activeTicketHistoryContainer.emptyStateId);
+    void startTicketHistorySync(activeTicketHistoryContainer.containerId, activeTicketHistoryContainer.emptyStateId)
+      .catch((syncError) => console.warn('Ticket history refresh after submission failed:', syncError));
 
     const form = titleElement?.closest('form');
     let submissionMessage = document.getElementById('ticketSubmissionMessage');
@@ -2816,7 +2836,7 @@ window.submitTicket = async function () {
       .catch((notificationError) => console.warn("Notification process failed:", notificationError));
   } catch (error) {
     console.error("Error submitting ticket:", error);
-    alert("Failed to submit ticket. Please try again.");
+    alert(`Failed to submit ticket: ${error?.message || 'Please try again.'}`);
   } finally {
     window.isSubmittingTicket = false;
   }

@@ -90,6 +90,11 @@ export async function saveFcmTokenForCurrentUser(token) {
 }
 
 export async function subscribeToNotifications() {
+  if (window.Capacitor?.isNativePlatform?.()) {
+    console.log('Skipping web push subscription on native Capacitor; native push handles notifications.');
+    return null;
+  }
+
   // Skip FCM in local development to prevent VAPID key errors
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     console.log('Skipping FCM notifications in local development');
@@ -120,6 +125,11 @@ export async function subscribeToNotifications() {
 }
 
 export function showLocalNotification(title, body, icon = null) {
+  if (typeof Notification === 'undefined') {
+    console.log('Browser notifications are unavailable in this runtime.');
+    return;
+  }
+
   if (Notification.permission === 'granted') {
     const notification = new Notification(title, {
       body,
@@ -147,7 +157,7 @@ export async function sendNotificationToUsers(userEmails, title, body, type = 'g
   });
   
   // Show local browser notification if permission granted
-  if (Notification.permission === 'granted') {
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
     showLocalNotification(title, body);
   }
   
