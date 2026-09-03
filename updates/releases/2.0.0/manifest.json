@@ -26,22 +26,22 @@
       "purpose": "any maskable"
     }
   ],
-  "version": "1.1.1",
+  "version": "2.0.0",
   "files": [
     {
       "path": "admin.html",
-      "size": 52153,
-      "sha256": "51293308257e707cbf9ad088cc0f365a1d12427547dd66987dafbd79a212d30e"
+      "size": 54944,
+      "sha256": "d983a60461680a57e4e28c641048f05f26b57ad9028e552a107a22cf87acda77"
     },
     {
       "path": "admin.js",
-      "size": 163568,
-      "sha256": "8d63b3a5a0eceaab634a593ef4723700432d43fa6a039d9ad972dbed3d5e1e16"
+      "size": 174850,
+      "sha256": "e73311a87e8e9ea81919bf488bc9bf20c6671035b67194f26d5a37424b411ec5"
     },
     {
       "path": "auth.js",
-      "size": 31336,
-      "sha256": "ca0c390ea1dfd310c2b0219c42ac67ab7bf43b853cf97cd7a10556e1908a8827"
+      "size": 31784,
+      "sha256": "e06dedf08f69acf8cca9071be2fc4a4c7b3a2ddbc40d1642e5e01a1c131dd11d"
     },
     {
       "path": "chat.html",
@@ -65,13 +65,18 @@
     },
     {
       "path": "firebase.js",
-      "size": 1389,
-      "sha256": "620a06605d2a494592919d4e2c8b3d7f6cd7c0f8b19590c3d6b58547d8a1c915"
+      "size": 1491,
+      "sha256": "6c257ac2ee74351f80877889097fcd23510f891a688808b2b506ef6e6140283a"
     },
     {
       "path": "firebase.json",
       "size": 164,
       "sha256": "7df4043192844f87e69231a12de70e88a2e3d41099b233ec44cc6a4b5ec71457"
+    },
+    {
+      "path": "firestore.rules",
+      "size": 5557,
+      "sha256": "74eb20692b1ffd4fe2ec45eca06225fd2107b0b63321fca07ab1e6cec9af29f9"
     },
     {
       "path": "github-email-trigger.js",
@@ -85,28 +90,38 @@
     },
     {
       "path": "index.html",
-      "size": 4468,
-      "sha256": "30743f0b1a3c6dc6e94688be5bbdff1448987a31081a35723f5546791093e672"
+      "size": 6561,
+      "sha256": "11d5b690025b1a60687f8cf108f5f44f6efd43efc4319757d3e0a69617cdaa93"
     },
     {
       "path": "login.html",
-      "size": 4454,
-      "sha256": "e03b2f24e5a22712806fa20625f66f174096ac5ac8ec1a0f069ba574e4057c23"
+      "size": 6629,
+      "sha256": "3d30ebe6ee589c141e07d5276cd360032de3256543e41c581a9f257b7b5ad768"
     },
     {
       "path": "member.html",
-      "size": 67253,
-      "sha256": "1847a4ff529a72bf2cfe6db16db3b47718e9bc985816fff1d8aeebbbda950c02"
+      "size": 64998,
+      "sha256": "a9e8610a6db5493107689759ca8bc693413e394cc0ddcd1887cfed48e560635a"
     },
     {
       "path": "member.js",
-      "size": 177544,
-      "sha256": "84d498591a78933fc534ff68051f288daef690d4da42a2fc33a33e27456e6589"
+      "size": 190180,
+      "sha256": "e98d0aa370e1c432ee3719acd36d9b5e83d436538a6c91076adb338355b1a105"
     },
     {
       "path": "notifications.js",
-      "size": 6085,
-      "sha256": "ba11596efa6938d8ef9835f97c6a6e4461d147f21deea442484b2a362a1015df"
+      "size": 6438,
+      "sha256": "cfc0d36df4faaf9ec1e1a5f92f2ddacac941520a91a0c4e4f208c92b1f018021"
+    },
+    {
+      "path": "organization-management.html",
+      "size": 14770,
+      "sha256": "8a0283b6f6761b63657c5f23e9b8c84ea6f62ac414d12430cda7f43839dc027a"
+    },
+    {
+      "path": "organizations.js",
+      "size": 3828,
+      "sha256": "d3e69daf17f02d8de28ab32e2c18799f41e919657e142cf3339d6429db0b8855"
     },
     {
       "path": "package-lock.json",
@@ -134,9 +149,19 @@
       "sha256": "eea2ac7fbb9e8c66890f91281e877030731cae83fa776a6ac846616f1013b593"
     },
     {
+      "path": "service-worker.js",
+      "size": 7733,
+      "sha256": "af24d81b7ad3d566be225ece65a5026e37859fdeedff76bdea6042eac3caeb76"
+    },
+    {
+      "path": "storage.rules",
+      "size": 184,
+      "sha256": "31cd19a93fb4e5c6d125feeb151790770894a6215d9746dcb3dd161cb01d7c46"
+    },
+    {
       "path": "style.css",
-      "size": 30670,
-      "sha256": "52adfb2f2facca076e68558a051abb9ef2ceada4296c3fcb016e7f157967c6a6"
+      "size": 35570,
+      "sha256": "97198713a0024cae9747ed69ea9b37bbad563f8061ec08548ae79cbd1c55c081"
     },
     {
       "path": "survey.html",
@@ -156,17 +181,22 @@
     {
       "path": "update-config.js",
       "size": 376,
-      "sha256": "2967da68bef4eb963b7ebcd24f6f7ab81e382ef2254ac63d250b7113bda90453"
+      "sha256": "2ff966f5833cab41c06f2f0b84b88ea993a306dfc88f5d3c257f18d4fc49aa8f"
     },
     {
       "path": "update-manager.js",
-      "size": 11965,
-      "sha256": "571e95d8a5e55013601aaecd41740b6eae5178a88a1f73913f0078ee90ae9f7f"
+      "size": 12511,
+      "sha256": "418fb7702cd59ce8e230d28ac770a59f3633e4b614bf591dc840140f8d657faf"
     },
     {
       "path": "vercel.json",
       "size": 277,
       "sha256": "6db4342674873da9fe5a66dd023482f3bfc6a9b6fe481ae964a8f8aa82e05034"
+    },
+    {
+      "path": "version.json",
+      "size": 631,
+      "sha256": "8e5b87ebda4524a8fbd0c89659632a286b99493f172080b8639d81298647e62e"
     },
     {
       "path": "watchtogether.js",

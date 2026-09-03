@@ -1,6 +1,6 @@
 {
-  "version": "2.0.0",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.0/",
+  "version": "1.1.59",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.59/",
   "required": true,
   "releaseNotes": [
     "Centered application headers consistently on mobile and desktop.",
