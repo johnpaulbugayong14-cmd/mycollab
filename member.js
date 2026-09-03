@@ -2789,6 +2789,13 @@ window.submitTicket = async function () {
     return;
   }
 
+  const organizationId = activeMemberOrganization?.id;
+  if (!organizationId) {
+    alert("You must be assigned to an organization before submitting a ticket.");
+    window.isSubmittingTicket = false;
+    return;
+  }
+
   try {
     if (!auth.currentUser) {
       await new Promise((resolve) => {
@@ -2816,6 +2823,7 @@ window.submitTicket = async function () {
     const createdTicketRef = await addDoc(collection(db, "tickets"), {
       title: title,
       description: description,
+      organizationId,
       submittedBy: userEmail,
       submittedByName: getUserName(userEmail),
       assignedTo: userEmail, // Add assignedTo field
@@ -2834,6 +2842,7 @@ window.submitTicket = async function () {
     renderSubmittedTicketImmediately(createdTicketRef.id, {
       title,
       description,
+      organizationId,
       submittedBy: userEmail,
       submittedByName: getUserName(userEmail),
       assignedTo: userEmail,
