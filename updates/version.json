@@ -1,10 +1,10 @@
 {
-  "version": "1.0.0",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.46/",
+  "version": "1.1.47",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.47/",
   "required": true,
   "releaseNotes": [
-    "Resolved Critical Identity Hijack: Disabled forced anonymous sign-in that was overwriting real member sessions.",
-    "Fixed Ticket History sync lag and crash on Android.",
-    "Ensured reliable real-time updates after app resume."
+    "Fixed member ticket submission when browser notifications are unavailable on Android.",
+    "Displayed admin task feedback for members, including completed tasks.",
+    "Prevented stale app data from being restored after Android reinstall."
   ]
 }
