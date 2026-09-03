@@ -1625,8 +1625,8 @@ canvas {
   }
 
   .content-header h1 {
-    padding-left: 2.5rem; /* Make room for the fixed button in the header area */
-    text-align: left;
+    padding-left: 0;
+    text-align: center;
     font-size: 1.5rem;
   }
 
