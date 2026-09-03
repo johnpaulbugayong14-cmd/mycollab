@@ -686,7 +686,7 @@ window.login = async function() {
       console.warn('Unable to update login presence:', presenceError);
     }
 
-    const destination = role === "admin" ? "admin.html" : "member.html";
+    const destination = role === "admin" ? "organization-management.html" : "member.html";
     console.log('User stored, redirecting to:', destination);
 
     window.location.href = destination;
@@ -775,6 +775,25 @@ export async function requireAuth(allowedRoles = null) {
     return;
   }
 
+  // Wait for Firebase auth to restore the session if it exists
+  if (!auth.currentUser) {
+    console.log("requireAuth: Waiting for Firebase Auth session settlement...");
+    await new Promise((resolve) => {
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        unsubscribe();
+        resolve(user);
+      });
+      setTimeout(resolve, 3000); // 2-second timeout safety
+    });
+  }
+
+  if (!auth.currentUser) {
+    console.warn("requireAuth: Firebase Auth session is unavailable; returning to login.");
+    await clearAuthData();
+    window.location.href = "login.html";
+    return;
+  }
+
   const accessAllowed = await getStoredUserAccess();
   if (accessAllowed === false && allowedRoles && allowedRoles.includes('member')) {
     // Restricted members are allowed to enter the member experience with limited access.
@@ -794,17 +813,6 @@ export async function requireAuth(allowedRoles = null) {
     return;
   }
 
-  // Initialize Firebase auth in background for Firestore access
-  if (!auth.currentUser) {
-    try {
-      await signInAnonymously(auth);
-      console.log("Initialized anonymous Firebase auth");
-    } catch (error) {
-      console.error("Failed to initialize Firebase auth:", error);
-      // Continue anyway - Firestore might work without auth
-    }
-  }
-
   // Start maintenance for auth persistence
   maintainAuthPersistence();
 
@@ -814,9 +822,11 @@ export async function requireAuth(allowedRoles = null) {
 
 // Ensure init runs after the script is loaded
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
+  window.firebaseAuthReady = new Promise((resolve) => {
+    document.addEventListener('DOMContentLoaded', () => init().then(resolve, resolve), { once: true });
+  });
 } else {
-  init();
+  window.firebaseAuthReady = init();
 }
 
 // Helper to safely initialize notifications
@@ -839,19 +849,21 @@ async function init() {
     await new Promise(resolve => setTimeout(resolve, 200));
   }
 
+  if (!auth.currentUser) {
+    await new Promise((resolve) => {
+      const unsubscribe = onAuthStateChanged(auth, () => {
+        unsubscribe();
+        resolve();
+      });
+      setTimeout(resolve, 3000);
+    });
+  }
+
   const path = window.location.pathname.toLowerCase();
   const isLoginPage = path.endsWith('login.html') || path.endsWith('index.html') || path === '/' || path === '';
 
   const user = await getStoredUser();
   console.log('Init: user found:', user, 'isLoginPage:', isLoginPage, 'path:', path);
-
-  if (user) {
-    const accessAllowed = await getStoredUserAccess();
-    if (accessAllowed === false && path.endsWith('login.html')) {
-      window.location.href = "member.html";
-      return;
-    }
-  }
 
   // Initialize notifications if user is logged in
   if (user) {
@@ -860,9 +872,9 @@ async function init() {
   }
 
   if (user && isLoginPage) {
-    // If logged in and on login page, redirect to dashboard
-    console.log('Redirecting to dashboard...');
-    window.location.href = user.role === "admin" ? "admin.html" : "member.html";
+    // Admins always choose a workspace after login or app restart.
+    console.log('Redirecting to landing page...');
+    window.location.href = user.role === "admin" ? "organization-management.html" : "member.html";
   } else if (!user && !isLoginPage) {
     // If not logged in and on a protected page, redirect to login
     console.log('Redirecting to login...');

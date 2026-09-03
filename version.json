@@ -1,10 +1,10 @@
 {
-  "version": "1.1.20",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.20/",
+  "version": "1.1.53",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.53/",
   "required": true,
   "releaseNotes": [
-    "Render newly submitted member tickets immediately despite delayed Firestore snapshots.",
-    "Fix mobile ticket-history refresh and overlay rendering.",
-    "Prevent the empty ticket message from appearing when ticket history is available."
+    "Added organization management with organization selection, creation, editing, and deletion.",
+    "Scoped organization data and scheduled video meetings to organization members.",
+    "Added a responsive organization management interface with compact lists, menus, and modal creation."
   ]
 }

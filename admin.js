@@ -89,12 +89,14 @@ import {
   orderBy,
   runTransaction,
   serverTimestamp,
-  writeBatch
+  writeBatch,
+  where
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 import { db } from "./firebase.js";
 import { signOutUser, getStoredUserEmail, getStoredUserRole, getEffectiveRole, setUserRole, setUserAccess, createMemberAccount, deleteMemberAccount, approvePasswordReset } from "./auth.js";
 import { sendNotificationToUsers, showLocalNotification, initializeNotifications } from "./notifications.js";
+import { addOrganizationMember, getActiveOrganizationId, setActiveOrganizationId, subscribeToOrganizations } from "./organizations.js";
 
 window.signOutUser = signOutUser;
 
@@ -106,6 +108,12 @@ let lastMemberProgress = {};
 let lastAnalyticsTasks = [];
 let archivedPollsCollapsed = localStorage.getItem('archivedPollsCollapsed') !== 'false';
 let archivedAnnouncementsCollapsed = localStorage.getItem('archivedAnnouncementsCollapsed') !== 'false';
+let managedOrganizations = [];
+let organizationsUnsubscribe = null;
+
+window.chooseOrganization = function() {
+  window.location.href = 'organization-management.html';
+};
 
 function escapeHtml(text) {
   return String(text ?? '')
@@ -206,7 +214,7 @@ async function persistProgressReportSections(sections) {
   const safeSections = Array.isArray(sections) ? sections : [];
 
   try {
-    await setDoc(progressRef, { sections: safeSections, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(progressRef, { sections: safeSections, organizationId: getActiveOrganizationId(), updatedAt: new Date().toISOString() }, { merge: true });
     const savedSnapshot = await getDoc(progressRef);
     const savedSections = savedSnapshot.exists() && Array.isArray(savedSnapshot.data()?.sections)
       ? savedSnapshot.data().sections
@@ -592,6 +600,7 @@ function getUserName(email) {
 
 let adminEmail = null;
 let adminRole = null;
+
 let liveChatRoomsUnsubscribe = null;
 let liveChatMessagesUnsubscribe = null;
 let selectedLiveChatId = null;
@@ -626,10 +635,6 @@ function clearAdminRoleLoadingState() {
   }
 }
 
-window.addEventListener('load', () => {
-  clearAdminRoleLoadingState();
-});
-
 function hasValidAdminRole(role) {
   return VALID_ADMIN_ROLES.has(normalizeRoleName(role));
 }
@@ -638,7 +643,6 @@ async function resolveAdminRoleForCurrentUser() {
   const currentEmail = adminEmail || await getStoredUserEmail();
   if (!currentEmail) {
     adminRole = 'member';
-    clearAdminRoleLoadingState();
     return adminRole;
   }
 
@@ -650,7 +654,6 @@ async function resolveAdminRoleForCurrentUser() {
     : (hasValidAdminRole(storedRole) ? storedRole : 'member');
 
   adminRole = candidate;
-  clearAdminRoleLoadingState();
   return adminRole;
 }
 
@@ -662,6 +665,27 @@ let selectedAdminChatImageName = null;
 let userRolesUnsubscribe = null;
 let adminProfilePictureUnsubscribe = null;
 let adminProgressSections = [];
+function loadManagedOrganizations() {
+  if (!adminEmail) return;
+  organizationsUnsubscribe?.();
+  organizationsUnsubscribe = subscribeToOrganizations(adminEmail, (organizations) => {
+    managedOrganizations = organizations;
+    const activeOrganizationId = getActiveOrganizationId();
+    const activeOrganization = organizations.find((organization) => organization.id === activeOrganizationId);
+    const activeOrganizationButton = document.getElementById('activeOrganizationButton');
+    if (activeOrganizationButton) {
+      activeOrganizationButton.innerHTML = `<i class="fas fa-exchange-alt"></i> ${escapeHtml(activeOrganization?.name || 'Choose Organization')}`;
+      activeOrganizationButton.title = activeOrganization ? `Change from ${activeOrganization.name}` : 'Choose organization';
+    }
+    if (!activeOrganization) {
+      window.resolveAdminOrganizationReady?.(null);
+      window.location.href = 'organization-management.html';
+      return;
+    }
+    window.resolveAdminOrganizationReady?.(activeOrganization.id);
+    if (typeof loadMemberRoles === 'function') void loadMemberRoles();
+  }, (error) => console.error('Unable to load organizations:', error));
+}
 
 function parseDateValue(value) {
   if (!value) return null;
@@ -707,6 +731,7 @@ function isMemberCurrentlyActive(member) {
 }
 
 (async () => {
+  if (window.firebaseAuthReady) await window.firebaseAuthReady;
   adminEmail = await getStoredUserEmail();
   setAdminRoleLoadingState();
 
@@ -728,6 +753,7 @@ function isMemberCurrentlyActive(member) {
   }
 
   if (adminEmail) {
+    loadManagedOrganizations();
     startAdminPresenceHeartbeat();
   }
 
@@ -1087,6 +1113,7 @@ window.createSurvey = async function () {
       targetNames,
       active: true,
       createdBy: adminEmail,
+      organizationId: getActiveOrganizationId(),
       createdAt: new Date()
     });
 
@@ -1161,11 +1188,18 @@ window.deleteSurvey = async function (surveyId, surveyTitle) {
   }
 };
 
-function loadSurveyManagement() {
+async function loadSurveyManagement() {
   const container = document.getElementById('surveysList');
   if (!container) return;
+  if (window.adminOrganizationReady) await window.adminOrganizationReady;
 
-  onSnapshot(collection(db, 'surveys'), (snapshot) => {
+  const activeOrganizationId = getActiveOrganizationId();
+  if (!activeOrganizationId) {
+    container.innerHTML = '<p style="color:#94a3b8; text-align:center;">Select an organization to view surveys.</p>';
+    return;
+  }
+
+  onSnapshot(query(collection(db, 'surveys'), where('organizationId', '==', activeOrganizationId)), (snapshot) => {
     const surveys = snapshot.docs
       .map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
       .sort((a, b) => {
@@ -1223,11 +1257,15 @@ function loadInAppNotificationRecipients() {
 async function loadMemberRoles() {
   try {
     const snapshot = await getDocs(collection(db, "userRoles"));
+    const activeOrganization = managedOrganizations.find((organization) => organization.id === getActiveOrganizationId());
+    const organizationMembers = new Set((activeOrganization?.memberEmails || []).map(normalizeEmail));
+    members.splice(0, members.length, { uid: 'everyone', name: 'Everyone' });
     const seen = new Set();
     snapshot.forEach((docSnap) => {
       const data = docSnap.data() || {};
       const docId = normalizeEmail(docSnap.id);
       if (!docId) return;
+      if (activeOrganization && !organizationMembers.has(docId) && docId !== normalizeEmail(adminEmail)) return;
       seen.add(docId);
 
       let member = members.find(m => normalizeEmail(m.uid) === docId);
@@ -1263,11 +1301,15 @@ function subscribeToMemberRoles() {
   }
 
   userRolesUnsubscribe = onSnapshot(collection(db, "userRoles"), (snapshot) => {
+    const activeOrganization = managedOrganizations.find((organization) => organization.id === getActiveOrganizationId());
+    const organizationMembers = new Set((activeOrganization?.memberEmails || []).map(normalizeEmail));
+    members.splice(0, members.length, { uid: 'everyone', name: 'Everyone' });
     const seen = new Set();
     snapshot.forEach((docSnap) => {
       const data = docSnap.data() || {};
       const docId = normalizeEmail(docSnap.id);
       if (!docId || isHiddenMember(docId)) return;
+      if (activeOrganization && !organizationMembers.has(docId) && docId !== normalizeEmail(adminEmail)) return;
 
       if (!isTrackedAuthMember(data)) return;
       
@@ -1530,7 +1572,13 @@ async function createMemberAccountFromAdmin() {
   }
 
   try {
+    const activeOrganizationId = getActiveOrganizationId();
+    if (!activeOrganizationId || !managedOrganizations.some((organization) => organization.id === activeOrganizationId)) {
+      throw new Error('Select or create an organization before creating members.');
+    }
+
     const result = await createMemberAccount(email, password, role, displayName);
+    await addOrganizationMember(activeOrganizationId, email);
     if (messageBox) {
       const friendlyLabel = displayName || result.email;
       messageBox.textContent = `Account created for ${friendlyLabel} with role ${result.role}.`;
@@ -1678,11 +1726,18 @@ function formatInAppNotificationDate(dateValue) {
   return new Date(dateValue).toLocaleString();
 }
 
-function loadInAppNotificationsList() {
+async function loadInAppNotificationsList() {
   const container = document.getElementById("inAppNotificationsList");
   if (!container) return;
+  if (window.adminOrganizationReady) await window.adminOrganizationReady;
 
-  onSnapshot(collection(db, "inAppNotifications"), (snap) => {
+  const activeOrganizationId = getActiveOrganizationId();
+  if (!activeOrganizationId) {
+    container.innerHTML = '<p style="color: #94a3b8; text-align: center;">Select an organization to view notices.</p>';
+    return;
+  }
+
+  onSnapshot(query(collection(db, "inAppNotifications"), where("organizationId", "==", activeOrganizationId)), (snap) => {
     const docs = [];
     snap.forEach(docSnap => docs.push({ id: docSnap.id, ...docSnap.data() }));
     docs.sort((a, b) => {
@@ -1884,7 +1939,7 @@ loadLiveChatRooms();
   loadMaintenanceSettings();
 
   /* LOAD TICKETS */
-  onSnapshot(collection(db, "tickets"), (snap) => {
+  onSnapshot(getActiveOrganizationId() ? query(collection(db, "tickets"), where("organizationId", "==", getActiveOrganizationId())) : collection(db, "tickets"), (snap) => {
     console.log('=== ADMIN TICKETS LISTENER TRIGGERED ===');
     console.log('Tickets snapshot received, docs count:', snap.size);
     const container = document.getElementById("ticketsList");
@@ -1971,7 +2026,7 @@ loadLiveChatRooms();
   });
 
   /* LOAD RESOURCES */
-  onSnapshot(collection(db, "resources"), (snap) => {
+  onSnapshot(getActiveOrganizationId() ? query(collection(db, "resources"), where("organizationId", "==", getActiveOrganizationId())) : collection(db, "resources"), (snap) => {
     console.log('=== ADMIN RESOURCES LISTENER TRIGGERED ===');
     console.log('Resources snapshot received, docs count:', snap.size);
     const container = document.getElementById("resourcesList");
@@ -2044,13 +2099,21 @@ function mergeProgressStructures(defaultSections, savedSections) {
   });
 }
 
-function loadProgressReport() {
+async function loadProgressReport() {
   console.log('=== LOAD PROGRESS REPORT CALLED ===');
   const container = document.getElementById("progressReportPanel");
   console.log('Progress report container element:', container);
 
   if (!container) {
     console.warn('Skipping progress report load because progressReportPanel is not present.');
+    return;
+  }
+  if (window.adminOrganizationReady) await window.adminOrganizationReady;
+
+  if (!getActiveOrganizationId()) {
+    const backupSections = getProgressBackupSections() || [];
+    adminProgressSections = backupSections;
+    renderAdminProgressReport(backupSections);
     return;
   }
 
@@ -2137,6 +2200,7 @@ window.createTask = async function () {
         linkURL: link || null,
         status: "pending",
         emailNotificationSent: false,
+        organizationId: getActiveOrganizationId(),
         createdAt: Date.now()
       };
 
@@ -2245,7 +2309,7 @@ window.needAction = async function (id) {
 };
 
 /* REALTIME + GRAPH */
-onSnapshot(collection(db, "tasks"), (snap) => {
+onSnapshot(getActiveOrganizationId() ? query(collection(db, "tasks"), where("organizationId", "==", getActiveOrganizationId())) : collection(db, "tasks"), (snap) => {
   const now = Date.now();
   const container = document.getElementById("tasks");
 
@@ -2662,6 +2726,7 @@ window.createPoll = async function () {
       votes: {},
       status: 'active',
       emailNotificationSent: false,
+      organizationId: getActiveOrganizationId(),
       createdAt: new Date()
     };
 
@@ -2847,6 +2912,7 @@ window.createInAppNotification = async function () {
       console.warn('Failed to read display frequency controls:', err);
     }
 
+    notificationData.organizationId = getActiveOrganizationId();
     await addDoc(collection(db, "inAppNotifications"), notificationData);
 
     document.getElementById("inAppNotificationTitle").value = "";
@@ -2891,7 +2957,8 @@ window.createAnnouncement = async function () {
       createdAt: new Date(),
       commentsEnabled: true,
       archived: false,
-      emailNotificationSent: false
+      emailNotificationSent: false,
+      organizationId: getActiveOrganizationId()
     };
 
     await addDoc(collection(db, "announcements"), announcementData);
@@ -2932,6 +2999,7 @@ window.createResource = async function () {
       title,
       description,
       link,
+      organizationId: getActiveOrganizationId(),
       createdAt: new Date()
     };
 
@@ -3028,7 +3096,7 @@ window.restoreAnnouncement = async function (id) {
 };
 
 /* LOAD POLLS */
-onSnapshot(collection(db, "polls"), (snap) => {
+onSnapshot(getActiveOrganizationId() ? query(collection(db, "polls"), where("organizationId", "==", getActiveOrganizationId())) : collection(db, "polls"), (snap) => {
   const container = document.getElementById("pollsList");
   if (!container) {
     console.warn('Skipping polls render because pollsList is not present.');
@@ -3144,7 +3212,7 @@ window.toggleArchivedPolls = function() {
 };
 
 /* LOAD ANNOUNCEMENTS */
-onSnapshot(collection(db, "announcements"), (snap) => {
+onSnapshot(getActiveOrganizationId() ? query(collection(db, "announcements"), where("organizationId", "==", getActiveOrganizationId())) : collection(db, "announcements"), (snap) => {
   const container = document.getElementById("announcementsList");
   if (!container) {
     console.warn('Skipping announcements render because announcementsList is not present.');
@@ -3279,7 +3347,9 @@ if (document.getElementById('addProgressSectionButton')) {
 }
 
 async function getNextLiveChatTitle() {
-  const snapshot = await getDocs(collection(db, 'liveChats'));
+  const activeOrganizationId = getActiveOrganizationId();
+  if (!activeOrganizationId) return 'Livechat 1';
+  const snapshot = await getDocs(query(collection(db, 'liveChats'), where('organizationId', '==', activeOrganizationId)));
   let maxIndex = 0;
   snapshot.forEach((docSnap) => {
     const title = String(docSnap.data().title || '').trim();
@@ -3301,6 +3371,7 @@ async function createLiveChatRoom(event) {
       createdByEmail: adminEmail,
       createdByName: 'Admin',
       status: 'Active',
+      organizationId: getActiveOrganizationId(),
       createdAt: Date.now()
     });
     loadLiveChatRooms();
@@ -3896,12 +3967,19 @@ async function deleteLiveChatRoom(chatId) {
   }
 }
 
-function loadLiveChatRooms() {
+async function loadLiveChatRooms() {
   if (liveChatRoomsUnsubscribe) {
     liveChatRoomsUnsubscribe();
   }
+  if (window.adminOrganizationReady) await window.adminOrganizationReady;
 
-  liveChatRoomsUnsubscribe = onSnapshot(collection(db, 'liveChats'), (snapshot) => {
+  const activeOrganizationId = getActiveOrganizationId();
+  if (!activeOrganizationId) {
+    renderAdminChatRooms([]);
+    return;
+  }
+
+  liveChatRoomsUnsubscribe = onSnapshot(query(collection(db, 'liveChats'), where('organizationId', '==', activeOrganizationId)), (snapshot) => {
     const rooms = [];
     snapshot.forEach((docSnap) => rooms.push({ id: docSnap.id, ...docSnap.data() }));
     renderAdminChatRooms(rooms);

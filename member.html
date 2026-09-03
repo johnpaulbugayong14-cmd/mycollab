@@ -494,6 +494,7 @@
   <main class="main-content">
     <div class="content-header">
       <h1 id="page-title"><i class="fas fa-briefcase"></i> My Collab</h1>
+      <div id="memberActiveOrganization" style="color:#cbd5e1; font-size:0.9rem;">Loading organization...</div>
       <div id="datetime" class="datetime-center">Loading date...</div>
       <div class="header-actions">
         <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -651,7 +652,7 @@
       <section id="submit-ticket" class="content-section">
         <div class="card">
           <h2 style="margin-bottom: 1rem;"><i class="fas fa-headset"></i> Submit Support Ticket</h2>
-          <form onsubmit="event.preventDefault(); submitTicket();">
+          <form id="memberTicketForm" onsubmit="event.preventDefault(); submitTicket();">
             <div class="form-group">
               <label for="ticketTitle">Ticket Title</label>
               <input id="ticketTitle" type="text" placeholder="Brief description of your issue" required>
@@ -836,7 +837,7 @@ function renderMemberNavigation(isRestricted) {
 }
 </script>
 <script type="module">
-  import { requireAuth, getStoredUserRole, getStoredUserAccess, getStoredUserAccessReason } from "./auth.js?v=7";
+  import { requireAuth, getStoredUserRole, getStoredUserAccess, getStoredUserAccessReason } from "./auth.js?v=8";
   import { initializeNotifications } from "./notifications.js?v=5";
   await requireAuth(['member', 'limited-admin']);
 
@@ -1021,7 +1022,7 @@ window.openMaintenanceOverlaySection = function(sectionId) {
   if (sectionId === 'submit-ticket') {
     actionTitle.textContent = 'Submit Support Ticket';
     actionContent.innerHTML = `
-      <form onsubmit="event.preventDefault(); submitTicket();">
+      <form id="maintenanceTicketForm" onsubmit="event.preventDefault(); submitTicket();">
         <div style="display:grid; gap:1rem;">
           <input id="maintenanceTicketTitle" type="text" placeholder="Ticket title" style="width:100%; padding:0.9rem; border-radius:0.75rem; border:1px solid rgba(255,255,255,0.12); background:rgba(15,23,42,0.8); color:#f8fafc;" required />
           <textarea id="maintenanceTicketDescription" rows="5" placeholder="Describe your issue" style="width:100%; padding:0.9rem; border-radius:0.75rem; border:1px solid rgba(255,255,255,0.12); background:rgba(15,23,42,0.8); color:#f8fafc;" required></textarea>

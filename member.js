@@ -3,6 +3,7 @@ import { db, auth } from "./firebase.js";
 import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStoredUserEmail, signOutUser, getPasswordChangeRequired, getAccountPasswordHint, updateAccountPassword } from "./auth.js";
 import { initializeNotifications, sendNotificationToUsers, showLocalNotification } from "./notifications.js";
+import { getActiveOrganizationId, getOrganizationsForEmail, setActiveOrganizationId } from "./organizations.js";
 
 window.signOutUser = signOutUser;
 
@@ -59,6 +60,7 @@ let homeChatMessageListeners = [];
 let homeChatRoomNames = {};
 let homeFlashcardIndex = 0;
 let homeFlashcardListeners = [];
+let activeMemberOrganization = null;
 const FIREBASE_PROJECT_ID = "mycollab-89c11";
 const FIRESTORE_REST_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 const container = document.getElementById("tasks");
@@ -340,7 +342,7 @@ function saveProgressBackupSections(sections) {
 async function persistProgressReportSections(sections) {
   try {
     const progressRef = doc(db, progressReportCollection, progressReportDocId);
-    await setDoc(progressRef, { sections, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(progressRef, { sections, organizationId: activeMemberOrganization?.id || '', updatedAt: new Date().toISOString() }, { merge: true });
     saveProgressBackupSections(sections);
     return true;
   } catch (error) {
@@ -982,6 +984,17 @@ function renderHomeFlashcard(items = []) {
   }, 4200);
 }
 
+async function initializeMemberOrganization() {
+  const organizations = await getOrganizationsForEmail(userEmail);
+  const activeId = getActiveOrganizationId();
+  activeMemberOrganization = organizations.find((organization) => organization.id === activeId) || organizations[0] || null;
+  setActiveOrganizationId(activeMemberOrganization?.id || '');
+  const label = document.getElementById('memberActiveOrganization');
+  if (label) label.textContent = activeMemberOrganization
+    ? `Organization: ${activeMemberOrganization.name}`
+    : 'No organization assigned';
+}
+
 
 function isTaskDeadlineUrgent(task = {}) {
   const status = String(task.status || '').trim().toLowerCase();
@@ -1073,14 +1086,22 @@ function getChatRoomDisplayName(room = {}, roomId = '') {
   return String(roomName || '').trim() || (roomId ? `Livechat ${roomId.slice(0, 8)}` : 'Live chat');
 }
 
+function getActiveOrganizationMemberEmails() {
+  const organization = activeMemberOrganization;
+  const emails = [organization?.ownerEmail, ...(organization?.adminEmails || []), ...(organization?.memberEmails || [])];
+  return new Set(emails.map(normalizeEmail).filter(Boolean));
+}
+
 function getMemberStatusFlashcardItems() {
   const adminEmail = 'johnpaulbugayong@gmail.com';
   const adminEntry = { uid: adminEmail, name: 'Admin' };
   const seenStatusMembers = new Set();
 
+  const organizationMemberEmails = getActiveOrganizationMemberEmails();
   return [...members, adminEntry].reduce((statusItems, member) => {
     if (!member || !member.uid || member.uid === 'everyone') return statusItems;
     const normalizedId = normalizeEmail(member.uid);
+    if (!organizationMemberEmails.has(normalizedId)) return statusItems;
     if (!normalizedId || seenStatusMembers.has(normalizedId)) return statusItems;
     seenStatusMembers.add(normalizedId);
 
@@ -1374,7 +1395,7 @@ function renderMemberTasks(snapshot) {
 
 function loadMemberTasks() {
   if (!userEmail) return;
-  onSnapshot(collection(db, 'tasks'), renderMemberTasks, (error) => {
+  onSnapshot(activeMemberOrganization?.id ? query(collection(db, 'tasks'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'tasks'), renderMemberTasks, (error) => {
     console.error('Member tasks listener error:', error);
     if (emptyState) emptyState.style.display = 'block';
   });
@@ -1417,7 +1438,7 @@ async function refreshHomeDashboard() {
   const eligibleMeetingRefs = [];
 
   try {
-    const taskSnap = await getDocs(query(collection(db, 'tasks'), where('assignedTo', 'in', [userEmail, 'everyone'])));
+    const taskSnap = await getDocs(activeMemberOrganization?.id ? query(collection(db, 'tasks'), where('organizationId', '==', activeMemberOrganization.id), where('assignedTo', 'in', [userEmail, 'everyone'])) : query(collection(db, 'tasks'), where('assignedTo', 'in', [userEmail, 'everyone'])));
     taskSnap.forEach(docSnap => {
       const task = { id: docSnap.id, ...docSnap.data() };
       const status = String(task.status || '').trim().toLowerCase();
@@ -1430,7 +1451,7 @@ async function refreshHomeDashboard() {
   }
 
   try {
-    const announcementSnap = await getDocs(collection(db, 'announcements'));
+    const announcementSnap = await getDocs(activeMemberOrganization?.id ? query(collection(db, 'announcements'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'announcements'));
     const memberName = (await getWelcomeName(userEmail)) || '';
 
     for (const docSnap of announcementSnap.docs) {
@@ -1458,7 +1479,7 @@ async function refreshHomeDashboard() {
   }
 
   try {
-    const pollsSnap = await getDocs(collection(db, 'polls'));
+    const pollsSnap = await getDocs(activeMemberOrganization?.id ? query(collection(db, 'polls'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'polls'));
     pollsSnap.forEach(docSnap => {
       const poll = { id: docSnap.id, ...docSnap.data() };
       const status = String(poll.status || '').trim().toLowerCase();
@@ -1471,7 +1492,7 @@ async function refreshHomeDashboard() {
   }
 
   try {
-    const ticketsSnap = await getDocs(collection(db, 'tickets'));
+    const ticketsSnap = await getDocs(activeMemberOrganization?.id ? query(collection(db, 'tickets'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'tickets'));
     ticketsSnap.forEach((docSnap) => {
       const ticket = { id: docSnap.id, ...docSnap.data() };
       const status = String(ticket.status || 'open').trim().toLowerCase();
@@ -1490,7 +1511,7 @@ async function refreshHomeDashboard() {
   });
 
   try {
-    const resourcesSnap = await getDocs(collection(db, 'resources'));
+    const resourcesSnap = await getDocs(activeMemberOrganization?.id ? query(collection(db, 'resources'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'resources'));
     resourcesSnap.forEach(docSnap => {
       const resource = { id: docSnap.id, ...docSnap.data() };
       if (resource.title || resource.name) {
@@ -1527,7 +1548,10 @@ async function refreshHomeDashboard() {
   }
 
   try {
-    const chatRoomsSnap = await getDocs(collection(db, 'liveChats'));
+    const chatRoomsSnap = activeMemberOrganization?.id
+      ? await getDocs(query(collection(db, 'liveChats'), where('organizationId', '==', activeMemberOrganization.id)))
+      : null;
+    if (!chatRoomsSnap) return;
     for (const docSnap of chatRoomsSnap.docs) {
       const room = { id: docSnap.id, ...docSnap.data() };
       const messagesSnap = await getDocs(collection(db, 'liveChats', docSnap.id, 'messages'));
@@ -1556,8 +1580,10 @@ async function refreshHomeDashboard() {
   }
 
   try {
-    const meetingsSnap = await getDocs(collection(db, 'meetings'));
-    meetingsSnap.forEach(docSnap => {
+    const meetingsSnap = activeMemberOrganization?.id
+      ? await getDocs(query(collection(db, 'meetings'), where('organizationId', '==', activeMemberOrganization.id)))
+      : null;
+    meetingsSnap?.forEach(docSnap => {
       const meeting = { id: docSnap.id, ...docSnap.data() };
       const status = String(meeting.status || 'Active').trim().toLowerCase();
       const assignedTo = Array.isArray(meeting.assignedTo)
@@ -1640,41 +1666,45 @@ function stopHomeFlashcardListeners() {
 function subscribeToHomeFlashcardUpdates() {
   stopHomeFlashcardListeners();
 
-  const taskQuery = query(collection(db, 'tasks'), where('assignedTo', 'in', [userEmail, 'everyone']));
+  const taskQuery = activeMemberOrganization?.id ? query(collection(db, 'tasks'), where('organizationId', '==', activeMemberOrganization.id), where('assignedTo', 'in', [userEmail, 'everyone'])) : query(collection(db, 'tasks'), where('assignedTo', 'in', [userEmail, 'everyone']));
   homeFlashcardListeners.push(
     onSnapshot(taskQuery, () => refreshHomeDashboard(), (error) => console.warn('Home flashcard task listener error:', error))
   );
 
   homeFlashcardListeners.push(
-    onSnapshot(collection(db, 'announcements'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard announcement listener error:', error))
+    onSnapshot(activeMemberOrganization?.id ? query(collection(db, 'announcements'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'announcements'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard announcement listener error:', error))
   );
 
   homeFlashcardListeners.push(
-    onSnapshot(collection(db, 'resources'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard resource listener error:', error))
+    onSnapshot(activeMemberOrganization?.id ? query(collection(db, 'resources'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'resources'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard resource listener error:', error))
   );
 
   homeFlashcardListeners.push(
     onSnapshot(doc(db, 'progressReports', 'thesisProgress'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard progress listener error:', error))
   );
 
+  if (activeMemberOrganization?.id) {
+    homeFlashcardListeners.push(
+      onSnapshot(query(collection(db, 'liveChats'), where('organizationId', '==', activeMemberOrganization.id)), (snapshot) => {
+        const rooms = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+        subscribeHomeChatMessageListeners(rooms);
+        void refreshHomeDashboard();
+      }, (error) => console.warn('Home flashcard chat listener error:', error))
+    );
+  }
+
+  if (activeMemberOrganization?.id) {
+    homeFlashcardListeners.push(
+      onSnapshot(query(collection(db, 'meetings'), where('organizationId', '==', activeMemberOrganization.id)), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard meeting listener error:', error))
+    );
+  }
+
   homeFlashcardListeners.push(
-    onSnapshot(collection(db, 'liveChats'), (snapshot) => {
-      const rooms = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-      subscribeHomeChatMessageListeners(rooms);
-      void refreshHomeDashboard();
-    }, (error) => console.warn('Home flashcard chat listener error:', error))
+    onSnapshot(activeMemberOrganization?.id ? query(collection(db, 'polls'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'polls'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard poll listener error:', error))
   );
 
   homeFlashcardListeners.push(
-    onSnapshot(collection(db, 'meetings'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard meeting listener error:', error))
-  );
-
-  homeFlashcardListeners.push(
-    onSnapshot(collection(db, 'polls'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard poll listener error:', error))
-  );
-
-  homeFlashcardListeners.push(
-    onSnapshot(collection(db, 'tickets'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard ticket listener error:', error))
+    onSnapshot(activeMemberOrganization?.id ? query(collection(db, 'tickets'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'tickets'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard ticket listener error:', error))
   );
 }
 
@@ -1723,7 +1753,7 @@ function renderMemberStatusPanel() {
     const normalizedUid = normalizeEmail(member.uid);
     if (!normalizedUid || seen.has(normalizedUid)) return false;
     seen.add(normalizedUid);
-    return true;
+    return getActiveOrganizationMemberEmails().has(normalizedUid);
   });
 
   const rows = statusEntries.map((member) => {
@@ -1780,6 +1810,7 @@ function subscribeToMemberRoster() {
 
       const docId = normalizeEmail(docSnap.id);
       if (!docId) return;
+      if (!getActiveOrganizationMemberEmails().has(docId)) return;
 
       const displayName = typeof data.displayName === 'string' && data.displayName.trim()
         ? data.displayName.trim()
@@ -1810,6 +1841,7 @@ function subscribeToMemberStatuses() {
     snapshot.forEach(docSnap => {
       const data = docSnap.data() || {};
       const normalizedId = normalizeEmail(docSnap.id);
+      if (!getActiveOrganizationMemberEmails().has(normalizedId)) return;
       memberStatusDocs[normalizedId] = {
         lastActive: data.lastActive || memberStatusDocs[normalizedId]?.lastActive,
         isOnline: typeof data.isOnline !== 'undefined' ? data.isOnline : memberStatusDocs[normalizedId]?.isOnline,
@@ -1830,6 +1862,7 @@ async function pollMemberStatuses() {
     snap.forEach(docSnap => {
       const data = docSnap.data() || {};
       const normalizedId = normalizeEmail(docSnap.id);
+      if (!getActiveOrganizationMemberEmails().has(normalizedId)) return;
       newDocs[normalizedId] = {
         lastActive: data.lastActive || memberStatusDocs[normalizedId]?.lastActive,
         isOnline: typeof data.isOnline !== 'undefined' ? data.isOnline : memberStatusDocs[normalizedId]?.isOnline,
@@ -2568,7 +2601,7 @@ function checkMaintenance() {
 
 async function loadInAppNotifications() {
   const currentEmail = userEmail || await getStoredUserEmail();
-  onSnapshot(collection(db, "inAppNotifications"), (snap) => {
+  onSnapshot(activeMemberOrganization?.id ? query(collection(db, "inAppNotifications"), where("organizationId", "==", activeMemberOrganization.id)) : collection(db, "inAppNotifications"), (snap) => {
     const docs = [];
     snap.forEach(docSnap => docs.push({ id: docSnap.id, ...docSnap.data() }));
     docs.sort((a, b) => {
@@ -2901,7 +2934,7 @@ window.votePoll = async function(pollId, optionIndex) {
 };
 
 function loadPolls() {
-  onSnapshot(collection(db, "polls"), (snap) => {
+  onSnapshot(activeMemberOrganization?.id ? query(collection(db, "polls"), where("organizationId", "==", activeMemberOrganization.id)) : collection(db, "polls"), (snap) => {
     pollsContainer.innerHTML = "";
     let activePollCount = 0;
     let closedPollCount = 0;
@@ -3118,7 +3151,7 @@ function renderAnnouncementComments(announcementId, comments) {
 }
 
 function loadAnnouncements() {
-  onSnapshot(collection(db, "announcements"), (snap) => {
+  onSnapshot(activeMemberOrganization?.id ? query(collection(db, "announcements"), where("organizationId", "==", activeMemberOrganization.id)) : collection(db, "announcements"), (snap) => {
     announcementsContainer.innerHTML = "";
     let announcementCount = 0;
     const archivedAnnouncements = [];
@@ -3211,7 +3244,7 @@ function loadResources() {
   }
 
   console.log('=== MEMBER RESOURCES LISTENER SETUP ===');
-  onSnapshot(collection(db, "resources"), (snap) => {
+  onSnapshot(activeMemberOrganization?.id ? query(collection(db, "resources"), where("organizationId", "==", activeMemberOrganization.id)) : collection(db, "resources"), (snap) => {
     console.log('=== MEMBER RESOURCES LISTENER TRIGGERED ===');
     console.log('Resources snapshot received, docs count:', snap.size);
     container.innerHTML = "";
@@ -3260,7 +3293,12 @@ function loadMeetings() {
     meetingsUnsubscribe();
   }
 
-  const meetingsQuery = query(collection(db, 'meetings'), where('assignedTo', 'in', [userEmail, 'everyone']));
+  if (!activeMemberOrganization?.id) {
+    renderMeetings([]);
+    return;
+  }
+
+  const meetingsQuery = query(collection(db, 'meetings'), where('organizationId', '==', activeMemberOrganization.id), where('assignedTo', 'in', [userEmail, 'everyone']));
   meetingsUnsubscribe = onSnapshot(meetingsQuery, (snapshot) => {
     const meetings = [];
     snapshot.forEach(docSnap => {
@@ -3465,7 +3503,7 @@ async function findPendingSurvey(email) {
 
 function watchRequiredSurveys(email) {
   if (surveyGateUnsubscribe) surveyGateUnsubscribe();
-  surveyGateUnsubscribe = onSnapshot(collection(db, 'surveys'), () => {
+  surveyGateUnsubscribe = onSnapshot(activeMemberOrganization?.id ? query(collection(db, 'surveys'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'surveys'), () => {
     void findPendingSurvey(email).then((pendingSurvey) => {
       if (!pendingSurvey || window.location.pathname.endsWith('survey.html')) return;
       window.location.replace(`survey.html?surveyId=${encodeURIComponent(pendingSurvey.id)}`);
@@ -3497,7 +3535,8 @@ function setupMentionAutocomplete(inputId, dropdownId) {
 }
 
 async function getNextLiveChatTitle() {
-  const snapshot = await getDocs(collection(db, 'liveChats'));
+  if (!activeMemberOrganization?.id) return 'Livechat 1';
+  const snapshot = await getDocs(query(collection(db, 'liveChats'), where('organizationId', '==', activeMemberOrganization.id)));
   let maxIndex = 0;
   snapshot.forEach((docSnap) => {
     const title = String(docSnap.data().title || '').trim();
@@ -3523,6 +3562,7 @@ async function createLiveChatRoom(event) {
   };
 
   try {
+    chatRoom.organizationId = activeMemberOrganization?.id || '';
     await addDoc(collection(db, 'liveChats'), chatRoom);
     loadChatRooms();
   } catch (error) {
@@ -4042,7 +4082,12 @@ function loadChatRooms() {
     chatRoomsUnsubscribe();
   }
 
-  chatRoomsUnsubscribe = onSnapshot(collection(db, 'liveChats'), (snapshot) => {
+  if (!activeMemberOrganization?.id) {
+    renderChatRooms([]);
+    return;
+  }
+
+  chatRoomsUnsubscribe = onSnapshot(query(collection(db, 'liveChats'), where('organizationId', '==', activeMemberOrganization.id)), (snapshot) => {
     const rooms = [];
     snapshot.forEach((docSnap) => {
       rooms.push({ id: docSnap.id, ...docSnap.data() });
@@ -4187,6 +4232,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
       welcomeEl.textContent = `Welcome, ${welcomeName}`;
     }
     await displayMemberProfilePicture(userEmail);
+    await initializeMemberOrganization();
     console.log('Starting data synchronization...');
     
     // Initialize notifications
@@ -4284,11 +4330,15 @@ function subscribeToTicketHistory() {
   const memberEmail = normalizeEmail(userEmail);
   console.log(`[TicketSync] [DIAG] Subscribing to ticket listener for ${memberEmail}...`);
 
-  const ticketsRef = collection(db, "tickets");
+  const ticketsRef = activeMemberOrganization?.id ? query(collection(db, "tickets"), where("organizationId", "==", activeMemberOrganization.id)) : collection(db, "tickets");
   let listenerFiredCount = 0;
   
   ticketHistoryUnsubscribe = onSnapshot(ticketsRef, { includeMetadataChanges: true }, (snapshot) => {
     listenerFiredCount++;
+    const previousSnapshotDocs = latestTicketSnapshotDocs || [];
+    snapshot.docChanges().forEach((change) => {
+      if (change.type === 'removed') optimisticTicketHistory.delete(change.doc.id);
+    });
     const isFromCache = snapshot.metadata.fromCache;
     const hasPendingWrites = snapshot.metadata.hasPendingWrites;
     console.log(`[TicketSync] [DIAG] [LISTENER_FIRE #${listenerFiredCount}] fromCache=${isFromCache}, hasPendingWrites=${hasPendingWrites}, docCount=${snapshot.size}`);
@@ -4308,6 +4358,7 @@ function subscribeToTicketHistory() {
     });
 
     console.log(`[TicketSync] [DIAG] Listener snapshot: ${matchCount} matched tickets out of ${snapshot.size} total.`);
+  reconcileOptimisticTicketHistory(docs, previousSnapshotDocs);
     latestTicketSnapshotDocs = docs;
     ticketSyncState = 'active';
     console.log(`[TicketSync] [DIAG] Rendering to container: ${ticketHistoryTarget.containerId}`);
@@ -4351,6 +4402,7 @@ async function startTicketHistorySync(containerId = "ticketHistory", emptyStateI
   const authoritativeDocs = await fetchCurrentTicketHistory(containerId);
   if (authoritativeDocs) {
     console.log(`[TicketSync] [DIAG] Fetch succeeded; got ${authoritativeDocs.length} tickets.`);
+    reconcileOptimisticTicketHistory(authoritativeDocs, latestTicketSnapshotDocs || []);
     latestTicketSnapshotDocs = authoritativeDocs;
     renderTicketHistory(containerId, emptyStateId, authoritativeDocs);
   } else {
@@ -4381,6 +4433,16 @@ function renderSubmittedTicketImmediately(ticketId, ticket) {
       renderTicketHistory(containerId, emptyStateId, latestTicketSnapshotDocs || []);
     }
   });
+}
+
+function reconcileOptimisticTicketHistory(docs, previousDocs = []) {
+  const currentIds = new Set(docs.map((ticketDoc) => ticketDoc.id));
+  const previousIds = new Set(previousDocs.map((ticketDoc) => ticketDoc.id));
+
+  previousIds.forEach((ticketId) => {
+    if (!currentIds.has(ticketId)) optimisticTicketHistory.delete(ticketId);
+  });
+  currentIds.forEach((ticketId) => optimisticTicketHistory.delete(ticketId));
 }
 
 function renderTicketHistory(containerId, emptyStateId, docs) {

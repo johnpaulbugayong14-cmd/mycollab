@@ -8,6 +8,15 @@ const UPDATE_STYLE_ID = 'mycollab-update-style';
 const log = (...args) => console.log('[Updater]', ...args);
 const warn = (...args) => console.warn('[Updater]', ...args);
 
+async function isNativeRuntime() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (window.Capacitor?.isNativePlatform?.()) return true;
+    if (window.Capacitor) return false;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  return false;
+}
+
 function parseVersion(value) {
   const match = String(value || '').trim().match(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/);
   if (!match) return null;
@@ -154,7 +163,7 @@ async function downloadRelease(remote, server, backdrop) {
 }
 
 async function checkForUpdate(force = false) {
-  if (!UPDATE_CONFIG.UPDATE_ENABLED || UPDATE_CONFIG.DEVELOPMENT_MODE || !window.Capacitor?.isNativePlatform?.()) return;
+  if (!(await isNativeRuntime()) || !UPDATE_CONFIG.UPDATE_ENABLED || UPDATE_CONFIG.DEVELOPMENT_MODE) return;
   const server = configuredServer();
   if (!server) { warn('Update server is not configured.'); return; }
   const lastChecked = Number(localStorage.getItem(CHECKED_KEY) || 0);
@@ -188,6 +197,7 @@ async function checkForUpdate(force = false) {
 }
 
 async function registerUpdater() {
+  if (!(await isNativeRuntime())) return;
   if (!('serviceWorker' in navigator)) return;
   try {
     await navigator.serviceWorker.register('./service-worker.js', { updateViaCache: 'none' });
