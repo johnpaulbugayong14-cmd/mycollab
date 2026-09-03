@@ -2589,7 +2589,7 @@ async function loadInAppNotifications() {
       // Skip if 'once' and this user already seen it
       if (notification.displayMode === 'once') {
         const alreadyShownArray = Array.isArray(notification.shownTo) ? notification.shownTo : [];
-        if (currentEmail && alreadyShownArray.includes(currentEmail)) return;
+        if (currentEmail && alreadyShownArray.some((email) => normalizeEmail(email) === normalizeEmail(currentEmail))) return;
         // If no currentEmail (shouldn't happen when signed-in), we cannot enforce 'once' strictly.
         // In strict Firestore mode we skip showing when we can't determine user identity.
         if (!currentEmail) return;
@@ -2597,7 +2597,8 @@ async function loadInAppNotifications() {
 
       const targetType = notification.targetType || "everyone";
       const assignedTo = Array.isArray(notification.assignedTo) ? notification.assignedTo : [];
-      const shouldShow = targetType === "everyone" || assignedTo.includes("everyone") || (currentEmail && assignedTo.includes(currentEmail));
+      const shouldShow = targetType === "everyone"
+        || assignedTo.some((recipient) => normalizeEmail(recipient) === 'everyone' || normalizeEmail(recipient) === normalizeEmail(currentEmail));
       if (shouldShow) {
         showInAppNotificationOverlay(notification);
       }
@@ -4190,6 +4191,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     
     // Initialize notifications
     initializeNotifications();
+    void loadInAppNotifications();
 
     loadMemberTasks();
     loadHomeDashboard();
