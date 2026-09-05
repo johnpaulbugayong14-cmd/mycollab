@@ -1,0 +1,9 @@
+{
+  "version": "2.0.1",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.1/",
+  "required": true,
+  "releaseNotes": [
+    "Fixed maintenance mode so member dashboards enforce the maintenance restriction again.",
+    "Restored maintenance notices, restricted navigation, and support ticket access for members."
+  ]
+}

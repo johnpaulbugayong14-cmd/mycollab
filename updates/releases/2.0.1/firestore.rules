@@ -1,0 +1,166 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to verify organizationId is present
+    function hasOrganizationId() {
+      return request.resource.data.organizationId != null && 
+             request.resource.data.organizationId is string &&
+             request.resource.data.organizationId != '';
+    }
+
+    function sameEmail(left, right) {
+      return left is string && right is string && left.lower() == right.lower();
+    }
+
+    // For writes, verify organization membership (requires email-based auth)
+    function isOrganizationMember(orgId) {
+      return request.auth != null &&
+        request.auth.token.email != null &&
+        orgId is string &&
+        exists(/databases/$(database)/documents/organizations/$(orgId)) &&
+        (sameEmail(get(/databases/$(database)/documents/organizations/$(orgId)).data.get('ownerEmail', ''), request.auth.token.email) ||
+         request.auth.token.email.lower() in get(/databases/$(database)/documents/organizations/$(orgId)).data.get('adminEmails', []) ||
+         request.auth.token.email.lower() in get(/databases/$(database)/documents/organizations/$(orgId)).data.get('memberEmails', []));
+    }
+
+    match /userCredentials/{userId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    match /userRoles/{userId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    match /userRoles/{userId}/walletTransactions/{document} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    match /appSettings/{document} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    match /organizations/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.ownerEmail.lower() == request.auth.token.email.lower();
+      allow update: if request.auth != null && 
+                             (resource.data.ownerEmail.lower() == request.auth.token.email.lower() || 
+                              request.auth.token.email.lower() in resource.data.adminEmails ||
+                              (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberEmails', 'updatedAt']) &&
+                               request.resource.data.memberEmails.size() == resource.data.memberEmails.size() + 1));
+      allow delete: if request.auth != null;
+    }
+
+    match /inAppNotifications/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && hasOrganizationId();
+      allow update: if request.auth != null && hasOrganizationId();
+      allow delete: if request.auth != null;
+    }
+
+    match /tickets/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && hasOrganizationId();
+      allow update: if request.auth != null && hasOrganizationId();
+      allow delete: if request.auth != null;
+    }
+
+    match /tasks/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && hasOrganizationId();
+      allow update: if request.auth != null && hasOrganizationId();
+      allow delete: if request.auth != null;
+    }
+
+    match /announcements/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && hasOrganizationId();
+      allow update: if request.auth != null && hasOrganizationId();
+      allow delete: if request.auth != null;
+    }
+
+    match /polls/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && hasOrganizationId();
+      allow update: if request.auth != null && hasOrganizationId();
+      allow delete: if request.auth != null;
+    }
+
+    match /surveys/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && hasOrganizationId();
+      allow update: if request.auth != null && hasOrganizationId();
+      allow delete: if request.auth != null;
+    }
+
+    match /surveys/{surveyId}/responses/{memberId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    match /resources/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && hasOrganizationId();
+      allow update: if request.auth != null && hasOrganizationId();
+      allow delete: if request.auth != null;
+    }
+
+    match /liveChats/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && hasOrganizationId();
+      allow update: if request.auth != null && hasOrganizationId();
+      allow delete: if request.auth != null;
+    }
+
+    match /liveChats/{chatId}/messages/{messageId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    match /meetings/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && hasOrganizationId();
+      allow update: if request.auth != null && hasOrganizationId();
+      allow delete: if request.auth != null;
+    }
+
+    match /events/{document} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && hasOrganizationId();
+      allow delete: if request.auth != null;
+    }
+
+    match /organizations/{organizationId}/flashcardSets/{setId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.organizationId == organizationId;
+      allow update: if request.auth != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visibility', 'updatedAt']);
+      allow delete: if request.auth != null;
+    }
+
+    match /organizations/{organizationId}/flashcardSets/{setId}/questions/{questionId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && get(/databases/$(database)/documents/organizations/$(organizationId)/flashcardSets/$(setId)).data.organizationId == organizationId;
+      allow delete: if request.auth != null;
+    }
+
+    match /progressReports/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && hasOrganizationId();
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+
+    match /supportTickets/{document} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    match /{document=**} {
+      allow read, create, update, delete: if false;
+    }
+  }
+}
