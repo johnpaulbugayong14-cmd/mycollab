@@ -686,7 +686,7 @@ window.login = async function() {
       console.warn('Unable to update login presence:', presenceError);
     }
 
-    const destination = role === "admin" ? "organization-management.html" : "member.html";
+    const destination = role === "admin" ? "organization-management.html" : "organization-selection.html";
     console.log('User stored, redirecting to:', destination);
 
     window.location.href = destination;
@@ -874,7 +874,7 @@ async function init() {
   if (user && isLoginPage) {
     // Admins always choose a workspace after login or app restart.
     console.log('Redirecting to landing page...');
-    window.location.href = user.role === "admin" ? "organization-management.html" : "member.html";
+    window.location.href = user.role === "admin" ? "organization-management.html" : "organization-selection.html";
   } else if (!user && !isLoginPage) {
     // If not logged in and on a protected page, redirect to login
     console.log('Redirecting to login...');

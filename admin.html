@@ -13,6 +13,7 @@
   <meta name="theme-color" content="#3b82f6">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="style.css?v=1">
+  <link rel="stylesheet" href="events.css?v=1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
     .survey-management-list {
@@ -142,6 +143,7 @@
       <li><button class="nav-btn" onclick="showSection('maintenance')"><i class="fas fa-tools"></i> Maintenance</button></li>
       <li><button class="nav-btn" onclick="showSection('manage-resources')"><i class="fas fa-book"></i> Manage Resources</button></li>
       <li><button class="nav-btn" onclick="showSection('manage-members')"><i class="fas fa-users-cog"></i> Manage Members</button></li>
+      <li><button class="nav-btn" onclick="showSection('eventsSection')"><i class="fas fa-calendar-days"></i> Events</button></li>
       <li><button class="nav-btn" onclick="showSection('manage-wallet')"><i class="fas fa-wallet"></i> Member Wallets</button></li>
       <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-chart-line"></i> Progress Report</button></li>
       <li><button class="nav-btn" onclick="showSection('task-analytics')"><i class="fas fa-chart-bar"></i> Analytics</button></li>
@@ -171,6 +173,12 @@
     </div>
     
     <div class="content-sections">
+      <section id="eventsSection" class="content-section">
+        <div class="card events-card">
+          <div class="events-toolbar"><h2><i class="fas fa-calendar-days"></i> Organization Events</h2><div class="events-month-controls"><button type="button" id="eventsPrevious" aria-label="Previous month">&lsaquo;</button><span id="eventsMonthLabel" class="events-month-label"></span><button type="button" id="eventsNext" aria-label="Next month">&rsaquo;</button><button type="button" id="eventsToday">Today</button></div></div>
+          <div class="events-layout"><div class="events-calendar"><div class="events-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div id="eventsGrid" class="events-grid"></div></div><form id="eventsForm" class="events-form"><h3>Add an event</h3><label for="eventTitle">Title</label><input id="eventTitle" required maxlength="100" placeholder="Team meeting"><label for="eventDate">Date</label><input id="eventDate" type="date" required><label for="eventDescription">Details</label><textarea id="eventDescription" maxlength="500" placeholder="Optional details"></textarea><button class="events-submit" type="submit">Add event</button><div id="eventsMessage" class="events-message" aria-live="polite"></div></form></div>
+        </div>
+      </section>
       <!-- Create New Task Section -->
       <section id="create-task" class="content-section active">
         <div class="card">
@@ -462,6 +470,19 @@
             <div id="newMemberAccountMessage" style="margin-top: 0.75rem; color: #94a3b8;"></div>
             <button type="button" onclick="createMemberAccountFromAdmin()" class="btn-success" style="margin-top: 0.75rem;">Create Account</button>
           </div>
+          <div style="margin-bottom: 1.25rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.75rem; background: #0f172a;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+              <div>
+                <h3 style="margin: 0 0 0.35rem 0; color: #f8fafc;">All Created Accounts</h3>
+                <p style="margin: 0; color: #94a3b8; font-size: 0.9rem;">Add an existing account to the active organization without creating new credentials.</p>
+              </div>
+              <button type="button" onclick="loadAllCreatedAccounts()" class="btn-secondary"><i class="fas fa-refresh"></i> Refresh Accounts</button>
+            </div>
+            <div id="allCreatedAccountsMessage" style="margin-top: 0.75rem; color: #94a3b8;"></div>
+            <div id="allCreatedAccountsPanel" style="margin-top: 0.75rem;">
+              <p style="color: #94a3b8; text-align: center;">Loading all created accounts...</p>
+            </div>
+          </div>
           <div id="memberManagementPanel">
             <p style="color: #94a3b8; text-align: center;">Loading members...</p>
           </div>
@@ -687,6 +708,7 @@ function closeMobileSidebar() {
   import { requireAuth } from "./auth.js?v=8";
   await requireAuth(['admin']);
 </script>
+<script type="module" src="events.js?v=1"></script>
 <script type="module" src="admin.js?v=6"></script>
 <script>
 if ("serviceWorker" in navigator) {
@@ -1165,6 +1187,7 @@ function showSection(sectionId) {
     'manage-announcements': '<i class="fas fa-bullhorn"></i> Manage Announcements',
     'support-tickets': '<i class="fas fa-ticket-alt"></i> Support Tickets',
     'manage-resources': '<i class="fas fa-book"></i> Manage Resources',
+    'eventsSection': '<i class="fas fa-calendar-days"></i> Organization Events',
     'progress-report': '<i class="fas fa-chart-line"></i> Progress Report',
     'task-analytics': '<i class="fas fa-chart-bar"></i> Task Analytics',
     'all-tasks': '<i class="fas fa-clipboard-list"></i> All Tasks',

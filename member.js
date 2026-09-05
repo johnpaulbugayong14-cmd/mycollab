@@ -4,6 +4,7 @@ import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/f
 import { getStoredUserEmail, signOutUser, getPasswordChangeRequired, getAccountPasswordHint, updateAccountPassword } from "./auth.js";
 import { initializeNotifications, sendNotificationToUsers, showLocalNotification } from "./notifications.js";
 import { getActiveOrganizationId, getOrganizationsForEmail, setActiveOrganizationId } from "./organizations.js";
+import { getPhilippineHolidays } from "./events.js";
 
 window.signOutUser = signOutUser;
 
@@ -570,6 +571,43 @@ window.handleMemberProfileUpload = async function(event) {
   }
 };
 
+async function requireMemberProfilePicture(email) {
+  const existingPicture = await loadProfilePictureForEmail(email);
+  if (existingPicture) return true;
+
+  const overlay = document.getElementById('memberProfileSetupOverlay');
+  const input = document.getElementById('memberProfileSetupInput');
+  const button = document.getElementById('memberProfileSetupButton');
+  const message = document.getElementById('memberProfileSetupMessage');
+  if (!overlay || !input || !button) return false;
+
+  overlay.classList.add('visible');
+  return new Promise((resolve) => {
+    const handleSelection = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      button.disabled = true;
+      if (message) message.textContent = 'Saving profile picture...';
+      try {
+        const compressed = await compressImage(file, 256, 0.55);
+        const saved = await saveProfilePictureForEmail(email, compressed);
+        if (!saved) throw new Error('Profile picture could not be saved.');
+        await displayMemberProfilePicture(email);
+        overlay.classList.remove('visible');
+        resolve(true);
+      } catch (error) {
+        console.error('Unable to complete profile setup:', error);
+        if (message) message.textContent = 'Unable to save the picture. Please choose another image and try again.';
+        button.disabled = false;
+      } finally {
+        input.value = '';
+      }
+    };
+    button.addEventListener('click', () => input.click());
+    input.addEventListener('change', handleSelection);
+  });
+}
+
 function matchesAnnouncementTarget(assignedTo, assignedToNames = [], currentEmail, currentName = '') {
   const values = [
     ...(Array.isArray(assignedTo) ? assignedTo : (assignedTo ? [assignedTo] : [])),
@@ -892,6 +930,14 @@ function renderHomeFlashcard(items = []) {
       return;
     }
 
+    if (item.title === 'Events') {
+      flashText.innerHTML = cleaned.map((entry) => {
+        const event = typeof entry === 'object' ? entry : { title: entry, status: 'Today' };
+        return `<div class="flash-item"><div><strong>${escapeHtml(event.status || 'Event')}:</strong> ${escapeHtml(event.title || 'Untitled event')}</div>${event.date ? `<div><strong>Date:</strong> ${escapeHtml(event.date)}</div>` : ''}${event.description ? `<div>${escapeHtml(event.description)}</div>` : ''}</div>`;
+      }).join('');
+      return;
+    }
+
     if (item.title === 'Tickets') {
       flashText.innerHTML = cleaned.map((entry) => {
         const ticket = typeof entry === 'object'
@@ -986,13 +1032,33 @@ function renderHomeFlashcard(items = []) {
 
 async function initializeMemberOrganization() {
   const organizations = await getOrganizationsForEmail(userEmail);
-  const activeId = getActiveOrganizationId();
-  activeMemberOrganization = organizations.find((organization) => organization.id === activeId) || organizations[0] || null;
+  if (!organizations.length) {
+    activeMemberOrganization = null;
+    setActiveOrganizationId('');
+    return false;
+  }
+
+  if (organizations.length > 1) {
+    const activeOrganizationId = getActiveOrganizationId();
+    const handoffOrganizationId = sessionStorage.getItem('mycollab.organization-selection');
+    const selectedOrganization = organizations.find((organization) => organization.id === activeOrganizationId)
+      || organizations.find((organization) => organization.id === handoffOrganizationId);
+    if (!selectedOrganization) {
+      window.location.replace('organization-selection.html');
+      return false;
+    }
+    sessionStorage.removeItem('mycollab.organization-selection');
+    activeMemberOrganization = selectedOrganization;
+  } else {
+    activeMemberOrganization = organizations[0];
+  }
+
   setActiveOrganizationId(activeMemberOrganization?.id || '');
   const label = document.getElementById('memberActiveOrganization');
   if (label) label.textContent = activeMemberOrganization
     ? `Organization: ${activeMemberOrganization.name}`
     : 'No organization assigned';
+  return Boolean(activeMemberOrganization);
 }
 
 
@@ -1184,7 +1250,7 @@ function subscribeHomeChatMessageListeners(rooms = []) {
   });
 }
 
-function getLatestHomeDashboardItems(taskItems, announcementItems, pollItems, ticketItems, resourceItems, progressItems, chatItems, meetingItems, memberStatusItems) {
+function getLatestHomeDashboardItems(taskItems, announcementItems, pollItems, ticketItems, resourceItems, progressItems, chatItems, meetingItems, memberStatusItems, eventItems) {
   const formatList = (items, mapper, emptyMessage) => {
     const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
     const mapped = safeItems.slice(0, 4).map(mapper).filter((value) => value && String(value).trim());
@@ -1282,6 +1348,10 @@ function getLatestHomeDashboardItems(taskItems, announcementItems, pollItems, ti
 
         return `${meeting.title || 'Team meeting'} is planned for ${meetingDateTime ? meetingDateTime.toLocaleDateString() + ' at ' + meetingDateTime.toLocaleTimeString() : 'a future time'}.`;
       }, 'No upcoming video conference for now.')
+    },
+    {
+      title: 'Events',
+      detail: formatList(eventItems, (eventItem) => eventItem, 'No events for today.')
     },
     {
       title: 'Member Status',
@@ -1426,6 +1496,7 @@ async function refreshHomeDashboard() {
   const progressRefs = [];
   const chatRefs = [];
   const meetingRefs = [];
+  const eventRefs = [];
   const memberStatusRefs = [];
 
   const eligibleTaskRefs = [];
@@ -1436,6 +1507,7 @@ async function refreshHomeDashboard() {
   const eligibleProgressRefs = [];
   const eligibleChatRefs = [];
   const eligibleMeetingRefs = [];
+  const eligibleEventRefs = [];
 
   try {
     const taskSnap = await getDocs(activeMemberOrganization?.id ? query(collection(db, 'tasks'), where('organizationId', '==', activeMemberOrganization.id), where('assignedTo', 'in', [userEmail, 'everyone'])) : query(collection(db, 'tasks'), where('assignedTo', 'in', [userEmail, 'everyone'])));
@@ -1614,9 +1686,42 @@ async function refreshHomeDashboard() {
     console.warn('Unable to load meetings for home dashboard:', error);
   }
 
+  try {
+    const eventsSnap = activeMemberOrganization?.id
+      ? await getDocs(query(collection(db, 'events'), where('organizationId', '==', activeMemberOrganization.id)))
+      : null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    const todayEvents = [];
+    const upcomingEvents = [];
+    const holidayEvents = getPhilippineHolidays(today.getFullYear());
+    holidayEvents.forEach((holiday) => {
+      const holidayDate = new Date(`${holiday.date}T00:00:00`);
+      if (holidayDate.getTime() === today.getTime()) todayEvents.push({ title: holiday.title, date: holidayDate.toLocaleDateString(), status: 'Today' });
+      else if (holidayDate > today && holidayDate <= nextWeek) upcomingEvents.push({ title: holiday.title, date: holidayDate.toLocaleDateString(), status: 'Upcoming holiday' });
+    });
+    eventsSnap?.forEach((docSnap) => {
+      const event = { id: docSnap.id, ...docSnap.data() };
+      if (!event.date) return;
+      const eventDate = new Date(`${event.date}T00:00:00`);
+      if (Number.isNaN(eventDate.getTime())) return;
+      if (eventDate.getTime() === today.getTime()) todayEvents.push({ title: event.title || 'Untitled event', date: eventDate.toLocaleDateString(), description: event.description, status: 'Today' });
+      else if (eventDate > today && eventDate <= nextWeek) upcomingEvents.push({ title: event.title || 'Untitled event', date: eventDate.toLocaleDateString(), description: event.description, status: 'Upcoming event' });
+    });
+    todayEvents.sort();
+    upcomingEvents.sort();
+    eventRefs.push(...(todayEvents.length ? todayEvents : ['No events for today.']), ...upcomingEvents);
+  } catch (error) {
+    console.warn('Unable to load events for home dashboard:', error);
+    eventRefs.push('No events for today.');
+  }
+
   memberStatusRefs.push(...getMemberStatusFlashcardItems());
 
   const sectionBuckets = [
+    { key: 'events', items: eventRefs, eligible: eligibleEventRefs },
     { key: 'tasks', items: taskRefs, eligible: eligibleTaskRefs },
     { key: 'announcements', items: announcementRefs, eligible: eligibleAnnouncementRefs },
     { key: 'polls', items: pollRefs, eligible: eligiblePollRefs },
@@ -1648,7 +1753,8 @@ async function refreshHomeDashboard() {
     eligibleProgressRefs,
     eligibleChatRefs,
     eligibleMeetingRefs,
-    memberStatusRefs
+    memberStatusRefs,
+    eligibleEventRefs
   );
   renderHomeFlashcard(bodyItems);
 }
@@ -1696,6 +1802,9 @@ function subscribeToHomeFlashcardUpdates() {
   if (activeMemberOrganization?.id) {
     homeFlashcardListeners.push(
       onSnapshot(query(collection(db, 'meetings'), where('organizationId', '==', activeMemberOrganization.id)), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard meeting listener error:', error))
+    );
+    homeFlashcardListeners.push(
+      onSnapshot(query(collection(db, 'events'), where('organizationId', '==', activeMemberOrganization.id)), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard event listener error:', error))
     );
   }
 
@@ -4241,7 +4350,14 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
       welcomeEl.textContent = `Welcome, ${welcomeName}`;
     }
     await displayMemberProfilePicture(userEmail);
-    await initializeMemberOrganization();
+    const hasProfilePicture = await requireMemberProfilePicture(userEmail);
+    if (!hasProfilePicture) return;
+    const hasOrganization = await initializeMemberOrganization();
+    if (!hasOrganization) {
+      console.warn('No organization is assigned to this member; dashboard synchronization stopped.');
+      return;
+    }
+    if (typeof window.initEventsCalendar === 'function') await window.initEventsCalendar('member');
     console.log('Starting data synchronization...');
     
     // Initialize notifications

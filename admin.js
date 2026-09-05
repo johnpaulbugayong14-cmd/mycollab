@@ -684,6 +684,8 @@ function loadManagedOrganizations() {
     }
     window.resolveAdminOrganizationReady?.(activeOrganization.id);
     if (typeof loadMemberRoles === 'function') void loadMemberRoles();
+    if (typeof loadAllCreatedAccounts === 'function') void loadAllCreatedAccounts();
+    if (typeof window.initEventsCalendar === 'function') void window.initEventsCalendar('admin');
   }, (error) => console.error('Unable to load organizations:', error));
 }
 
@@ -1546,6 +1548,85 @@ function renderMemberManagementPanel() {
     }).join('');
 }
 
+async function loadAllCreatedAccounts() {
+  const container = document.getElementById('allCreatedAccountsPanel');
+  const messageBox = document.getElementById('allCreatedAccountsMessage');
+  if (!container) return;
+
+  try {
+    const activeOrganization = managedOrganizations.find((organization) => organization.id === getActiveOrganizationId());
+    if (!activeOrganization) {
+      container.innerHTML = '<p style="color: #fbbf24;">Select an organization before adding accounts.</p>';
+      return;
+    }
+
+    const organizationMembers = new Set([
+      activeOrganization.ownerEmail,
+      ...(Array.isArray(activeOrganization.adminEmails) ? activeOrganization.adminEmails : []),
+      ...(Array.isArray(activeOrganization.memberEmails) ? activeOrganization.memberEmails : [])
+    ].map(normalizeEmail));
+    const snapshot = await getDocs(collection(db, 'userRoles'));
+    const accounts = snapshot.docs
+      .map((docSnap) => ({ email: normalizeEmail(docSnap.id), ...(docSnap.data() || {}) }))
+      .filter((account) => account.email && isTrackedAuthMember(account))
+      .sort((left, right) => String(left.displayName || left.email).localeCompare(String(right.displayName || right.email)));
+
+    if (!accounts.length) {
+      container.innerHTML = '<p style="color: #94a3b8;">No created accounts found.</p>';
+      return;
+    }
+
+    container.innerHTML = accounts.map((account) => {
+      const isMember = organizationMembers.has(account.email);
+      const displayName = account.displayName || account.name || account.email;
+      return `<div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; padding:0.75rem 0; border-bottom:1px solid #374151;">
+        <div style="min-width:0;">
+          <strong style="color:#f8fafc;">${escapeHtml(displayName)}</strong>
+          <span style="display:block; color:#94a3b8; font-size:0.85rem;">${escapeHtml(account.email)}</span>
+        </div>
+        <button type="button" ${isMember ? 'disabled' : ''} onclick="addExistingAccountToOrganization('${escapeHtml(account.email)}')" style="background:${isMember ? '#4b5563' : '#10b981'}; color:white; border:none; padding:0.55rem 0.85rem; border-radius:0.5rem; cursor:${isMember ? 'not-allowed' : 'pointer'};">${isMember ? 'Already a member' : 'Add to organization'}</button>
+      </div>`;
+    }).join('');
+  } catch (error) {
+    console.error('Unable to load all created accounts:', error);
+    container.innerHTML = '<p style="color: #fda4af;">Unable to load created accounts.</p>';
+  }
+}
+
+async function addExistingAccountToOrganization(email) {
+  const messageBox = document.getElementById('allCreatedAccountsMessage');
+  const activeOrganizationId = getActiveOrganizationId();
+  if (!activeOrganizationId || !managedOrganizations.some((organization) => organization.id === activeOrganizationId)) {
+    if (messageBox) messageBox.textContent = 'Select an organization before adding an account.';
+    return;
+  }
+
+  try {
+    await addOrganizationMember(activeOrganizationId, email);
+    if (messageBox) {
+      messageBox.textContent = `${email} was added to the active organization.`;
+      messageBox.style.color = '#86efac';
+    }
+    await loadMemberRoles();
+    loadMembers();
+    loadWalletMembers();
+    loadAnnouncementAssignTo();
+    loadSurveyAssignTo();
+    loadInAppNotificationRecipients();
+    renderMemberManagementPanel();
+    await loadAllCreatedAccounts();
+  } catch (error) {
+    console.error('Unable to add existing account to organization:', error);
+    if (messageBox) {
+      messageBox.textContent = error?.message || 'Unable to add account to organization.';
+      messageBox.style.color = '#fda4af';
+    }
+  }
+}
+
+window.loadAllCreatedAccounts = loadAllCreatedAccounts;
+window.addExistingAccountToOrganization = addExistingAccountToOrganization;
+
 async function createMemberAccountFromAdmin() {
   const emailInput = document.getElementById('newMemberEmail');
   const nameInput = document.getElementById('newMemberName');
@@ -1831,11 +1912,13 @@ initInAppDisplayModeControls();
 loadMemberRoles().then(() => {
   subscribeToMemberRoles();
   renderMemberManagementPanel();
+  loadAllCreatedAccounts();
   applyAdminRoleRestrictionsWhenReady();
 }).catch((error) => {
   console.warn('Unable to load member roles before rendering management panel:', error);
   subscribeToMemberRoles();
   renderMemberManagementPanel();
+  loadAllCreatedAccounts();
   applyAdminRoleRestrictionsWhenReady();
 });
 

@@ -14,11 +14,54 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <link rel="stylesheet" href="style.css?v=1">
+  <link rel="stylesheet" href="events.css?v=1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
   <style>
+    .member-profile-setup-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 11000;
+      display: none;
+      place-items: center;
+      padding: 1.5rem;
+      background: rgba(2, 6, 23, 0.86);
+    }
+    .member-profile-setup-overlay.visible { display: grid; }
+    .member-profile-setup-card {
+      width: min(420px, 100%);
+      padding: 2rem;
+      border: 1px solid #475569;
+      border-radius: 0.75rem;
+      background: #1e293b;
+      color: #f8fafc;
+      text-align: center;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+    }
+    .member-profile-setup-card h2 { margin: 0 0 0.75rem; color: #ffffff; }
+    .member-profile-setup-card p { margin: 0 0 1.25rem; color: #cbd5e1; }
+    .member-profile-setup-button { border: 0; border-radius: 0.5rem; padding: 0.7rem 1rem; background: #2563eb; color: #ffffff; cursor: pointer; font-weight: 700; }
+    .member-profile-setup-message { min-height: 1.25rem; margin-top: 0.75rem; color: #fca5a5; font-size: 0.85rem; }
+    .header-actions {
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    .member-header-action-buttons {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .member-top-left-controls {
+      position: absolute;
+      top: 1.25rem;
+      right: 1.5rem;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
     @keyframes restrictedPulse {
       0%, 100% { transform: scale(1); opacity: 1; }
       50% { transform: scale(1.06); opacity: 0.85; }
@@ -438,6 +481,15 @@
   </style>
 </head>
 <body>
+<div id="memberProfileSetupOverlay" class="member-profile-setup-overlay" role="dialog" aria-modal="true" aria-labelledby="memberProfileSetupTitle">
+  <div class="member-profile-setup-card">
+    <h2 id="memberProfileSetupTitle">Set up your profile</h2>
+    <p>Please add a profile picture before continuing to your organization workspace.</p>
+    <input id="memberProfileSetupInput" type="file" accept="image/*" hidden>
+    <button type="button" id="memberProfileSetupButton" class="member-profile-setup-button">Choose profile picture</button>
+    <div id="memberProfileSetupMessage" class="member-profile-setup-message" aria-live="polite"></div>
+  </div>
+</div>
 <div id="maintenanceOverlay" class="maintenance-overlay" style="display:none;">
   <div class="maintenance-card">
     <svg class="maintenance-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 700" width="1120" height="700"><circle cx="292.61" cy="213" r="213" fill="#f2f2f2"/><path fill="#2f2e41" d="M0 51.14c0 77.5 48.62 140.21 108.7 140.21"/><path fill="#03c39d" d="M108.7 191.35c0-78.37 54.26-141.78 121.3-141.78M39.38 58.17c0 73.61 31 133.18 69.32 133.18"/><path fill="#2f2e41" d="M108.7 191.35c0-100.14 62.71-181.17 140.2-181.17"/><path fill="#a8a8a8" d="M85.83 192.34s15.42-.48 20.06-3.78 23.72-7.26 24.87-1.96 23.17 26.4 5.76 26.53-40.44-2.7-45.07-5.53-5.62-15.26-5.62-15.26z"/><path d="M136.83 211.28c-17.4.15-40.44-2.7-45.07-5.53-3.53-2.15-4.94-9.87-5.41-13.43l-.52.02s.98 12.43 5.62 15.26 27.67 5.67 45.07 5.53c5.03-.04 6.76-1.83 6.67-4.47-.7 1.6-2.62 2.6-6.36 2.62z" opacity=".2"/><ellipse cx="198.61" cy="424.5" fill="#3f3d56" rx="187" ry="25.44"/><ellipse cx="198.61" cy="424.5" opacity=".1" rx="157" ry="21.36"/><ellipse cx="836.61" cy="660.5" fill="#3f3d56" rx="283" ry="38.5"/><ellipse cx="310.61" cy="645.5" fill="#3f3d56" rx="170" ry="23.13"/><path fill="none" stroke="#2f2e41" stroke-miterlimit="10" stroke-width="2" d="M462.6 626c90 23 263-30 282-90M309.6 259s130-36 138 80-107 149-17 172M184.01 537.28s39.07-10.82 41.48 24.05-32.16 44.78-5.11 51.7"/><path fill="#2f2e41" d="M778.7 563.24l-7.87 50.3s-38.78 20.6-11.52 21.2 155.74 0 155.74 0 24.84 0-14.55-21.81l-7.87-52.72z"/><path d="M753.83 634.2c6.2-5.51 17-11.25 17-11.25l7.87-50.3 113.93.1 7.87 49.59c9.19 5.09 14.88 8.99 18.2 11.98 5.07-1.16 10.6-5.45-18.2-21.4l-7.87-52.71-113.93 3.03-7.87 50.3s-32.6 17.31-17 20.66z" opacity=".1"/><rect width="513.25" height="357.52" x="578.43" y="212.69" fill="#2f2e41" rx="18.05"/><path fill="#3f3d56" d="M595.7 231.78h478.71v267.84H595.7z"/><circle cx="835.06" cy="223.29" r="3.03" fill="#f2f2f2"/><path fill="#2f2e41" d="M1091.69 520.82v31.34a18.04 18.04 0 01-18.05 18.05H596.48a18.04 18.04 0 01-18.05-18.05v-31.34zM968.98 667.47v6.06H642.97v-4.85l.45-1.21 8.03-21.82h310.86l6.67 21.82zM1094.44 661.53c-.6 2.54-2.84 5.22-7.9 7.75-18.18 9.1-55.15-2.42-55.15-2.42s-28.48-4.85-28.48-17.57a22.72 22.72 0 012.5-1.49c7.64-4.04 32.98-14.02 77.92.42a18.74 18.74 0 018.54 5.6c1.82 2.13 3.25 4.84 2.57 7.71z"/><path d="M1094.44 661.53c-22.25 8.53-42.09 9.17-62.44-4.97-10.27-7.13-19.6-8.9-26.6-8.76 7.65-4.04 33-14.02 77.93.42a18.74 18.74 0 018.54 5.6c1.82 2.13 3.25 4.84 2.57 7.71z" opacity=".1"/><ellipse cx="1066.54" cy="654.13" fill="#f2f2f2" rx="7.88" ry="2.42"/><circle cx="835.06" cy="545.67" r="11.51" fill="#f2f2f2"/><path d="M968.98 667.47v6.06H642.97v-4.85l.45-1.21h325.56z" opacity=".1"/><path fill="#2f2e41" d="M108.61 159h208v242h-208z"/><path fill="#3f3d56" d="M87.61 135h250v86h-250zM87.61 237h250v86h-250zM87.61 339h250v86h-250z"/><path fill="#03c39d" d="M271.61 150h16v16h-16z" opacity=".4"/><path fill="#03c39d" d="M294.61 150h16v16h-16z" opacity=".8"/><path fill="#03c39d" d="M317.61 150h16v16h-16z"/><path fill="#03c39d" d="M271.61 251h16v16h-16z" opacity=".4"/><path fill="#03c39d" d="M294.61 251h16v16h-16z" opacity=".8"/><path fill="#03c39d" d="M317.61 251h16v16h-16z"/><path fill="#03c39d" d="M271.61 352h16v16h-16z" opacity=".4"/><path fill="#03c39d" d="M294.61 352h16v16h-16z" opacity=".8"/><path fill="#03c39d" d="M317.61 352h16v16h-16z"/><circle cx="316.61" cy="538" r="79" fill="#2f2e41"/><path fill="#2f2e41" d="M280.61 600h24v43h-24zM328.61 600h24v43h-24z"/><ellipse cx="300.61" cy="643.5" fill="#2f2e41" rx="20" ry="7.5"/><ellipse cx="348.61" cy="642.5" fill="#2f2e41" rx="20" ry="7.5"/><circle cx="318.61" cy="518" r="27" fill="#fff"/><circle cx="318.61" cy="518" r="9" fill="#3f3d56"/><path fill="#03c39d" d="M239.98 464.53c-6.38-28.57 14-57.43 45.54-64.47s62.27 10.4 68.64 38.98-14.51 39.1-46.05 46.14-61.75 7.92-68.13-20.65z"/></svg>
@@ -487,12 +539,17 @@
       <li><button class="nav-btn" onclick="showSection('resources')"><i class="fas fa-book"></i> Resources</button></li>
       <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-file-alt"></i> Progress Report</button></li>
       <li><button class="nav-btn" onclick="showSection('member-status')"><i class="fas fa-users"></i> Member Status</button></li>
+      <li><button class="nav-btn" onclick="showSection('eventsSection')"><i class="fas fa-calendar-days"></i> Events</button></li>
     </ul>
   </nav>
 
   <!-- Main Content -->
   <main class="main-content">
     <div class="content-header">
+      <div class="member-top-left-controls">
+        <button type="button" onclick="window.location.href='organization-selection.html'" aria-label="Choose organization" title="Choose organization" style="width: 32px; height: 24px; padding: 0; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.4rem; background: rgba(30, 41, 59, 0.9); color: #f8fafc; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem;"><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
+        <button onclick="signOutUser()" class="logout-btn header-logout">Logout</button>
+      </div>
       <h1 id="page-title"><i class="fas fa-briefcase"></i> My Collab</h1>
       <div id="memberActiveOrganization" style="color:#cbd5e1; font-size:0.9rem;">Loading organization...</div>
       <div id="datetime" class="datetime-center">Loading date...</div>
@@ -504,7 +561,6 @@
           <div id="welcome" class="welcome-header">Welcome, User</div>
           <input type="file" id="memberProfileInputHeader" accept="image/*" style="display: none;" onchange="handleMemberProfileUpload(event)" />
         </div>
-        <button onclick="signOutUser()" class="logout-btn header-logout">Logout</button>
       </div>
     </div>
     
@@ -526,6 +582,12 @@
           </div>
 
       <!-- Home Section -->
+      <section id="eventsSection" class="content-section">
+        <div class="card events-card">
+          <div class="events-toolbar"><h2><i class="fas fa-calendar-days"></i> Organization Events</h2><div class="events-month-controls"><button type="button" id="eventsPrevious" aria-label="Previous month">&lsaquo;</button><span id="eventsMonthLabel" class="events-month-label"></span><button type="button" id="eventsNext" aria-label="Next month">&rsaquo;</button><button type="button" id="eventsToday">Today</button></div></div>
+          <div class="events-layout"><div class="events-calendar"><div class="events-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div id="eventsGrid" class="events-grid"></div></div><form id="eventsForm" class="events-form"><h3>Add an event</h3><label for="eventTitle">Title</label><input id="eventTitle" required maxlength="100" placeholder="Team meeting"><label for="eventDate">Date</label><input id="eventDate" type="date" required><label for="eventDescription">Details</label><textarea id="eventDescription" maxlength="500" placeholder="Optional details"></textarea><button class="events-submit" type="submit">Add event</button><div id="eventsMessage" class="events-message" aria-live="polite"></div></form></div>
+        </div>
+      </section>
       <section id="home" class="content-section active">
         <div class="card home-dashboard">
           <h2 id="home-greeting" class="home-greeting">Hello there, Member!</h2>
@@ -831,6 +893,7 @@ function renderMemberNavigation(isRestricted) {
     <li><button class="nav-btn" onclick="showSection('resources')"><i class="fas fa-book"></i> Resources</button></li>
     <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-file-alt"></i> Progress Report</button></li>
     <li><button class="nav-btn" onclick="showSection('member-status')"><i class="fas fa-users"></i> Member Status</button></li>
+    <li><button class="nav-btn" onclick="showSection('eventsSection')"><i class="fas fa-calendar-days"></i> Events</button></li>
   `;
   applyLimitedAdminNavigationVisibility();
   window.applyMemberThemeTextColors?.();
@@ -864,6 +927,7 @@ function renderMemberNavigation(isRestricted) {
 
   applyLimitedAdminNavigationVisibility();
 </script>
+<script type="module" src="events.js?v=1"></script>
 <script type="module" src="member.js?v=9"></script>
 <script>
 if ("serviceWorker" in navigator) {
@@ -982,6 +1046,7 @@ function showSection(sectionId) {
 
   const titles = {
     'home': '<i class="fas fa-briefcase"></i> My Collab',
+    'eventsSection': '<i class="fas fa-calendar-days"></i> Organization Events',
     'my-tasks': '<i class="fas fa-check-circle"></i> My Tasks',
     'ticket-history': '<i class="fas fa-ticket-alt"></i> Ticket History',
     'active-polls': '<i class="fas fa-chart-bar"></i> Active Polls',
