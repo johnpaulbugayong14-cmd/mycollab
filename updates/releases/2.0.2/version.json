@@ -1,0 +1,9 @@
+{
+  "version": "2.0.2",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.2/",
+  "required": true,
+  "releaseNotes": [
+    "Moved the member avatar and welcome message above the Back and Logout controls.",
+    "Improved the member header action layout for clearer navigation."
+  ]
+}
