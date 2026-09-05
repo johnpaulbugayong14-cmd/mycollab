@@ -1,0 +1,9 @@
+{
+  "version": "2.0.3",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.3/",
+  "required": true,
+  "releaseNotes": [
+    "Placed Back and Logout beside the My Collab header at the upper right.",
+    "Centered the member avatar and welcome message below the date."
+  ]
+}
