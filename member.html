@@ -59,8 +59,14 @@
       right: 1.5rem;
       z-index: 2;
       display: flex;
+      flex-direction: column;
       align-items: center;
       gap: 0.75rem;
+    }
+    .member-top-left-controls .header-actions {
+      position: static;
+      margin: 0;
+      justify-content: center;
     }
     @keyframes restrictedPulse {
       0%, 100% { transform: scale(1); opacity: 1; }
@@ -547,21 +553,23 @@
   <main class="main-content">
     <div class="content-header">
       <div class="member-top-left-controls">
-        <button type="button" onclick="window.location.href='organization-selection.html'" aria-label="Choose organization" title="Choose organization" style="width: 32px; height: 24px; padding: 0; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.4rem; background: rgba(30, 41, 59, 0.9); color: #f8fafc; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem;"><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
-        <button onclick="signOutUser()" class="logout-btn header-logout">Logout</button>
+        <div class="member-header-action-buttons">
+          <button type="button" onclick="window.location.href='organization-selection.html'" aria-label="Choose organization" title="Choose organization" style="width: 32px; height: 24px; padding: 0; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.4rem; background: rgba(30, 41, 59, 0.9); color: #f8fafc; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem;"><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
+          <button onclick="signOutUser()" class="logout-btn header-logout">Logout</button>
+        </div>
+        <div class="header-actions">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div id="memberHeaderProfilePicture" onclick="document.getElementById('memberProfileInputHeader')?.click?.()" style="width: 40px; height: 40px; border-radius: 50%; background: #1f2937; border: 2px solid #4b5563; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;" aria-label="Profile picture">
+              <i class="fas fa-user" style="color: #9ca3af; font-size: 1rem;"></i>
+            </div>
+            <div id="welcome" class="welcome-header">Welcome, User</div>
+            <input type="file" id="memberProfileInputHeader" accept="image/*" style="display: none;" onchange="handleMemberProfileUpload(event)" />
+          </div>
+        </div>
       </div>
       <h1 id="page-title"><i class="fas fa-briefcase"></i> My Collab</h1>
       <div id="memberActiveOrganization" style="color:#cbd5e1; font-size:0.9rem;">Loading organization...</div>
       <div id="datetime" class="datetime-center">Loading date...</div>
-      <div class="header-actions">
-        <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <div id="memberHeaderProfilePicture" onclick="document.getElementById('memberProfileInputHeader')?.click?.()" style="width: 40px; height: 40px; border-radius: 50%; background: #1f2937; border: 2px solid #4b5563; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;" aria-label="Profile picture">
-            <i class="fas fa-user" style="color: #9ca3af; font-size: 1rem;"></i>
-          </div>
-          <div id="welcome" class="welcome-header">Welcome, User</div>
-          <input type="file" id="memberProfileInputHeader" accept="image/*" style="display: none;" onchange="handleMemberProfileUpload(event)" />
-        </div>
-      </div>
     </div>
     
     <div class="content-sections">

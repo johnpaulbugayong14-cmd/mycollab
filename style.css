@@ -24,6 +24,15 @@ body {
   isolation: isolate;
 }
 
+#chatMessageInput,
+#adminChatMessageInput,
+#chatMessages,
+#adminChatMessages,
+.chat-message-text {
+  font-family: 'DM Sans', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'Segoe UI', sans-serif;
+  font-variant-emoji: emoji;
+}
+
 body::before,
 body::after {
   content: '';

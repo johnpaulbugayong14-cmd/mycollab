@@ -3772,7 +3772,7 @@ function renderChatMessages(messages) {
         <div style="font-size: 0.85rem; color: #94a3b8;">${escapeHtml(sender)}</div>
         <div style="font-size: 0.75rem; color: #6b7280;">${timestamp}</div>
       </div>
-      <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; margin-bottom: 0.5rem; white-space: pre-wrap; word-break: break-word;">${imageMarkup}${renderedText}</div>
+      <div class="chat-message-text" style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; margin-bottom: 0.5rem; white-space: pre-wrap; word-break: break-word;">${imageMarkup}${renderedText}</div>
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; margin-bottom: ${msg.reactions && Object.keys(msg.reactions).length > 0 ? '0.5rem' : '0'};">
         ${actionButtons ? `<div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">${actionButtons}</div>` : ''}
         <button type="button" class="chat-react-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">😊 React</button>
@@ -4036,7 +4036,7 @@ async function sendChatMessage(event) {
 
   const messageInput = document.getElementById('chatMessageInput');
   if (!messageInput) return;
-  const message = messageInput.value.trim();
+  const message = messageInput.value.trim().normalize('NFC');
   if (!message && !selectedChatImageData) return;
 
   const currentEmail = userEmail || await getStoredUserEmail();
@@ -4357,6 +4357,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
       console.warn('No organization is assigned to this member; dashboard synchronization stopped.');
       return;
     }
+    checkMaintenance();
     if (typeof window.initEventsCalendar === 'function') await window.initEventsCalendar('member');
     console.log('Starting data synchronization...');
     

@@ -600,7 +600,7 @@ function renderChatMessages(messages) {
         </div>
         <div style="font-size: 0.8rem; color: #6b7280;">${timestamp}</div>
       </div>
-      <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; white-space: pre-wrap; word-break: break-word;">${replyQuote}${imageMarkup}${renderedText}</div>
+      <div class="chat-message-text" style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; white-space: pre-wrap; word-break: break-word;">${replyQuote}${imageMarkup}${renderedText}</div>
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; margin-bottom: ${msg.reactions && Object.keys(msg.reactions).length > 0 ? '0.5rem' : '0'};">
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">${actionButtons}</div>
         ${!msg.deleted ? `<button type="button" class="chat-react-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">😊 React</button>` : ''}
@@ -1188,7 +1188,7 @@ async function sendChatMessage(event) {
   updateChatImagePreview();
 
   const currentEmail = currentUserEmail || await getStoredUserEmail();
-  const cleanedMessage = message.split('\n').map(line => line.trim()).join('\n').trim();
+  const cleanedMessage = message.split('\n').map(line => line.trim()).join('\n').trim().normalize('NFC');
   const messageData = {
     senderEmail: currentEmail,
     senderName: normalizeEmail(currentEmail) === 'johnpaulbugayong@gmail.com' ? 'Admin' : getUserName(currentEmail),

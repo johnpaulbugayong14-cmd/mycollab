@@ -1,12 +1,9 @@
 {
-  "version": "1.1.59",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/1.1.59/",
+  "version": "2.0.1",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.1/",
   "required": true,
   "releaseNotes": [
-    "Centered application headers consistently on mobile and desktop.",
-    "Fixed member ticket submission failures caused by missing organization permissions.",
-    "Added organization management with organization selection, creation, editing, and deletion.",
-    "Scoped organization data and scheduled video meetings to organization members.",
-    "Added a responsive organization management interface with compact lists, menus, and modal creation."
+    "Fixed maintenance mode so member dashboards enforce the maintenance restriction again.",
+    "Restored maintenance notices, restricted navigation, and support ticket access for members."
   ]
 }
