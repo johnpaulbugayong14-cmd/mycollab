@@ -332,6 +332,27 @@ async function getStoredUser() {
   return null;
 }
 
+async function validateStoredUser(storedUser) {
+  const email = normalizeEmail(storedUser?.email);
+  if (!email) return false;
+
+  try {
+    const [credentialSnap, roleSnap] = await Promise.all([
+      getDoc(doc(db, 'userCredentials', email)),
+      getDoc(doc(db, 'userRoles', email))
+    ]);
+
+    if (storedUser.role === 'admin') {
+      return credentialSnap.exists() || roleSnap.exists();
+    }
+
+    return credentialSnap.exists() && roleSnap.exists();
+  } catch (error) {
+    console.warn('Unable to validate stored user against Firestore:', error);
+    return null;
+  }
+}
+
 // Store user in storage
 async function storeUser(user) {
   try {
@@ -615,6 +636,13 @@ window.login = async function() {
       console.log('Using Firestore credential fallback for login');
     }
 
+    const signedInUserIsValid = await validateStoredUser({ email: signedInEmail, role });
+    if (signedInUserIsValid === false) {
+      await signOut(auth).catch(() => {});
+      showMessage('This member account has been deleted. Please contact an administrator.');
+      return;
+    }
+
     if (!role || role === 'member') {
       role = await getEffectiveRole(signedInEmail) || 'member';
       const accessDetails = await getUserAccessDetails(signedInEmail);
@@ -775,6 +803,14 @@ export async function requireAuth(allowedRoles = null) {
     return;
   }
 
+  await ensureAuthenticatedForFirestore();
+  const storedUserIsValid = await validateStoredUser(storedUser);
+  if (storedUserIsValid === false) {
+    await clearAuthData();
+    window.location.href = "login.html";
+    return;
+  }
+
   // Wait for Firebase auth to restore the session if it exists
   if (!auth.currentUser) {
     console.log("requireAuth: Waiting for Firebase Auth session settlement...");
@@ -863,7 +899,15 @@ async function init() {
   const isLoginPage = path.endsWith('login.html') || path.endsWith('index.html') || path === '/' || path === '';
 
   const user = await getStoredUser();
+  const userIsValid = user ? await validateStoredUser(user) : false;
   console.log('Init: user found:', user, 'isLoginPage:', isLoginPage, 'path:', path);
+
+  if (user && userIsValid === false) {
+    console.warn('Init: stored user no longer exists in Firestore; clearing session.');
+    await clearAuthData();
+    if (!isLoginPage) window.location.href = "login.html";
+    return;
+  }
 
   // Initialize notifications if user is logged in
   if (user) {

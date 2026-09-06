@@ -49,8 +49,9 @@ service cloud.firestore {
       allow create: if request.auth != null &&
                            request.resource.data.ownerEmail is string &&
                            request.resource.data.ownerEmail != '' &&
-                           (request.auth.token.email == null ||
-                            request.resource.data.ownerEmail.lower() == request.auth.token.email.lower());
+                           (request.auth.token.firebase.sign_in_provider == 'anonymous' ||
+                            (request.auth.token.email is string &&
+                             request.resource.data.ownerEmail.lower() == request.auth.token.email.lower()));
       allow update: if request.auth != null && 
                              (resource.data.ownerEmail.lower() == request.auth.token.email.lower() || 
                               request.auth.token.email.lower() in resource.data.adminEmails ||

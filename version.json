@@ -1,9 +1,12 @@
 {
-  "version": "2.0.1",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.1/",
+  "version": "2.0.7",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.7/",
   "required": true,
   "releaseNotes": [
-    "Fixed maintenance mode so member dashboards enforce the maintenance restriction again.",
-    "Restored maintenance notices, restricted navigation, and support ticket access for members."
+    "Added organization-scoped data isolation across admin and member workflows.",
+    "Added organization selection and quick organization creation during admin startup.",
+    "Blocked deleted member accounts from re-entering through saved sessions or Firebase Auth.",
+    "Displayed maintenance mode before members select an organization.",
+    "Applied maintenance state immediately for restricted members during startup."
   ]
 }

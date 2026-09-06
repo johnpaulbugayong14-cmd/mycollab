@@ -3355,7 +3355,7 @@ function loadAnnouncements() {
 }
 
 function loadResources() {
-  const container = document.getElementById("resources");
+  const container = document.getElementById("resourcesList");
   if (!container) {
     console.log('=== RESOURCES CONTAINER NOT FOUND ===');
     return;
@@ -4357,6 +4357,8 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
       console.warn('No organization is assigned to this member; dashboard synchronization stopped.');
       return;
     }
+    loadResources();
+    loadProgressReport();
     checkMaintenance();
     if (typeof window.initEventsCalendar === 'function') await window.initEventsCalendar('member');
     console.log('Starting data synchronization...');

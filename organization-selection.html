@@ -69,6 +69,12 @@
     .selection-footer { margin-top: 3rem; padding: 1.5rem 0; border-top: 1px solid #3f3f46; text-align: right; }
     .selection-footer-name { color: #ffffff; font-size: 1rem; font-weight: 700; }
     .selection-footer-credit { margin-top: 0.25rem; color: #cbd5e1; font-size: 0.85rem; }
+    .selection-maintenance-overlay { position: fixed; inset: 0; z-index: 9999; display: none; place-items: center; padding: 1.5rem; background: rgba(15, 23, 42, 0.96); }
+    .selection-maintenance-overlay.visible { display: grid; }
+    .selection-maintenance-card { width: min(620px, 100%); padding: 2.25rem; border: 1px solid #475569; border-radius: 1rem; background: #1e293b; color: #f8fafc; text-align: center; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45); }
+    .selection-maintenance-card i { margin-bottom: 1rem; color: #7dd3fc; font-size: 3rem; }
+    .selection-maintenance-card h2 { margin: 0 0 0.8rem; color: #ffffff; }
+    .selection-maintenance-card p { margin: 0; color: #cbd5e1; line-height: 1.7; white-space: pre-wrap; }
     @media (max-width: 600px) { body { padding: 2rem 1rem; } .organization-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -93,18 +99,43 @@
       <div class="selection-footer-credit">Created by John Paul Bugayong</div>
     </footer>
   </main>
+  <div id="selectionMaintenanceOverlay" class="selection-maintenance-overlay" role="alertdialog" aria-modal="true" aria-labelledby="selectionMaintenanceTitle">
+    <div class="selection-maintenance-card">
+      <i class="fas fa-tools" aria-hidden="true"></i>
+      <h2 id="selectionMaintenanceTitle">We're performing maintenance</h2>
+      <p id="selectionMaintenanceMessage">The site is currently under maintenance. Please try again shortly.</p>
+    </div>
+  </div>
   <script type="module">
-    import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+    import { doc, getDoc, onSnapshot, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
     import { db } from './firebase.js';
     import { getStoredUserEmail, requireAuth, signOutUser } from './auth.js?v=8';
     import { getOrganizationsForEmail, setActiveOrganizationId } from './organizations.js';
 
     const grid = document.getElementById('organizationGrid');
+    const maintenanceOverlay = document.getElementById('selectionMaintenanceOverlay');
+    const maintenanceMessage = document.getElementById('selectionMaintenanceMessage');
     const avatar = document.getElementById('selectionAvatar');
     const profileInput = document.getElementById('selectionProfileInput');
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character]));
 
     await requireAuth(['member', 'limited-admin']);
+    const maintenanceRef = doc(db, 'appSettings', 'maintenance');
+    const applyMaintenanceState = (snapshot) => {
+      const data = snapshot.exists() ? snapshot.data() : {};
+      const enabled = data.enabled === true;
+      maintenanceMessage.textContent = data.message || 'The site is currently under maintenance. Please try again shortly.';
+      maintenanceOverlay.classList.toggle('visible', enabled);
+      maintenanceOverlay.setAttribute('aria-hidden', String(!enabled));
+      grid.setAttribute('aria-hidden', String(enabled));
+      grid.style.pointerEvents = enabled ? 'none' : '';
+    };
+    getDoc(maintenanceRef).then(applyMaintenanceState).catch((error) => {
+      console.warn('Unable to read maintenance mode on organization selection:', error);
+    });
+    onSnapshot(maintenanceRef, applyMaintenanceState, (error) => {
+      console.warn('Unable to monitor maintenance mode on organization selection:', error);
+    });
     const email = await getStoredUserEmail();
     const organizations = email ? await getOrganizationsForEmail(email) : [];
     const displayName = String(email || 'User').split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
