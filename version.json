@@ -1,12 +1,14 @@
 {
-  "version": "2.0.7",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.7/",
+  "version": "2.0.8",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.8/",
   "required": true,
   "releaseNotes": [
     "Added organization-scoped data isolation across admin and member workflows.",
     "Added organization selection and quick organization creation during admin startup.",
     "Blocked deleted member accounts from re-entering through saved sessions or Firebase Auth.",
     "Displayed maintenance mode before members select an organization.",
-    "Applied maintenance state immediately for restricted members during startup."
+    "Applied maintenance state immediately for restricted members during startup.",
+    "Fixed mobile keyboard background glitches on the login and index pages without pausing the animated background.",
+    "Prevented the animated auth background from intercepting typing and touch input."
   ]
 }
