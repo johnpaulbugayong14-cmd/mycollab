@@ -1,0 +1,10 @@
+{
+  "version": "2.0.4",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.4/",
+  "required": true,
+  "releaseNotes": [
+    "Added organization-scoped data isolation across admin and member workflows.",
+    "Added organization selection and quick organization creation during admin startup.",
+    "Enforced organization IDs in Firestore rules for organization-scoped records."
+  ]
+}
