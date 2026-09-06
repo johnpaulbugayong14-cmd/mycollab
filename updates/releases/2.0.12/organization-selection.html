@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Choose Organization - MyCollab</title>
+  <link rel="stylesheet" href="style.css?v=1">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: 3rem 1.5rem;
+      background: #1f1f1f;
+      color: #f8fafc;
+    }
+    .selection-shell {
+      width: min(1240px, 100%);
+      margin: 0 auto;
+    }
+    .selection-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 3rem; padding-bottom: 1rem; border-bottom: 1px solid #3f3f46; }
+    .selection-brand { margin: 0; color: #ffffff; font-size: 1.4rem; font-weight: 700; }
+    .selection-user { display: flex; flex-direction: column; align-items: flex-end; gap: 0.45rem; }
+    .selection-user-profile { display: flex; align-items: center; gap: 0.7rem; }
+    .selection-avatar { display: grid; width: 40px; height: 40px; min-width: 40px; min-height: 40px; flex: 0 0 40px; aspect-ratio: 1 / 1; place-items: center; padding: 0; border: 1px solid #64748b; border-radius: 50%; background: #334155; color: #ffffff; font-weight: 700; cursor: pointer; overflow: hidden; }
+    .selection-welcome { color: #f8fafc; font-size: 0.9rem; }
+    .selection-logout { border: 1px solid #475569; border-radius: 0.45rem; padding: 0.55rem 0.8rem; background: #1e293b; color: #f8fafc; cursor: pointer; }
+    .selection-logout:hover { background: #334155; }
+    .selection-shell h1 { margin: 0 0 0.35rem; color: #ffffff !important; background: none !important; -webkit-text-fill-color: #ffffff !important; background-clip: border-box !important; font-size: clamp(1.8rem, 4vw, 2.3rem); text-align: left; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+    .subtitle { margin: 0 0 2rem; color: #f1f5f9; font-size: 1rem; }
+    .organization-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+    }
+    .organization-card {
+      min-height: 170px;
+      padding: 1rem;
+      border: 1px solid #353535;
+      border-radius: 0.45rem;
+      background: #292929;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+    }
+    .organization-card:hover, .organization-card:focus-visible {
+      border-color: #60a5fa;
+      background: #303030;
+      transform: translateY(-2px);
+      outline: none;
+    }
+    .organization-card-top { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 1.35rem; }
+    .organization-avatar {
+      display: grid;
+      width: 72px;
+      height: 72px;
+      flex: 0 0 72px;
+      place-items: center;
+      border-radius: 0.3rem;
+      background: #e40088;
+      color: white;
+      font-size: 1.6rem;
+      font-weight: 700;
+    }
+    .organization-name { display: block; overflow: hidden; color: #ffffff; font-size: 1.05rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .organization-description { display: block; overflow: hidden; color: #d1d5db; font-size: 0.85rem; text-overflow: ellipsis; white-space: nowrap; }
+    .empty-state { max-width: 520px; padding: 1.5rem; border: 1px solid #4b5563; border-radius: 0.5rem; background: #292929; color: #cbd5e1; }
+    .selection-footer { margin-top: 3rem; padding: 1.5rem 0; border-top: 1px solid #3f3f46; text-align: right; }
+    .selection-footer-name { color: #ffffff; font-size: 1rem; font-weight: 700; }
+    .selection-footer-credit { margin-top: 0.25rem; color: #cbd5e1; font-size: 0.85rem; }
+    .selection-maintenance-overlay { position: fixed; inset: 0; z-index: 9999; display: none; place-items: center; padding: 1.5rem; background: rgba(15, 23, 42, 0.96); }
+    .selection-maintenance-overlay.visible { display: grid; }
+    .selection-maintenance-card { width: min(620px, 100%); padding: 2.25rem; border: 1px solid #475569; border-radius: 1rem; background: #1e293b; color: #f8fafc; text-align: center; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45); }
+    .selection-maintenance-card i { margin-bottom: 1rem; color: #7dd3fc; font-size: 3rem; }
+    .selection-maintenance-card h2 { margin: 0 0 0.8rem; color: #ffffff; }
+    .selection-maintenance-card p { margin: 0; color: #cbd5e1; line-height: 1.7; white-space: pre-wrap; }
+    @media (max-width: 600px) { body { padding: 2rem 1rem; } .organization-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="selection-shell">
+    <header class="selection-header">
+      <h1 class="selection-brand">My Collab</h1>
+      <div class="selection-user">
+        <button type="button" class="selection-logout" onclick="signOutUser()">Logout</button>
+        <div class="selection-user-profile">
+          <button type="button" id="selectionAvatar" class="selection-avatar" aria-label="Change profile picture" title="Change profile picture">?</button>
+          <input id="selectionProfileInput" type="file" accept="image/*" hidden>
+          <div id="selectionWelcome" class="selection-welcome">Welcome</div>
+        </div>
+      </div>
+    </header>
+    <h1>Choose an organization</h1>
+    <p class="subtitle">Select the organization you want to check.</p>
+    <div id="organizationGrid" class="organization-grid" aria-live="polite"></div>
+    <footer class="selection-footer">
+      <div class="selection-footer-name">MyCollab</div>
+      <div class="selection-footer-credit">Created by John Paul Bugayong</div>
+    </footer>
+  </main>
+  <div id="selectionMaintenanceOverlay" class="selection-maintenance-overlay" role="alertdialog" aria-modal="true" aria-labelledby="selectionMaintenanceTitle">
+    <div class="selection-maintenance-card">
+      <i class="fas fa-tools" aria-hidden="true"></i>
+      <h2 id="selectionMaintenanceTitle">We're performing maintenance</h2>
+      <p id="selectionMaintenanceMessage">The site is currently under maintenance. Please try again shortly.</p>
+    </div>
+  </div>
+  <script type="module">
+    import { doc, getDoc, onSnapshot, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+    import { db } from './firebase.js';
+    import { getStoredUserEmail, requireAuth, signOutUser } from './auth.js?v=8';
+    import { getOrganizationsForEmail, setActiveOrganizationId } from './organizations.js';
+
+    const grid = document.getElementById('organizationGrid');
+    const maintenanceOverlay = document.getElementById('selectionMaintenanceOverlay');
+    const maintenanceMessage = document.getElementById('selectionMaintenanceMessage');
+    const avatar = document.getElementById('selectionAvatar');
+    const profileInput = document.getElementById('selectionProfileInput');
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character]));
+
+    await requireAuth(['member', 'limited-admin']);
+    const maintenanceRef = doc(db, 'appSettings', 'maintenance');
+    const applyMaintenanceState = (snapshot) => {
+      const data = snapshot.exists() ? snapshot.data() : {};
+      const enabled = data.enabled === true;
+      maintenanceMessage.textContent = data.message || 'The site is currently under maintenance. Please try again shortly.';
+      maintenanceOverlay.classList.toggle('visible', enabled);
+      maintenanceOverlay.setAttribute('aria-hidden', String(!enabled));
+      grid.setAttribute('aria-hidden', String(enabled));
+      grid.style.pointerEvents = enabled ? 'none' : '';
+    };
+    getDoc(maintenanceRef).then(applyMaintenanceState).catch((error) => {
+      console.warn('Unable to read maintenance mode on organization selection:', error);
+    });
+    onSnapshot(maintenanceRef, applyMaintenanceState, (error) => {
+      console.warn('Unable to monitor maintenance mode on organization selection:', error);
+    });
+    const email = await getStoredUserEmail();
+    const organizations = email ? await getOrganizationsForEmail(email) : [];
+    const displayName = String(email || 'User').split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+    const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]).join('').toUpperCase() || '?';
+    document.getElementById('selectionWelcome').textContent = `Welcome, ${displayName}`;
+    avatar.textContent = initials;
+
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const profileSnapshot = normalizedEmail ? await getDoc(doc(db, 'userRoles', normalizedEmail)).catch(() => null) : null;
+    const savedPicture = profileSnapshot?.data()?.profilePicture || localStorage.getItem(`profilePicture:${normalizedEmail}`);
+    if (savedPicture) {
+      localStorage.setItem(`profilePicture:${normalizedEmail}`, savedPicture);
+      avatar.innerHTML = `<img src="${savedPicture}" alt="Profile picture" style="display:block; width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
+    }
+
+    function compressProfilePicture(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const image = new Image();
+          image.onload = () => {
+            const scale = Math.min(1, 256 / Math.max(image.width, image.height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(image.width * scale));
+            canvas.height = Math.max(1, Math.round(image.height * scale));
+            canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.55));
+          };
+          image.onerror = () => reject(new Error('Unable to load image.'));
+          image.src = event.target.result;
+        };
+        reader.onerror = () => reject(new Error('Unable to read image.'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    avatar.addEventListener('click', () => profileInput.click());
+    profileInput.addEventListener('change', async () => {
+      const file = profileInput.files?.[0];
+      if (!file || !normalizedEmail) return;
+      try {
+        const picture = await compressProfilePicture(file);
+        if (picture.length > 900000) throw new Error('The profile picture is too large.');
+        await setDoc(doc(db, 'userRoles', normalizedEmail), { profilePicture: picture, profilePictureUpdatedAt: new Date().toISOString() }, { merge: true });
+        localStorage.setItem(`profilePicture:${normalizedEmail}`, picture);
+        avatar.innerHTML = `<img src="${picture}" alt="Profile picture" style="display:block; width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
+      } catch (error) {
+        console.error('Unable to update profile picture:', error);
+        alert('Profile picture could not be saved. Please try again.');
+      } finally {
+        profileInput.value = '';
+      }
+    });
+
+    if (organizations.length === 0) {
+      grid.innerHTML = '<div class="empty-state">Your account is not assigned to an organization. Please contact an administrator.</div>';
+    } else {
+      grid.innerHTML = organizations.map((organization) => {
+        const name = String(organization.name || 'Unnamed organization');
+        const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]).join('').toUpperCase() || '?';
+        const description = String(organization.description || 'Organization workspace');
+        return `<button type="button" class="organization-card" data-organization-id="${escapeHtml(organization.id)}">
+          <span class="organization-card-top"><span class="organization-avatar" aria-hidden="true">${escapeHtml(initials)}</span><span><span class="organization-name">${escapeHtml(name)}</span><span class="organization-description">${escapeHtml(description)}</span></span></span>
+          <span>Open workspace <i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+        </button>`;
+      }).join('');
+
+      grid.addEventListener('click', (event) => {
+        const card = event.target.closest('[data-organization-id]');
+        if (!card) return;
+        setActiveOrganizationId(card.dataset.organizationId);
+        sessionStorage.setItem('mycollab.organization-selection', card.dataset.organizationId);
+        window.location.replace('member.html');
+      });
+    }
+  </script>
+</body>
+</html>
