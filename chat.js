@@ -558,7 +558,7 @@ function renderChatMessages(messages) {
         dateSeparator.style.cssText = 'display: flex; align-items: center; justify-content: center; margin: 1.5rem 0 1rem 0; gap: 0.75rem;';
         dateSeparator.innerHTML = `
           <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent);"></div>
-          <div style="padding: 0.35rem 0.75rem; font-size: 0.8rem; color: #cbd5e1; font-weight: 600; white-space: nowrap; letter-spacing: 0.02em;">${currentDate}</div>
+          <div class="chat-date-separator" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; color: #cbd5e1; font-weight: 600; white-space: nowrap; letter-spacing: 0.02em;">${currentDate}</div>
           <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent);"></div>
         `;
         chatMessagesEl.appendChild(dateSeparator);
@@ -598,7 +598,7 @@ function renderChatMessages(messages) {
           ${renderUserAvatarMarkup(msg.senderEmail || sender, 26)}
           <div style="font-size: 0.9rem; color: #94a3b8;">${escapeHtml(sender)}</div>
         </div>
-        <div style="font-size: 0.8rem; color: #6b7280;">${timestamp}</div>
+        <div class="chat-message-time" style="font-size: 0.8rem; color: #6b7280;">${timestamp}</div>
       </div>
       <div class="chat-message-text" style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; white-space: pre-wrap; word-break: break-word;">${replyQuote}${imageMarkup}${renderedText}</div>
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; margin-bottom: ${msg.reactions && Object.keys(msg.reactions).length > 0 ? '0.5rem' : '0'};">
@@ -704,7 +704,7 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
         dateSeparator.style.cssText = 'display: flex; align-items: center; justify-content: center; margin: 1.5rem 0 1rem 0; gap: 0.75rem;';
         dateSeparator.innerHTML = `
           <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent);"></div>
-          <div style="padding: 0.35rem 0.75rem; font-size: 0.8rem; color: #cbd5e1; font-weight: 600; white-space: nowrap; letter-spacing: 0.02em;">${currentDate}</div>
+          <div class="chat-date-separator" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; color: #cbd5e1; font-weight: 600; white-space: nowrap; letter-spacing: 0.02em;">${currentDate}</div>
           <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent);"></div>
         `;
         chatMessagesEl.appendChild(dateSeparator);
@@ -743,7 +743,7 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
           ${renderUserAvatarMarkup(msg.senderEmail || sender, 26)}
           <div style="font-size: 0.9rem; color: #94a3b8;">${escapeHtml(sender)}</div>
         </div>
-        <div style="font-size: 0.8rem; color: #6b7280;">${timestamp}</div>
+        <div class="chat-message-time" style="font-size: 0.8rem; color: #6b7280;">${timestamp}</div>
       </div>
       <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; white-space: pre-wrap; word-break: break-word;">${replyQuote}${imageMarkup}${renderedText}</div>
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; margin-bottom: ${msg.reactions && Object.keys(msg.reactions).length > 0 ? '0.5rem' : '0'};">

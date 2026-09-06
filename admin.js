@@ -85,6 +85,7 @@ import {
   getDoc,
   getDocs,
   arrayUnion,
+  arrayRemove,
   query,
   orderBy,
   runTransaction,
@@ -1777,7 +1778,36 @@ async function deleteMemberAccountFromAdmin(email) {
   }
 
   try {
-    await deleteMemberAccount(email);
+    const normalizedEmail = normalizeEmail(email);
+    const activeOrganizationId = getActiveOrganizationId();
+    const activeOrganization = managedOrganizations.find((organization) => organization.id === activeOrganizationId);
+    if (!activeOrganization) {
+      throw new Error('Select an organization before deleting a member.');
+    }
+
+    const organizationsSnapshot = await getDocs(collection(db, 'organizations'));
+    if (normalizeEmail(activeOrganization.ownerEmail) === normalizedEmail) {
+      throw new Error('The organization owner cannot be deleted from this organization.');
+    }
+    const otherOrganizations = organizationsSnapshot.docs
+      .filter((organizationDoc) => organizationDoc.id !== activeOrganizationId)
+      .map((organizationDoc) => organizationDoc.data() || {});
+    const belongsToAnotherOrganization = otherOrganizations.some((organization) => [
+      organization.ownerEmail,
+      ...(Array.isArray(organization.adminEmails) ? organization.adminEmails : []),
+      ...(Array.isArray(organization.memberEmails) ? organization.memberEmails : [])
+    ].some((candidate) => normalizeEmail(candidate) === normalizedEmail));
+
+    await updateDoc(doc(db, 'organizations', activeOrganizationId), {
+      memberEmails: arrayRemove(normalizedEmail),
+      adminEmails: arrayRemove(normalizedEmail),
+      updatedAt: serverTimestamp()
+    });
+
+    if (!belongsToAnotherOrganization) {
+      await deleteMemberAccount(normalizedEmail);
+    }
+
     members = members.filter(m => normalizeEmail(m.uid) !== normalizeEmail(email));
     await refreshMentionMembers();
     loadMembers();
@@ -1785,7 +1815,9 @@ async function deleteMemberAccountFromAdmin(email) {
     loadInAppNotificationRecipients();
     await loadMemberRoles();
     renderMemberManagementPanel();
-    alert('Account deleted successfully.');
+    alert(belongsToAnotherOrganization
+      ? 'Member removed from this organization. Their account remains available in other organizations.'
+      : 'Account deleted successfully.');
   } catch (error) {
     console.error('Failed to delete member account:', error);
     alert('Could not delete account. Check console for details.');
