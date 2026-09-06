@@ -18,6 +18,10 @@
       justify-content: center;
       min-height: 100vh;
     }
+    body.login-page::before,
+    body.login-page::after {
+      display: none;
+    }
     svg {
       position: fixed;
       top: 0;
@@ -66,6 +70,15 @@
       padding: 2.5rem 2rem;
       border-radius: 16px;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+    @media (max-width: 768px) {
+      body.login-page {
+        min-height: 100svh;
+      }
+      .login-card {
+        background: #1e293b;
+        backdrop-filter: none;
+      }
     }
 
     .login-card::before {
@@ -152,7 +165,7 @@
     }
   </style>
 </head>
-<body>
+<body class="login-page">
 
 <svg preserveAspectRatio="xMidYMid slice" viewBox="10 10 80 80">
     <defs>
