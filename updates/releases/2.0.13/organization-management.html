@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Organization Management</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <style>
+    .organization-page { max-width: 1120px; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
+    .organization-page .content-header { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; min-height: 0; padding: 0 0 1.15rem; border-bottom: 1px solid rgba(148, 163, 184, 0.24); background: transparent; backdrop-filter: none; position: relative; z-index: auto; text-align: left; }
+    .organization-page .content-header h1 { margin: 0; color: #000; background: none; background-clip: border-box; -webkit-background-clip: border-box; -webkit-text-fill-color: #000; text-align: left; font-size: clamp(1.25rem, 2vw, 1.65rem); font-weight: 650; }
+    .organization-page .content-header h1 i { margin-right: 0.55rem; color: #000; }
+    .organization-toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .organization-toolbar h2 { margin: 0; color: #f8fafc; font-size: 1.35rem; font-weight: 650; }
+    .organization-toolbar p { margin: 0.35rem 0 0; color: #94a3b8; }
+    .organization-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
+    .organization-card { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; min-height: 0; padding: 0.9rem 1.1rem; background: rgba(15, 23, 42, 0.42); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.75rem; box-shadow: 0 8px 22px rgba(2, 6, 23, 0.12); backdrop-filter: blur(10px); cursor: pointer; transition: border-color 160ms ease, background 160ms ease, transform 160ms ease; }
+    .organization-card:hover { transform: translateY(-2px); border-color: rgba(125, 211, 252, 0.55); background: rgba(15, 23, 42, 0.55); }
+    .organization-card.active { border-color: rgba(96, 165, 250, 0.7); }
+    .organization-card h3 { margin: 0; padding-right: 2.25rem; color: #f8fafc; font-size: 1.05rem; font-weight: 650; overflow-wrap: anywhere; }
+    .organization-card p { margin: 0.4rem 0 0; color: #aab8ca; font-size: 0.9rem; line-height: 1.45; overflow-wrap: anywhere; }
+    .organization-status { display: inline-flex; align-items: center; gap: 0.35rem; margin-top: 0.7rem; color: #7dd3fc; font-size: 0.72rem; font-weight: 650; letter-spacing: 0.03em; text-transform: uppercase; }
+    .organization-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; flex: 0 0 auto; }
+    .organization-actions > button:first-child { flex: 0 0 auto; }
+    .organization-menu { position: absolute; top: 0.75rem; right: 0.75rem; }
+    .organization-menu-toggle { width: 2rem; height: 2rem; padding: 0; border: 1px solid transparent; border-radius: 0.45rem; background: transparent; color: #94a3b8; }
+    .organization-menu-toggle:hover, .organization-menu-toggle:focus-visible { color: #f8fafc; border-color: rgba(148, 163, 184, 0.28); background: rgba(51, 65, 85, 0.45); }
+    .organization-menu-list { position: absolute; right: 0; top: calc(100% + 0.35rem); z-index: 3; display: none; min-width: 8.5rem; padding: 0.3rem; background: #172033; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 0.55rem; box-shadow: 0 10px 24px rgba(2, 6, 23, 0.3); }
+    .organization-menu-list.open { display: grid; gap: 0.2rem; }
+    .organization-menu-list button { width: 100%; padding: 0.5rem 0.65rem; border: 0; border-radius: 0.35rem; background: transparent; color: #e2e8f0; text-align: left; }
+    .organization-menu-list button:hover, .organization-menu-list button:focus-visible { background: rgba(59, 130, 246, 0.25); color: #fff; }
+    .organization-page button { cursor: pointer; transition: background 160ms ease, border-color 160ms ease, color 160ms ease; }
+    .organization-page .header-actions { position: absolute; top: 0; right: 0; display: flex; align-items: center; }
+    .organization-page .header-actions .logout-btn { min-height: 2.25rem; padding: 0.45rem 0.8rem; }
+    .organization-page .primary-action { min-height: 2.35rem; padding: 0.5rem 0.85rem; border: 1px solid rgba(96, 165, 250, 0.5); border-radius: 0.5rem; background: rgba(37, 99, 235, 0.82); color: #fff; font-weight: 600; }
+    .organization-page .primary-action:hover, .organization-page .primary-action:focus-visible { background: #2563eb; border-color: #93c5fd; }
+    .organization-page .card { padding: 0; background: transparent; border: 0; box-shadow: none; }
+    .organization-page form { display: grid; gap: 0.85rem; }
+    .organization-page form label { color: #cbd5e1; font-size: 0.88rem; font-weight: 600; }
+    .organization-page form input, .organization-page form textarea { width: 100%; box-sizing: border-box; border: 1px solid #3b4a62; border-radius: 0.5rem; background: #111a2c; color: #f8fafc; padding: 0.7rem 0.8rem; }
+    .organization-page form input { min-height: 2.65rem; }
+    .organization-page form input:focus, .organization-page form textarea:focus { outline: 2px solid rgba(96, 165, 250, 0.35); outline-offset: 1px; border-color: #60a5fa; }
+    .organization-modal { position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center; padding: 1rem; background: rgba(2, 6, 23, 0.7); }
+    .organization-modal.open { display: flex; }
+    .organization-dialog { width: min(100%, 440px); padding: 1.35rem; background: #172033; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 0.8rem; box-shadow: 0 20px 50px rgba(2, 6, 23, 0.4); }
+    .organization-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.1rem; }
+    .organization-dialog-header h2 { margin: 0; color: #f8fafc; font-size: 1.15rem; }
+    .organization-dialog-close { width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 0.4rem; background: transparent; color: #94a3b8; font-size: 1.25rem; }
+    .organization-dialog-close:hover, .organization-dialog-close:focus-visible { color: #fff; background: rgba(71, 85, 105, 0.5); }
+    .organization-dialog-actions { display: flex; justify-content: flex-end; gap: 0.55rem; margin-top: 0.35rem; }
+    .organization-dialog-actions button { min-height: 2.35rem; padding: 0.5rem 0.85rem; border-radius: 0.5rem; }
+    .organization-dialog-actions button[type="button"] { border: 1px solid #475569; background: transparent; color: #cbd5e1; }
+    .organization-dialog-actions button[type="submit"] { border: 1px solid #60a5fa; background: #2563eb; color: #fff; font-weight: 600; }
+    @media (max-width: 640px) { .organization-page { padding: 1rem 1rem 2rem; } .organization-page .content-header { align-items: flex-start; padding-right: 5.5rem; } .organization-page .content-header h1 { font-size: 1.2rem; } .organization-toolbar h2 { font-size: 1.2rem; } .organization-card { align-items: flex-start; flex-direction: column; gap: 0.85rem; } .organization-actions { width: 100%; justify-content: flex-start; } }
+  </style>
+</head>
+<body>
+  <main class="organization-page">
+    <header class="content-header" style="margin-bottom: 2rem;">
+      <h1><i class="fas fa-building"></i> Organization Management</h1>
+      <div class="header-actions">
+        <button type="button" onclick="window.signOutUser()" class="logout-btn">Logout</button>
+      </div>
+    </header>
+
+    <section>
+      <div class="organization-toolbar">
+        <div>
+          <h2>Organizations</h2>
+          <p id="organizationMessage">Select an organization to open its workspace.</p>
+        </div>
+        <button type="button" class="primary-action" onclick="window.showCreateOrganizationForm()"><i class="fas fa-plus"></i> Create Organization</button>
+      </div>
+      <div id="organizationsList"></div>
+    </section>
+
+    <div id="organizationCreateModal" class="organization-modal" role="dialog" aria-modal="true" aria-labelledby="organizationCreateTitle">
+      <div class="organization-dialog">
+        <div class="organization-dialog-header">
+          <h2 id="organizationCreateTitle">Create Organization</h2>
+          <button type="button" class="organization-dialog-close" aria-label="Close create organization dialog" onclick="window.hideCreateOrganizationForm()"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="organizationForm" hidden>
+          <label for="organizationName">Organization name</label>
+          <input id="organizationName" type="text" placeholder="Enter organization name" required>
+          <label for="organizationDescription">Description</label>
+          <textarea id="organizationDescription" rows="3" placeholder="Add a short description"></textarea>
+          <div class="organization-dialog-actions">
+            <button type="button" onclick="window.hideCreateOrganizationForm()">Cancel</button>
+            <button type="submit">Create</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { requireAuth, getStoredUserEmail, signOutUser } from './auth.js?v=8';
+    import { createOrganization, deleteOrganization, getActiveOrganizationId, setActiveOrganizationId, subscribeToOrganizations, updateOrganization } from './organizations.js';
+
+    window.signOutUser = signOutUser;
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character]));
+    const form = document.getElementById('organizationForm');
+    const list = document.getElementById('organizationsList');
+    const message = document.getElementById('organizationMessage');
+    let organizations = [];
+
+    const createModal = document.getElementById('organizationCreateModal');
+    window.showCreateOrganizationForm = () => { createModal.classList.add('open'); form.hidden = false; document.getElementById('organizationName').focus(); };
+    window.hideCreateOrganizationForm = () => { createModal.classList.remove('open'); form.hidden = true; form.reset(); };
+    createModal.addEventListener('click', (event) => { if (event.target === createModal) window.hideCreateOrganizationForm(); });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && createModal.classList.contains('open')) window.hideCreateOrganizationForm(); });
+    window.selectOrganization = (organizationId) => {
+      setActiveOrganizationId(organizationId);
+      window.location.href = 'admin.html';
+    };
+    window.toggleOrganizationMenu = (organizationId) => {
+      document.querySelectorAll('.organization-menu-list.open').forEach((menu) => {
+        if (menu.dataset.organizationId !== organizationId) menu.classList.remove('open');
+      });
+      document.querySelector(`[data-organization-menu="${organizationId}"]`)?.classList.toggle('open');
+    };
+    window.editOrganization = async (organizationId) => {
+      const organization = organizations.find((candidate) => candidate.id === organizationId);
+      if (!organization) return;
+      const name = prompt('Organization name', organization.name);
+      if (!name?.trim()) return;
+      const description = prompt('Organization description', organization.description || '') ?? '';
+      try { await updateOrganization(organizationId, { name: name.trim(), description: description.trim() }); }
+      catch (error) { alert(`Unable to update organization: ${error.message}`); }
+    };
+    window.deleteOrganization = async (organizationId) => {
+      const organization = organizations.find((candidate) => candidate.id === organizationId);
+      if (!organization || !confirm(`Delete ${organization.name}? This cannot be undone.`)) return;
+      try { await deleteOrganization(organizationId); }
+      catch (error) { alert(`Unable to delete organization: ${error.message}`); }
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      try {
+        const id = await createOrganization({ name: document.getElementById('organizationName').value, description: document.getElementById('organizationDescription').value, ownerEmail: await getStoredUserEmail() });
+        window.selectOrganization(id);
+      } catch (error) { alert(`Unable to create organization: ${error.message}`); }
+    });
+
+    await requireAuth(['admin']);
+    const email = await getStoredUserEmail();
+    subscribeToOrganizations(email, (nextOrganizations) => {
+      organizations = nextOrganizations;
+      const activeId = getActiveOrganizationId();
+      message.textContent = organizations.length ? 'Select the organization whose workspace you want to open.' : 'No organization created as of the moment.';
+      list.className = 'organization-grid';
+      list.innerHTML = organizations.map((organization) => `<article class="organization-card ${organization.id === activeId ? 'active' : ''}" role="button" tabindex="0" aria-label="Open ${escapeHtml(organization.name || 'organization')}" onclick="window.selectOrganization('${escapeHtml(organization.id)}')" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); window.selectOrganization('${escapeHtml(organization.id)}'); }">
+        <div><h3>${escapeHtml(organization.name || 'Unnamed')}</h3><p>${escapeHtml(organization.description || 'No description')}</p>${organization.id === activeId ? '<span class="organization-status"><i class="fas fa-check-circle"></i> Current workspace</span>' : ''}</div>
+        <div class="organization-actions"><div class="organization-menu"><button type="button" class="organization-menu-toggle" aria-label="Organization settings" title="Organization settings" onclick="event.stopPropagation(); window.toggleOrganizationMenu('${escapeHtml(organization.id)}')"><i class="fas fa-ellipsis-v"></i></button><div class="organization-menu-list" data-organization-menu="${escapeHtml(organization.id)}" data-organization-id="${escapeHtml(organization.id)}"><button type="button" onclick="event.stopPropagation(); window.editOrganization('${escapeHtml(organization.id)}')"><i class="fas fa-pen"></i> Edit</button><button type="button" onclick="event.stopPropagation(); window.deleteOrganization('${escapeHtml(organization.id)}')"><i class="fas fa-trash"></i> Delete</button></div></div></div>
+      </article>`).join('');
+    }, (error) => { message.textContent = `Unable to load organizations: ${error.message}`; });
+  </script>
+</body>
+</html>
