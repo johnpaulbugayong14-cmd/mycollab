@@ -831,7 +831,16 @@ function getProgressReportMemberName(member) {
 
 function refreshProgressReportMemberOptions() {
   document.querySelectorAll('select[id^="assignedTo-"]').forEach((select) => {
+    const match = select.id.match(/^assignedTo-(\d+)-(\d+)$/);
+    const sectionIndex = Number(match?.[1]);
+    const itemIndex = Number(match?.[2]);
+    const savedAssignments = match && adminProgressSections[sectionIndex]?.items?.[itemIndex]?.assignedTo;
     const selectedValues = new Set(Array.from(select.selectedOptions).map((option) => option.value));
+    if (Array.isArray(savedAssignments)) {
+      savedAssignments.forEach((value) => selectedValues.add(value));
+    } else if (savedAssignments) {
+      selectedValues.add(savedAssignments);
+    }
     const memberOptions = members.filter(isProgressReportMember).map((member) => `
       <option value="${escapeHtml(member.uid)}">${escapeHtml(getProgressReportMemberName(member))}</option>
     `).join('');
