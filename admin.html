@@ -1155,12 +1155,17 @@ function showSection(sectionId) {
   const targetSection = document.getElementById(sectionId);
   if (targetSection) {
     targetSection.classList.add('active');
-    
-    // Only show the meeting frame after the admin joins a meeting.
-    if (sectionId === 'video-conference') {
-      loadMeetings();
-      initializeAdminMeetingForm();
-    }
+
+    // Let the section switch paint before starting heavier integrations.
+    setTimeout(() => {
+      if (!targetSection.classList.contains('active')) return;
+
+      // Only show the meeting frame after the admin joins a meeting.
+      if (sectionId === 'video-conference') {
+        loadMeetings();
+        initializeAdminMeetingForm();
+      }
+    }, 0);
   }
   
   // Update active nav button

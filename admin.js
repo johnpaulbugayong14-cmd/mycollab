@@ -2522,7 +2522,7 @@ onSnapshot(getActiveOrganizationId() ? query(collection(db, "tasks"), where("org
 
   allTasks.forEach(t => {
     const assignedMember = t.assignedToName || t.assignedTo || "Unassigned";
-    const memberName = normalizeEmail(assignedMember) === 'johnpaulbugayong@gmail.com' ? 'Admin' : assignedMember;
+    const memberName = normalizeEmail(assignedMember) === 'johnpaulbugayong@gmail.com' ? 'John Paul Bugayong' : assignedMember;
 
     let status = (t.status || "pending").toLowerCase().trim();
     const deadline = parseDeadline(t.deadline);
@@ -2544,7 +2544,7 @@ onSnapshot(getActiveOrganizationId() ? query(collection(db, "tasks"), where("org
   members
     .filter(member => member.uid !== 'everyone' && member.name)
     .forEach(member => {
-      const memberName = normalizeEmail(member.name) === 'johnpaulbugayong@gmail.com' ? 'Admin' : member.name;
+      const memberName = normalizeEmail(member.name) === 'johnpaulbugayong@gmail.com' ? 'John Paul Bugayong' : member.name;
       if (!memberProgress[memberName]) {
         memberProgress[memberName] = { done: 0, pending: 0, overdue: 0, needsAction: 0, pendingValidation: 0 };
       }

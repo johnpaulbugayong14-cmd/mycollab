@@ -1221,7 +1221,7 @@ function getUnreadChatMessages(roomId, messages) {
       type: 'chat',
       roomName: homeChatRoomNames[roomId] || getChatRoomDisplayName({}, roomId),
       senderName: normalizeEmail(message.senderEmail) === 'johnpaulbugayong@gmail.com'
-        ? 'Admin'
+        ? 'John Paul Bugayong'
         : getFriendlyName(message.senderName || getUserName(message.senderEmail) || 'Member'),
       messageText: message.text || (message.imageData ? '[Image]' : '[Message]')
     }));
@@ -2877,7 +2877,6 @@ window.markDone = async function (id) {
 };
 
 window.submitTicket = async function () {
-  console.log('submitTicket called, userEmail:', userEmail);
   if (!userEmail) {
     alert("Please wait for the page to load completely.");
     return;
@@ -2885,7 +2884,6 @@ window.submitTicket = async function () {
 
   // Prevent multiple submissions
   if (window.isSubmittingTicket) {
-    console.log('Ticket submission already in progress, ignoring...');
     return;
   }
   window.isSubmittingTicket = true;
@@ -2894,7 +2892,6 @@ window.submitTicket = async function () {
   const descriptionElement = document.getElementById("maintenanceTicketDescription") || document.getElementById("ticketDescription");
   const title = titleElement ? titleElement.value.trim() : "";
   const description = descriptionElement ? descriptionElement.value.trim() : "";
-  console.log('Ticket data - title:', title, 'description:', description);
 
   if (!title || !description) {
     alert("Please fill in both title and description.");
@@ -2931,8 +2928,6 @@ window.submitTicket = async function () {
       await signInAnonymously(auth);
     }
 
-    console.log('Adding ticket to Firestore...');
-    console.log('Submitting ticket with userEmail:', userEmail);
     const createdTicketRef = await addDoc(collection(db, "tickets"), {
       title: title,
       description: description,
@@ -2945,8 +2940,6 @@ window.submitTicket = async function () {
       createdAt: new Date(),
       responses: []
     });
-    console.log('Ticket added successfully with submittedBy:', userEmail);
-
     // Clear form
     if (titleElement) titleElement.value = "";
     if (descriptionElement) descriptionElement.value = "";
@@ -3714,7 +3707,7 @@ function renderChatRooms(chatRooms) {
     const roomDiv = document.createElement('div');
     roomDiv.style.cssText = 'border: 1px solid #374151; background: #1e293b; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;';
     const createdBy = normalizeEmail(room.createdByEmail) === 'johnpaulbugayong@gmail.com'
-      ? 'Admin'
+      ? 'John Paul Bugayong'
       : (room.createdByName
         ? getFriendlyName(room.createdByName)
         : (getUserName(room.createdByEmail) || 'Unknown'));
@@ -4413,140 +4406,104 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
   }
 })();
 
-console.log('=== MEMBER.JS FILE LOADED ===');
-
 async function fetchCurrentTicketHistory(targetContainerId) {
   if (!userEmail) {
-    console.log('[TicketSync] No userEmail; aborting fetch.');
     return null;
   }
   const memberEmail = normalizeEmail(userEmail);
-  console.log(`[TicketSync] [DIAG] Authoritative server fetch starting for ${memberEmail}`);
 
   try {
     const ticketsRef = collection(db, "tickets");
     // Use the basic collection reference for getDocsFromServer to avoid index requirements
     const snapshot = await getDocsFromServer(ticketsRef);
-    console.log(`[TicketSync] [DIAG] Fetch complete. Total documents from server: ${snapshot.size}`);
 
     const docs = [];
-    let debugCount = 0;
     snapshot.forEach(docSnap => {
       const t = docSnap.data();
       const subBy = normalizeEmail(t.submittedBy);
       const assignTo = normalizeEmail(t.assignedTo);
       const isMatch = subBy === memberEmail || assignTo === memberEmail;
       if (isMatch) {
-        debugCount++;
         docs.push(docSnap);
-        console.log(`[TicketSync] [DIAG] [FETCH] Matched ticket #${debugCount}: ID=${docSnap.id}, title=${t.title}, submittedBy=${subBy}, assignedTo=${assignTo}`);
       }
     });
-    console.log(`[TicketSync] [DIAG] Fetch result: ${debugCount} tickets match member email.`);
     return docs;
   } catch (error) {
-    console.error('[TicketSync] [DIAG] Server fetch FAILED:', error);
+    console.error('[TicketSync] Server fetch failed:', error);
     return null;
   }
 }
 
 function subscribeToTicketHistory() {
   if (!userEmail) {
-    console.log('[TicketSync] [DIAG] No userEmail; listener not subscribed.');
     return;
   }
 
   if (ticketHistoryUnsubscribe) {
-    console.log('[TicketSync] [DIAG] Unsubscribing previous listener...');
     ticketHistoryUnsubscribe();
     ticketHistoryUnsubscribe = null;
   }
 
   const memberEmail = normalizeEmail(userEmail);
-  console.log(`[TicketSync] [DIAG] Subscribing to ticket listener for ${memberEmail}...`);
 
   const ticketsRef = activeMemberOrganization?.id ? query(collection(db, "tickets"), where("organizationId", "==", activeMemberOrganization.id)) : collection(db, "tickets");
-  let listenerFiredCount = 0;
   
   ticketHistoryUnsubscribe = onSnapshot(ticketsRef, { includeMetadataChanges: true }, (snapshot) => {
-    listenerFiredCount++;
     const previousSnapshotDocs = latestTicketSnapshotDocs || [];
     snapshot.docChanges().forEach((change) => {
       if (change.type === 'removed') optimisticTicketHistory.delete(change.doc.id);
     });
-    const isFromCache = snapshot.metadata.fromCache;
-    const hasPendingWrites = snapshot.metadata.hasPendingWrites;
-    console.log(`[TicketSync] [DIAG] [LISTENER_FIRE #${listenerFiredCount}] fromCache=${isFromCache}, hasPendingWrites=${hasPendingWrites}, docCount=${snapshot.size}`);
 
     const docs = [];
-    let matchCount = 0;
     snapshot.forEach(ticketDoc => {
       const t = ticketDoc.data();
       const subBy = normalizeEmail(t.submittedBy);
       const assignTo = normalizeEmail(t.assignedTo);
       const isMatch = subBy === memberEmail || assignTo === memberEmail;
       if (isMatch) {
-        matchCount++;
         docs.push(ticketDoc);
-        console.log(`[TicketSync] [DIAG] [LISTENER_MATCH #${matchCount}] ID=${ticketDoc.id}, title=${t.title}, submittedBy=${subBy}, assignedTo=${assignTo}`);
       }
     });
 
-    console.log(`[TicketSync] [DIAG] Listener snapshot: ${matchCount} matched tickets out of ${snapshot.size} total.`);
-  reconcileOptimisticTicketHistory(docs, previousSnapshotDocs);
+    reconcileOptimisticTicketHistory(docs, previousSnapshotDocs);
     latestTicketSnapshotDocs = docs;
     ticketSyncState = 'active';
-    console.log(`[TicketSync] [DIAG] Rendering to container: ${ticketHistoryTarget.containerId}`);
     renderTicketHistory(ticketHistoryTarget.containerId, ticketHistoryTarget.emptyStateId, docs);
     ticketNotificationsInitialized = true;
   }, (error) => {
-    console.error('[TicketSync] [DIAG] Listener FAILED:', error);
+    console.error('[TicketSync] Listener failed:', error);
     ticketSyncState = 'error';
     ticketHistoryUnsubscribe = null;
   });
-
-  console.log(`[TicketSync] [DIAG] Listener subscription established.`);
 }
 
 async function startTicketHistorySync(containerId = "ticketHistory", emptyStateId = "ticketHistoryEmptyState") {
-  console.log(`[TicketSync] [DIAG] startTicketHistorySync called with containerId=${containerId}`);
-  
   // Re-read userEmail from storage if lost
   if (!userEmail) {
     userEmail = await getStoredUserEmail();
-    console.log(`[TicketSync] [DIAG] userEmail restored from storage: ${userEmail}`);
   }
   if (!userEmail) {
-    console.log('[TicketSync] [DIAG] No userEmail available; sync aborted.');
     return;
   }
 
   ticketHistoryTarget = { containerId, emptyStateId };
-  console.log(`[TicketSync] [DIAG] Target updated to container=${containerId}`);
 
   // Force Auth refresh if on native platform to ensure token hasn't expired
   if (window.Capacitor?.isNativePlatform?.() && !auth.currentUser) {
-    console.log('[TicketSync] [DIAG] Native platform detected and no auth user; forcing auth refresh...');
      await new Promise(r => {
         const u = onAuthStateChanged(auth, (user) => { u(); r(user); });
         setTimeout(r, 2000);
      });
   }
 
-  console.log('[TicketSync] [DIAG] Fetching authoritative data from server...');
   const authoritativeDocs = await fetchCurrentTicketHistory(containerId);
   if (authoritativeDocs) {
-    console.log(`[TicketSync] [DIAG] Fetch succeeded; got ${authoritativeDocs.length} tickets.`);
     reconcileOptimisticTicketHistory(authoritativeDocs, latestTicketSnapshotDocs || []);
     latestTicketSnapshotDocs = authoritativeDocs;
     renderTicketHistory(containerId, emptyStateId, authoritativeDocs);
-  } else {
-    console.log('[TicketSync] [DIAG] Fetch returned null; rendering empty.');
   }
   
-  console.log('[TicketSync] [DIAG] Establishing real-time listener...');
   subscribeToTicketHistory();
-  console.log('[TicketSync] [DIAG] Sync lifecycle complete.');
 }
 
 function loadTicketHistory(containerId = "ticketHistory", emptyStateId = "ticketHistoryEmptyState", forceRefresh = false) {
@@ -4648,17 +4605,13 @@ function renderTicketHistory(containerId, emptyStateId, docs) {
 window.loadTicketHistory = loadTicketHistory;
 
 window.forceRefreshTicketHistory = async function() {
-  console.log('[TicketSync] [DIAG] FORCE REFRESH called by user.');
   // Completely reset and restart the ticket sync
   if (ticketHistoryUnsubscribe) {
-    console.log('[TicketSync] [DIAG] Unsubscribing old listener before force refresh...');
     ticketHistoryUnsubscribe();
     ticketHistoryUnsubscribe = null;
   }
   latestTicketSnapshotDocs = null;
   ticketSyncState = 'inactive';
-  console.log('[TicketSync] [DIAG] State reset; restarting sync...');
   await startTicketHistorySync();
-  console.log('[TicketSync] [DIAG] FORCE REFRESH complete.');
 };
 

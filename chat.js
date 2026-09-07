@@ -232,7 +232,7 @@ function getUserName(email) {
 }
 
 function getChatSenderName(message = {}) {
-  if (normalizeEmail(message.senderEmail) === 'johnpaulbugayong@gmail.com') return 'Admin';
+  if (normalizeEmail(message.senderEmail) === 'johnpaulbugayong@gmail.com') return 'John Paul Bugayong';
   return message.senderName || getUserName(message.senderEmail) || 'Unknown';
 }
 
@@ -1204,7 +1204,7 @@ async function sendChatMessage(event) {
   const cleanedMessage = message.split('\n').map(line => line.trim()).join('\n').trim().normalize('NFC');
   const messageData = {
     senderEmail: currentEmail,
-    senderName: normalizeEmail(currentEmail) === 'johnpaulbugayong@gmail.com' ? 'Admin' : getUserName(currentEmail),
+    senderName: normalizeEmail(currentEmail) === 'johnpaulbugayong@gmail.com' ? 'John Paul Bugayong' : getUserName(currentEmail),
     text: cleanedMessage || '',
     createdAt: Date.now(),
     deleted: false
@@ -1266,7 +1266,7 @@ async function loadChatRoomInfo(chatId) {
   if (titleEl) titleEl.textContent = data.title || 'Live Chat';
   if (metaEl) {
     const createdBy = normalizeEmail(data.createdByEmail) === 'johnpaulbugayong@gmail.com'
-      ? 'Admin'
+      ? 'John Paul Bugayong'
       : (data.createdByName && !/^[^@\s]+@[^\s]+\.[^@\s]+$/.test(data.createdByName)
         ? data.createdByName
         : getUserName(data.createdByEmail));

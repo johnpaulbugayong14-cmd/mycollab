@@ -1253,14 +1253,19 @@ function showSection(sectionId) {
   if (targetSection) {
     targetSection.classList.add('active');
 
-    if (sectionId === 'video-conference') {
-      loadMeetings();
-      setTimeout(initializeJitsiConference, 100);
-    }
+    // Let the section switch paint before starting heavier integrations.
+    setTimeout(() => {
+      if (!targetSection.classList.contains('active')) return;
 
-    if (sectionId === 'live-chat' && typeof loadChatRooms === 'function') {
-      loadChatRooms();
-    }
+      if (sectionId === 'video-conference') {
+        loadMeetings();
+        setTimeout(initializeJitsiConference, 100);
+      }
+
+      if (sectionId === 'live-chat' && typeof loadChatRooms === 'function') {
+        loadChatRooms();
+      }
+    }, 0);
   }
 
   const navButtons = document.querySelectorAll('.nav-btn');
