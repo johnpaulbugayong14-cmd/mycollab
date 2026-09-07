@@ -448,13 +448,16 @@ function getInitialsFromEmail(email) {
   return parts.map(part => part.charAt(0).toUpperCase()).join('').slice(0, 2);
 }
 
-function renderUserAvatarMarkup(email, size = 28) {
+function renderUserAvatarMarkup(email, size = 28, profilePicture = null) {
   const normalized = normalizeEmail(email);
   const initials = getInitialsFromEmail(email || 'Member');
   const safeSize = Math.max(20, Number(size) || 28);
+  const pictureMarkup = profilePicture
+    ? `<img src="${escapeHtml(profilePicture)}" alt="Profile" style="width:100%; height:100%; object-fit:cover; display:block;" />`
+    : `<span style="color:#e5e7eb; font-size:${Math.max(9, safeSize * 0.38)}px; font-weight:700; letter-spacing:0.04em;">${escapeHtml(initials)}</span>`;
   return `
     <div data-profile-email="${escapeHtml(normalized || '')}" style="width:${safeSize}px; height:${safeSize}px; border-radius:50%; background:#1f2937; border:1px solid #4b5563; overflow:hidden; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 0 0 1px rgba(148,163,184,0.15);">
-      <span style="color:#e5e7eb; font-size:${Math.max(9, safeSize * 0.38)}px; font-weight:700; letter-spacing:0.04em;">${escapeHtml(initials)}</span>
+      ${pictureMarkup}
     </div>
   `;
 }
@@ -1320,6 +1323,7 @@ async function loadMemberRoles() {
       member.walletBalance = Number(data.walletBalance) || 0;
       member.accessAllowed = typeof data.accessAllowed === 'boolean' ? data.accessAllowed : member.accessAllowed;
       member.accessReason = typeof data.accessReason === 'string' ? data.accessReason : member.accessReason;
+      member.profilePicture = typeof data.profilePicture === 'string' ? data.profilePicture : null;
       member.lastActive = parseDateValue(data.lastActive) || member.lastActive;
       member.isOnline = typeof data.isOnline !== 'undefined' ? data.isOnline : member.isOnline;
       member.name = data.displayName || data.name || member.name || docId;
@@ -1368,6 +1372,7 @@ function subscribeToMemberRoles() {
       member.walletBalance = Number(data.walletBalance) || 0;
       member.accessAllowed = typeof data.accessAllowed === 'boolean' ? data.accessAllowed : member.accessAllowed;
       member.accessReason = typeof data.accessReason === 'string' ? data.accessReason : member.accessReason;
+      member.profilePicture = typeof data.profilePicture === 'string' ? data.profilePicture : null;
       member.lastActive = parseDateValue(data.lastActive) || member.lastActive;
       member.isOnline = typeof data.isOnline !== 'undefined' ? data.isOnline : member.isOnline;
       member.name = data.displayName || data.name || member.name || docId;
@@ -1556,7 +1561,7 @@ function renderMemberManagementPanel() {
       <div style="border: 1px solid #374151; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem; background: #111827;">
         <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
           <div style="display: flex; align-items: center; gap: 0.75rem;">
-            ${renderUserAvatarMarkup(member.uid, 42)}
+            ${renderUserAvatarMarkup(member.uid, 42, member.profilePicture)}
             <div>
               <h3 style="margin: 0 0 0.5rem 0; color: #f8fafc;">${member.name}</h3>
               <p style="margin: 0 0.5rem 0 0; color: #94a3b8; font-size: 0.9rem;">${member.uid}</p>
