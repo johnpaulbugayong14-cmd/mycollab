@@ -1273,25 +1273,6 @@ function showSection(sectionId) {
 
   localStorage.setItem('memberSelectedSection', sectionId);
 
-  const titles = {
-    'home': '<i class="fas fa-briefcase"></i> My Collab',
-    'eventsSection': '<i class="fas fa-calendar-days"></i> Organization Events',
-    'my-tasks': '<i class="fas fa-check-circle"></i> My Tasks',
-    'ticket-history': '<i class="fas fa-ticket-alt"></i> Ticket History',
-    'active-polls': '<i class="fas fa-chart-bar"></i> Active Polls',
-    'announcements': '<i class="fas fa-bullhorn"></i> Announcements',
-    'submit-ticket': '<i class="fas fa-headset"></i> Submit Ticket',
-    'video-conference': '<i class="fas fa-video"></i> Video Conference',
-    'live-chat': '<i class="fas fa-comments"></i> Live Chat',
-    'resources': '<i class="fas fa-book"></i> Resources',
-    'progress-report': '<i class="fas fa-file-alt"></i> Progress Report',
-  };
-
-  const pageTitle = document.getElementById('page-title');
-  if (pageTitle && titles[sectionId]) {
-    pageTitle.innerHTML = titles[sectionId];
-  }
-
   closeMobileSidebar();
 }
 
