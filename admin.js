@@ -3489,7 +3489,8 @@ async function getNextLiveChatTitle() {
 
 async function createLiveChatRoom(event) {
   if (event && event.preventDefault) event.preventDefault();
-  const title = await getNextLiveChatTitle();
+  const customTitle = document.getElementById('adminChatRoomName')?.value?.trim();
+  const title = customTitle || await getNextLiveChatTitle();
 
   try {
     await addDoc(collection(db, 'liveChats'), {
@@ -3500,6 +3501,8 @@ async function createLiveChatRoom(event) {
       organizationId: getActiveOrganizationId(),
       createdAt: Date.now()
     });
+    const nameInput = document.getElementById('adminChatRoomName');
+    if (nameInput) nameInput.value = '';
     loadLiveChatRooms();
   } catch (error) {
     console.error('Failed to create live chat room:', error);

@@ -2645,6 +2645,7 @@ function checkMaintenance() {
         renderMaintenanceBannerInSection('#submit-ticket .card', message);
         renderMaintenanceBannerInSection('#ticket-history .card', message);
         renderHeaderMaintenanceBanner('DOWNTIME ALERT');
+        renderMaintenanceOverlay(message);
 
         // Monkeypatch showSection to enforce maintenance
         if (!window._originalShowSection) {
@@ -3667,7 +3668,8 @@ async function getNextLiveChatTitle() {
 
 async function createLiveChatRoom(event) {
   if (event && event.preventDefault) event.preventDefault();
-  let title = await getNextLiveChatTitle();
+  const customTitle = document.getElementById('chatRoomName')?.value?.trim();
+  const title = customTitle || await getNextLiveChatTitle();
 
   const currentEmail = userEmail || await getStoredUserEmail();
   const chatRoom = {
@@ -3681,6 +3683,8 @@ async function createLiveChatRoom(event) {
   try {
     chatRoom.organizationId = activeMemberOrganization?.id || '';
     await addDoc(collection(db, 'liveChats'), chatRoom);
+    const nameInput = document.getElementById('chatRoomName');
+    if (nameInput) nameInput.value = '';
     loadChatRooms();
   } catch (error) {
     console.error('Failed to create live chat room:', error);

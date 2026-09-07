@@ -620,7 +620,8 @@
         <div class="card">
           <h2><i class="fas fa-comments"></i> Live Chat</h2>
           <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #0f172a;">
-            <form id="adminCreateChatForm" style="display: flex; gap: 0.75rem; align-items: center; justify-content: flex-start;">
+            <form id="adminCreateChatForm" style="display: flex; gap: 0.75rem; align-items: center; justify-content: flex-start; flex-wrap: wrap;">
+              <input id="adminChatRoomName" type="text" maxlength="120" placeholder="Chat room name (optional)" aria-label="Optional chat room name" style="flex: 1 1 240px; min-width: 0; padding: 0.75rem 1rem; border: 1px solid #374151; border-radius: 8px; background: #020617; color: #f8fafc;">
               <button type="submit" style="padding: 0.75rem 1.25rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer;">Create Chat Room</button>
             </form>
           </div>
