@@ -806,8 +806,8 @@ function renderAdminProgressReport(sections) {
               <label style="color: #cbd5e1; font-size: 0.9rem; min-width: 120px;">Assign to:</label>
               <select id="assignedTo-${sectionIndex}-${itemIndex}" multiple style="background: #0f172a; color: #f8fafc; border: 1px solid #4b5563; border-radius: 0.375rem; padding: 0.45rem 0.6rem; min-width: 180px; min-height: 40px;">
                 <option value="" ${Array.isArray(assignedToValue) ? (!assignedToValue.includes('') && assignedToValue.length === 0) : assignedToValue === '' ? 'selected' : ''}>Unassigned</option>
-                ${members.filter(member => !isHiddenMember(member)).map(member => `
-                  <option value="${member.uid}" ${Array.isArray(assignedToValue) ? (assignedToValue.includes(member.uid) ? 'selected' : '') : (member.uid === assignedToValue ? 'selected' : '')}>${member.name}</option>
+                ${members.filter(isProgressReportMember).map(member => `
+                  <option value="${escapeHtml(member.uid)}" ${Array.isArray(assignedToValue) ? (assignedToValue.includes(member.uid) ? 'selected' : '') : (member.uid === assignedToValue ? 'selected' : '')}>${escapeHtml(getProgressReportMemberName(member))}</option>
                 `).join('')}
               </select>
             </div>
@@ -818,11 +818,22 @@ function renderAdminProgressReport(sections) {
   `).join('');
 }
 
+function isProgressReportMember(member) {
+  const normalizedId = normalizeEmail(member?.uid || member);
+  return normalizedId && (normalizedId === normalizeEmail(adminEmail) || !isHiddenMember(member));
+}
+
+function getProgressReportMemberName(member) {
+  return normalizeEmail(member?.uid || member) === normalizeEmail(adminEmail)
+    ? 'John Paul Bugayong'
+    : member.name;
+}
+
 function refreshProgressReportMemberOptions() {
   document.querySelectorAll('select[id^="assignedTo-"]').forEach((select) => {
     const selectedValues = new Set(Array.from(select.selectedOptions).map((option) => option.value));
-    const memberOptions = members.filter(member => !isHiddenMember(member)).map((member) => `
-      <option value="${escapeHtml(member.uid)}">${escapeHtml(member.name)}</option>
+    const memberOptions = members.filter(isProgressReportMember).map((member) => `
+      <option value="${escapeHtml(member.uid)}">${escapeHtml(getProgressReportMemberName(member))}</option>
     `).join('');
 
     select.innerHTML = `<option value="">Unassigned</option>${memberOptions}`;
@@ -1326,7 +1337,7 @@ function subscribeToMemberRoles() {
     snapshot.forEach((docSnap) => {
       const data = docSnap.data() || {};
       const docId = normalizeEmail(docSnap.id);
-      if (!docId || isHiddenMember(docId)) return;
+      if (!docId || (isHiddenMember(docId) && docId !== normalizeEmail(adminEmail))) return;
       if (activeOrganization && !organizationMembers.has(docId) && docId !== normalizeEmail(adminEmail)) return;
 
       if (!isTrackedAuthMember(data)) return;
