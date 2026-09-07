@@ -69,13 +69,23 @@
     .selection-footer { margin-top: 3rem; padding: 1.5rem 0; border-top: 1px solid #3f3f46; text-align: right; }
     .selection-footer-name { color: #ffffff; font-size: 1rem; font-weight: 700; }
     .selection-footer-credit { margin-top: 0.25rem; color: #cbd5e1; font-size: 0.85rem; }
-    .selection-maintenance-overlay { position: fixed; inset: 0; z-index: 9999; display: none; place-items: center; padding: 1.5rem; background: rgba(15, 23, 42, 0.96); }
+    .selection-maintenance-overlay { position: fixed; inset: 0; z-index: 9999; display: none; place-items: center; padding: 1.5rem; background: #f9f9f9; color: #535368; text-align: center; }
     .selection-maintenance-overlay.visible { display: grid; }
-    .selection-maintenance-card { width: min(620px, 100%); padding: 2.25rem; border: 1px solid #475569; border-radius: 1rem; background: #1e293b; color: #f8fafc; text-align: center; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45); }
-    .selection-maintenance-card i { margin-bottom: 1rem; color: #7dd3fc; font-size: 3rem; }
-    .selection-maintenance-card h2 { margin: 0 0 0.8rem; color: #ffffff; }
-    .selection-maintenance-card p { margin: 0; color: #cbd5e1; line-height: 1.7; white-space: pre-wrap; }
-    @media (max-width: 600px) { body { padding: 2rem 1rem; } .organization-grid { grid-template-columns: 1fr; } }
+    .selection-maintenance-card { width: min(1120px, 100%); padding: 0; color: #535368; text-align: center; }
+    .selection-maintenance-artwork { width: min(1120px, 80vw); max-width: 80vw; max-height: 50vh; height: auto; margin: 0 auto 2rem; }
+    .selection-maintenance-card h2 { margin: 0 0 1rem; color: #2f2e41; font-size: 2.5rem; line-height: 1.2; }
+    .selection-maintenance-card p { margin: 0 0 0.35rem; color: #535368; font-size: 1.4rem; line-height: 1.6; white-space: pre-wrap; }
+    @media (prefers-color-scheme: dark) {
+      .selection-maintenance-overlay { background: #535368; color: #cddcdd; }
+      .selection-maintenance-card h2 { color: #f9f9f9; }
+      .selection-maintenance-card p { color: #cddcdd; }
+    }
+    @media (max-width: 600px) {
+      body { padding: 2rem 1rem; }
+      .organization-grid { grid-template-columns: 1fr; }
+      .selection-maintenance-card h2 { font-size: 1.875rem; }
+      .selection-maintenance-card p { font-size: 1.05rem; }
+    }
   </style>
 </head>
 <body>
@@ -101,9 +111,11 @@
   </main>
   <div id="selectionMaintenanceOverlay" class="selection-maintenance-overlay" role="alertdialog" aria-modal="true" aria-labelledby="selectionMaintenanceTitle">
     <div class="selection-maintenance-card">
-      <i class="fas fa-tools" aria-hidden="true"></i>
-      <h2 id="selectionMaintenanceTitle">We're performing maintenance</h2>
-      <p id="selectionMaintenanceMessage">The site is currently under maintenance. Please try again shortly.</p>
+      <svg class="selection-maintenance-artwork" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 700" aria-hidden="true"><circle cx="292.61" cy="213" r="213" fill="#f2f2f2"/><path fill="#2f2e41" d="M0 51.14c0 77.5 48.62 140.21 108.7 140.21"/><path fill="#03c39d" d="M108.7 191.35c0-78.37 54.26-141.78 121.3-141.78M39.38 58.17c0 73.61 31 133.18 69.32 133.18"/><path fill="#2f2e41" d="M108.7 191.35c0-100.14 62.71-181.17 140.2-181.17"/><rect width="513.25" height="357.52" x="578.43" y="212.69" fill="#2f2e41" rx="18.05"/><path fill="#3f3d56" d="M595.7 231.78h478.71v267.84H595.7z"/><path fill="#2f2e41" d="M108.61 159h208v242h-208z"/><path fill="#3f3d56" d="M87.61 135h250v86h-250zM87.61 237h250v86h-250zM87.61 339h250v86h-250z"/><path fill="#03c39d" d="M271.61 150h16v16h-16zM294.61 150h16v16h-16zM317.61 150h16v16h-16zM271.61 251h16v16h-16zM294.61 251h16v16h-16zM317.61 251h16v16h-16zM271.61 352h16v16h-16zM294.61 352h16v16h-16zM317.61 352h16v16h-16z"/></svg>
+      <h2 id="selectionMaintenanceTitle">My Collab is temporarily unavailable.</h2>
+      <p>Scheduled maintenance is currently in progress.</p>
+      <p>We'll be back shortly.</p>
+      <p id="selectionMaintenanceMessage" style="margin-top: 1rem; font-size: 1rem;"></p>
     </div>
   </div>
   <script type="module">
@@ -125,10 +137,10 @@
       const data = snapshot.exists() ? snapshot.data() : {};
       const enabled = data.enabled === true;
       maintenanceMessage.textContent = data.message || 'The site is currently under maintenance. Please try again shortly.';
-      maintenanceOverlay.classList.remove('visible');
-      maintenanceOverlay.setAttribute('aria-hidden', 'true');
-      grid.removeAttribute('aria-hidden');
-      grid.style.pointerEvents = '';
+      maintenanceOverlay.classList.toggle('visible', enabled);
+      maintenanceOverlay.setAttribute('aria-hidden', String(!enabled));
+      grid.setAttribute('aria-hidden', String(enabled));
+      grid.style.pointerEvents = enabled ? 'none' : '';
     };
     getDoc(maintenanceRef).then(applyMaintenanceState).catch((error) => {
       console.warn('Unable to read maintenance mode on organization selection:', error);
