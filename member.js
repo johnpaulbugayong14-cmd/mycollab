@@ -61,6 +61,7 @@ let homeChatMessageListeners = [];
 let homeChatRoomNames = {};
 let homeFlashcardIndex = 0;
 let homeFlashcardListeners = [];
+let homeDashboardRefreshToken = 0;
 let activeMemberOrganization = null;
 const FIREBASE_PROJECT_ID = "mycollab-89c11";
 const FIRESTORE_REST_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
@@ -84,6 +85,7 @@ const mentionUsers = [];
 const progressReportCollection = "progressReports";
 const progressReportDocId = "thesisProgress";
 const progressStorageKey = "thesisProgressReportBackup";
+let latestProgressReportSections = null;
 const memberGradientStorageKey = 'memberInterfaceGradient';
 const defaultMemberGradientTheme = {
   start: '#0f172a',
@@ -826,6 +828,15 @@ function renderHomeFlashcard(items = []) {
   const flashcard = document.getElementById('home-flashcard');
   if (!flashcard) return;
 
+  const currentTitle = homeFlashcardItems[homeFlashcardIndex]?.title;
+  const currentIndex = items.findIndex((item) => item?.title === currentTitle);
+  if (homeFlashcardTimer && currentIndex >= 0 && homeFlashcardSetContent) {
+    homeFlashcardItems = items;
+    homeFlashcardIndex = currentIndex;
+    homeFlashcardSetContent(items[currentIndex]);
+    return;
+  }
+
   homeFlashcardItems = items;
 
   if (homeFlashcardTimer) {
@@ -1024,10 +1035,10 @@ function renderHomeFlashcard(items = []) {
   setFlashContent(items[0]);
 
   homeFlashcardTimer = setInterval(() => {
-    homeFlashcardIndex = (homeFlashcardIndex + 1) % items.length;
+    homeFlashcardIndex = (homeFlashcardIndex + 1) % homeFlashcardItems.length;
     flashText.classList.remove('visible');
     void flashText.offsetWidth;
-    setFlashContent(items[homeFlashcardIndex]);
+    setFlashContent(homeFlashcardItems[homeFlashcardIndex]);
     flashText.classList.add('visible');
   }, 4200);
 }
@@ -1484,6 +1495,7 @@ window.toggleCompletedTasks = function () {
 };
 
 async function refreshHomeDashboard() {
+  const refreshToken = ++homeDashboardRefreshToken;
   const homeGreeting = document.getElementById('home-greeting');
   const currentName = userEmail ? await getWelcomeName(userEmail) : 'User';
   if (homeGreeting) {
@@ -1597,26 +1609,22 @@ async function refreshHomeDashboard() {
   }
 
   try {
-    const progressDoc = await getDoc(doc(db, 'progressReports', 'thesisProgress'));
-    if (progressDoc.exists()) {
-      const sections = Array.isArray(progressDoc.data()?.sections) ? progressDoc.data().sections : [];
-      sections.forEach((section) => {
-        const items = Array.isArray(section?.items) ? section.items : [];
-        items.forEach((item, index) => {
-          if (!item || typeof item !== 'object') return;
-          const itemStatus = String(item.status || '').trim().toLowerCase();
-          if (itemStatus === 'completed' || itemStatus === 'complete' || itemStatus === 'done') return;
-
-          const assigned = Array.isArray(item.assignedTo) ? item.assignedTo : (item.assignedTo ? [item.assignedTo] : []);
-          const assignedNames = Array.isArray(item.assignedToName) ? item.assignedToName : [];
-          const isForCurrentUser = assigned.some(value => normalizeEmail(value) === normalizeEmail(userEmail))
-            || assignedNames.some(value => normalizeEmail(value) === normalizeEmail(userEmail));
-          if (!assigned.length || isForCurrentUser || assigned.includes('everyone')) {
-            progressRefs.push({ ...item, id: item.id || `${section.title || 'progress'}-${index}` });
-          }
-        });
-      });
+    let progressSections = latestProgressReportSections;
+    if (!Array.isArray(progressSections)) {
+      const progressDoc = await getDoc(doc(db, progressReportCollection, progressReportDocId));
+      progressSections = progressDoc.exists() && Array.isArray(progressDoc.data()?.sections)
+        ? progressDoc.data().sections
+        : [];
     }
+
+    progressSections.forEach((section) => {
+      const items = Array.isArray(section?.items) ? section.items : [];
+      items.forEach((item, index) => {
+        if (!item || typeof item !== 'object') return;
+
+        progressRefs.push({ ...item, id: item.id || `${section.title || 'progress'}-${index}` });
+      });
+    });
   } catch (error) {
     console.warn('Unable to load progress reports for home dashboard:', error);
   }
@@ -1758,6 +1766,7 @@ async function refreshHomeDashboard() {
     memberStatusRefs,
     eligibleEventRefs
   );
+  if (refreshToken !== homeDashboardRefreshToken) return;
   renderHomeFlashcard(bodyItems);
 }
 
@@ -1788,7 +1797,12 @@ function subscribeToHomeFlashcardUpdates() {
   );
 
   homeFlashcardListeners.push(
-    onSnapshot(doc(db, 'progressReports', 'thesisProgress'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard progress listener error:', error))
+    onSnapshot(doc(db, progressReportCollection, progressReportDocId), (snapshot) => {
+      latestProgressReportSections = snapshot.exists() && Array.isArray(snapshot.data()?.sections)
+        ? snapshot.data().sections
+        : [];
+      void refreshHomeDashboard();
+    }, (error) => console.warn('Home flashcard progress listener error:', error))
   );
 
   if (activeMemberOrganization?.id) {
@@ -1821,7 +1835,9 @@ function subscribeToHomeFlashcardUpdates() {
 
 function loadHomeDashboard() {
   subscribeToHomeFlashcardUpdates();
-  refreshHomeDashboard();
+  void refreshHomeDashboard().catch((error) => {
+    console.error('Home dashboard refresh failed:', error);
+  });
 }
 
 function formatDateTime(value) {
@@ -2841,26 +2857,36 @@ function loadProgressReport() {
       if (sections.length === 0) {
         const backupSections = getProgressBackupSections() || [];
         if (backupSections.length > 0) {
+          latestProgressReportSections = backupSections;
           renderMemberProgressReport(backupSections);
+          void refreshHomeDashboard();
           return;
         }
       }
+      latestProgressReportSections = sections;
       saveProgressBackupSections(sections);
       renderMemberProgressReport(sections);
+      void refreshHomeDashboard();
       return;
     }
 
     const backupSections = getProgressBackupSections() || [];
     if (backupSections.length > 0) {
+      latestProgressReportSections = backupSections;
       renderMemberProgressReport(backupSections);
+      void refreshHomeDashboard();
       return;
     }
 
+    latestProgressReportSections = [];
     renderMemberProgressReport([]);
+    void refreshHomeDashboard();
   }, (error) => {
     console.error('Progress report onSnapshot error:', error);
     const backupSections = getProgressBackupSections() || [];
+    latestProgressReportSections = backupSections;
     renderMemberProgressReport(backupSections);
+    void refreshHomeDashboard();
   });
 }
 
