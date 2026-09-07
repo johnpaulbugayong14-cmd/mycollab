@@ -18,6 +18,7 @@
     .organization-card { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; min-height: 0; padding: 0.9rem 1.1rem; background: rgba(15, 23, 42, 0.42); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.75rem; box-shadow: 0 8px 22px rgba(2, 6, 23, 0.12); backdrop-filter: blur(10px); cursor: pointer; transition: border-color 160ms ease, background 160ms ease, transform 160ms ease; }
     .organization-card:hover { transform: translateY(-2px); border-color: rgba(125, 211, 252, 0.55); background: rgba(15, 23, 42, 0.55); }
     .organization-card.active { border-color: rgba(96, 165, 250, 0.7); }
+    .organization-card.menu-open { z-index: 10; }
     .organization-card h3 { margin: 0; padding-right: 2.25rem; color: #f8fafc; font-size: 1.05rem; font-weight: 650; overflow-wrap: anywhere; }
     .organization-card p { margin: 0.4rem 0 0; color: #aab8ca; font-size: 0.9rem; line-height: 1.45; overflow-wrap: anywhere; }
     .organization-status { display: inline-flex; align-items: center; gap: 0.35rem; margin-top: 0.7rem; color: #7dd3fc; font-size: 0.72rem; font-weight: 650; letter-spacing: 0.03em; text-transform: uppercase; }
@@ -118,8 +119,11 @@
     window.toggleOrganizationMenu = (organizationId) => {
       document.querySelectorAll('.organization-menu-list.open').forEach((menu) => {
         if (menu.dataset.organizationId !== organizationId) menu.classList.remove('open');
+        menu.closest('.organization-card')?.classList.remove('menu-open');
       });
-      document.querySelector(`[data-organization-menu="${organizationId}"]`)?.classList.toggle('open');
+      const menu = document.querySelector(`[data-organization-menu="${organizationId}"]`);
+      const isOpen = menu?.classList.toggle('open');
+      menu?.closest('.organization-card')?.classList.toggle('menu-open', isOpen);
     };
     window.editOrganization = async (organizationId) => {
       const organization = organizations.find((candidate) => candidate.id === organizationId);

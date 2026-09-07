@@ -66,6 +66,9 @@
     .organization-name { display: block; overflow: hidden; color: #ffffff; font-size: 1.05rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
     .organization-description { display: block; overflow: hidden; color: #d1d5db; font-size: 0.85rem; text-overflow: ellipsis; white-space: nowrap; }
     .empty-state { max-width: 520px; padding: 1.5rem; border: 1px solid #4b5563; border-radius: 0.5rem; background: #292929; color: #cbd5e1; }
+    .selection-my-space { margin-top: 1.25rem; text-align: center; }
+    .selection-my-space button { border: 1px solid #475569; border-radius: 0.45rem; padding: 0.65rem 1rem; background: #1e293b; color: #f8fafc; cursor: pointer; }
+    .selection-my-space button:hover { background: #334155; }
     .selection-footer { margin-top: 3rem; padding: 1.5rem 0; border-top: 1px solid #3f3f46; text-align: right; }
     .selection-footer-name { color: #ffffff; font-size: 1rem; font-weight: 700; }
     .selection-footer-credit { margin-top: 0.25rem; color: #cbd5e1; font-size: 0.85rem; }
@@ -104,6 +107,11 @@
     <h1>Choose an organization</h1>
     <p class="subtitle">Select the organization you want to check.</p>
     <div id="organizationGrid" class="organization-grid" aria-live="polite"></div>
+    <div class="selection-my-space">
+      <button type="button" onclick="window.location.href='myspace.html'">
+        <i class="fas fa-layer-group" aria-hidden="true"></i> My Space
+      </button>
+    </div>
     <footer class="selection-footer">
       <div class="selection-footer-name">MyCollab</div>
       <div class="selection-footer-credit">Created by John Paul Bugayong</div>
