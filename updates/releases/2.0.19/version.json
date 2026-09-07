@@ -3,6 +3,7 @@
   "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.19/",
   "required": true,
   "releaseNotes": [
+    "Removed the optional Details input from admin and member event forms.",
     "Added organization-scoped data isolation across admin and member workflows.",
     "Added organization selection and quick organization creation during admin startup.",
     "Blocked deleted member accounts from re-entering through saved sessions or Firebase Auth.",

@@ -30,8 +30,8 @@
   "files": [
     {
       "path": "admin.html",
-      "size": 57954,
-      "sha256": "eb8c507c4dbe9139ff3156808cc0e7424686e09eff3466003a1f839169107fbb"
+      "size": 57819,
+      "sha256": "8a73119b3b3ac408213da00e0c11dfd9261e48b65b609aeb4624ca3bfbdfa995"
     },
     {
       "path": "admin.js",
@@ -110,8 +110,8 @@
     },
     {
       "path": "member.html",
-      "size": 73969,
-      "sha256": "4ce1c4a20b2eb4cd5523942c626b4044c71a17a0bfe70aec8ad982a3e9da3d27"
+      "size": 73834,
+      "sha256": "6348fcf42559c54d05df0d48b32c4518eb89192ca05ef78d1d3057aac5b9a0fb"
     },
     {
       "path": "member.js",
@@ -215,8 +215,8 @@
     },
     {
       "path": "version.json",
-      "size": 2295,
-      "sha256": "e84fe5351360242fe9051aa04432acadf3f24c6629e6b2d56118d27ced3ea3ad"
+      "size": 2373,
+      "sha256": "02bafe1a2bd4508576c31b6f76961a37569469e86861d4432a9b72d376977cff"
     },
     {
       "path": "watchtogether.js",
