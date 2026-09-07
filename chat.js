@@ -531,6 +531,31 @@ function sortMessagesByDateTime(messages) {
   });
 }
 
+function getChatDateKey(date) {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function formatChatDateLabel(date) {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  if (getChatDateKey(date) === getChatDateKey(today)) return 'Today';
+  if (getChatDateKey(date) === getChatDateKey(yesterday)) return 'Yesterday';
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function createChatDateSeparator(date) {
+  const separator = document.createElement('div');
+  separator.className = 'chat-date-separator-wrap';
+  separator.innerHTML = `
+    <div class="chat-date-separator-line"></div>
+    <div class="chat-date-separator">${escapeHtml(formatChatDateLabel(date))}</div>
+    <div class="chat-date-separator-line"></div>
+  `;
+  return separator;
+}
+
 function renderChatMessages(messages) {
   const chatMessagesEl = document.getElementById('chatMessages');
   if (!chatMessagesEl) return;
@@ -552,16 +577,10 @@ function renderChatMessages(messages) {
   sortedMessages.forEach((msg) => {
     // Add date separator if date changed
     if (msg.createdAt) {
-      const currentDate = new Date(msg.createdAt).toLocaleDateString([], { year: 'numeric', month: 'short', day: '2-digit' });
+      const messageDate = new Date(msg.createdAt);
+      const currentDate = getChatDateKey(messageDate);
       if (lastDate !== currentDate) {
-        const dateSeparator = document.createElement('div');
-        dateSeparator.style.cssText = 'display: flex; align-items: center; justify-content: center; margin: 1.5rem 0 1rem 0; gap: 0.75rem;';
-        dateSeparator.innerHTML = `
-          <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent);"></div>
-          <div class="chat-date-separator" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; color: #cbd5e1; font-weight: 600; white-space: nowrap; letter-spacing: 0.02em;">${currentDate}</div>
-          <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent);"></div>
-        `;
-        chatMessagesEl.appendChild(dateSeparator);
+        chatMessagesEl.appendChild(createChatDateSeparator(messageDate));
         lastDate = currentDate;
       }
     }
@@ -598,7 +617,7 @@ function renderChatMessages(messages) {
           ${renderUserAvatarMarkup(msg.senderEmail || sender, 26)}
           <div style="font-size: 0.9rem; color: #94a3b8;">${escapeHtml(sender)}</div>
         </div>
-        <div class="chat-message-time" style="font-size: 0.8rem; color: #6b7280;">${timestamp}</div>
+        <div class="chat-message-time"><span class="chat-sent-label">Sent</span>${timestamp}</div>
       </div>
       <div class="chat-message-text" style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; white-space: pre-wrap; word-break: break-word;">${replyQuote}${imageMarkup}${renderedText}</div>
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; margin-bottom: ${msg.reactions && Object.keys(msg.reactions).length > 0 ? '0.5rem' : '0'};">
@@ -698,16 +717,10 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
   sortedMessages.forEach((msg) => {
     // Add date separator if date changed
     if (msg.createdAt) {
-      const currentDate = new Date(msg.createdAt).toLocaleDateString([], { year: 'numeric', month: 'short', day: '2-digit' });
+      const messageDate = new Date(msg.createdAt);
+      const currentDate = getChatDateKey(messageDate);
       if (lastDate !== currentDate) {
-        const dateSeparator = document.createElement('div');
-        dateSeparator.style.cssText = 'display: flex; align-items: center; justify-content: center; margin: 1.5rem 0 1rem 0; gap: 0.75rem;';
-        dateSeparator.innerHTML = `
-          <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent);"></div>
-          <div class="chat-date-separator" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; color: #cbd5e1; font-weight: 600; white-space: nowrap; letter-spacing: 0.02em;">${currentDate}</div>
-          <div style="flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.3), transparent);"></div>
-        `;
-        chatMessagesEl.appendChild(dateSeparator);
+        chatMessagesEl.appendChild(createChatDateSeparator(messageDate));
         lastDate = currentDate;
       }
     }
@@ -743,7 +756,7 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
           ${renderUserAvatarMarkup(msg.senderEmail || sender, 26)}
           <div style="font-size: 0.9rem; color: #94a3b8;">${escapeHtml(sender)}</div>
         </div>
-        <div class="chat-message-time" style="font-size: 0.8rem; color: #6b7280;">${timestamp}</div>
+        <div class="chat-message-time"><span class="chat-sent-label">Sent</span>${timestamp}</div>
       </div>
       <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; white-space: pre-wrap; word-break: break-word;">${replyQuote}${imageMarkup}${renderedText}</div>
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; margin-bottom: ${msg.reactions && Object.keys(msg.reactions).length > 0 ? '0.5rem' : '0'};">

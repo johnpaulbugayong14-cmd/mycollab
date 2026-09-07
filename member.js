@@ -2645,7 +2645,6 @@ function checkMaintenance() {
         renderMaintenanceBannerInSection('#submit-ticket .card', message);
         renderMaintenanceBannerInSection('#ticket-history .card', message);
         renderHeaderMaintenanceBanner('DOWNTIME ALERT');
-        renderMaintenanceOverlay(message);
 
         // Monkeypatch showSection to enforce maintenance
         if (!window._originalShowSection) {

@@ -52,11 +52,23 @@ service cloud.firestore {
                            (request.auth.token.firebase.sign_in_provider == 'anonymous' ||
                             (request.auth.token.email is string &&
                              request.resource.data.ownerEmail.lower() == request.auth.token.email.lower()));
-      allow update: if request.auth != null && 
-                             (resource.data.ownerEmail.lower() == request.auth.token.email.lower() || 
-                              request.auth.token.email.lower() in resource.data.adminEmails ||
-                              (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberEmails', 'updatedAt']) &&
-                               request.resource.data.memberEmails.size() == resource.data.memberEmails.size() + 1));
+      allow update: if request.auth != null &&
+        (
+          (request.auth.token.email is string &&
+           (resource.data.ownerEmail.lower() == request.auth.token.email.lower() ||
+            request.auth.token.email.lower() in resource.data.adminEmails)) ||
+          (request.auth.token.firebase.sign_in_provider == 'anonymous' &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberEmails', 'adminEmails', 'updatedAt']) &&
+           (
+             (request.resource.data.memberEmails.size() == resource.data.memberEmails.size() + 1 &&
+              request.resource.data.adminEmails.size() == resource.data.adminEmails.size()) ||
+             (request.resource.data.memberEmails.size() <= resource.data.memberEmails.size() &&
+              request.resource.data.adminEmails.size() <= resource.data.adminEmails.size() &&
+              (request.resource.data.memberEmails.size() < resource.data.memberEmails.size() ||
+               request.resource.data.adminEmails.size() < resource.data.adminEmails.size()))
+           )
+          )
+        );
       allow delete: if request.auth != null;
     }
 

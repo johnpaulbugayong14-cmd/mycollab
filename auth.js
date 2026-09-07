@@ -1,6 +1,6 @@
 // Firebase Auth imports
-import { createUserWithEmailAndPassword, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { addDoc, collection, doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { signInAnonymously, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { addDoc, collection, doc, getDoc, getDocs, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { auth, db } from "./firebase.js";
 
 // Storage utility for cross-platform compatibility
@@ -136,6 +136,23 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+async function hasActiveOrganizationMembership(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return false;
+
+  const snapshot = await getDocs(collection(db, 'organizations'));
+  return snapshot.docs.some((organizationDoc) => {
+    const organization = organizationDoc.data() || {};
+    if (organization.archived === true) return false;
+
+    return [
+      organization.ownerEmail,
+      ...(Array.isArray(organization.adminEmails) ? organization.adminEmails : []),
+      ...(Array.isArray(organization.memberEmails) ? organization.memberEmails : [])
+    ].some((candidate) => normalizeEmail(candidate) === normalizedEmail);
+  });
+}
+
 function generateRecoveryPassword(length = 10) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let result = '';
@@ -147,7 +164,8 @@ function generateRecoveryPassword(length = 10) {
 
 async function ensureAuthenticatedForFirestore() {
   try {
-    if (auth.currentUser) return auth.currentUser;
+    if (auth.currentUser?.isAnonymous) return auth.currentUser;
+    if (auth.currentUser) await signOut(auth);
     await signInAnonymously(auth);
     return auth.currentUser;
   } catch (error) {
@@ -254,7 +272,7 @@ export async function setUserRole(email, role) {
     await setDoc(roleRef, {
       role,
       hasAuthAccount: true,
-      authProvider: 'password',
+      authProvider: 'anonymous',
       updatedAt: new Date()
     }, { merge: true });
   } catch (error) {
@@ -303,7 +321,7 @@ export async function setUserAccess(email, isAccessAllowed, reason = '') {
       accessAllowed: Boolean(isAccessAllowed),
       accessReason: String(reason || ''),
       hasAuthAccount: true,
-      authProvider: 'password',
+      authProvider: 'anonymous',
       updatedAt: new Date()
     }, { merge: true });
   } catch (error) {
@@ -544,7 +562,7 @@ export async function createMemberAccount(email, password, role = 'member', disp
       accessAllowed: true,
       accessReason: '',
       hasAuthAccount: true,
-      authProvider: 'firestore',
+      authProvider: 'anonymous',
       createdAt: new Date(),
       createdByAdmin: true,
       authTracked: true,
@@ -609,32 +627,28 @@ window.login = async function() {
     let accessReason = '';
     let firestoreCredential = null;
 
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      signedInEmail = normalizeEmail(userCredential.user.email || email);
-      console.log('Firebase Auth successful');
-    } catch (firebaseError) {
-      try {
-        if (!auth.currentUser) {
-          await signInAnonymously(auth);
-        }
-      } catch (anonymousError) {
-        console.warn('Unable to initialize anonymous auth for fallback login:', anonymousError);
-      }
-
-      firestoreCredential = await getFirestoreCredential(email, password);
-      if (!firestoreCredential) {
-        console.error('Firebase Auth error:', firebaseError);
-        showMessage('Invalid email or password. Please try again.');
-        return;
-      }
-
-      signedInEmail = firestoreCredential.email;
-      role = firestoreCredential.role || 'member';
-      accessAllowed = firestoreCredential.accessAllowed !== false;
-      accessReason = '';
-      console.log('Using Firestore credential fallback for login');
+    if (auth.currentUser && !auth.currentUser.isAnonymous) {
+      await signOut(auth);
     }
+    await signInAnonymously(auth);
+
+    firestoreCredential = await getFirestoreCredential(email, password);
+    if (!firestoreCredential) {
+      showMessage('Invalid email or password. Please try again.');
+      return;
+    }
+
+    if (!(await hasActiveOrganizationMembership(firestoreCredential.email))) {
+      await signOut(auth).catch(() => {});
+      showMessage('This account is not associated with an active organization. Please contact an administrator.');
+      return;
+    }
+
+    signedInEmail = firestoreCredential.email;
+    role = firestoreCredential.role || 'member';
+    accessAllowed = firestoreCredential.accessAllowed !== false;
+    accessReason = '';
+    console.log('Using anonymous Firebase Auth with Firestore credentials');
 
     const signedInUserIsValid = await validateStoredUser({ email: signedInEmail, role });
     if (signedInUserIsValid === false) {
@@ -707,7 +721,7 @@ window.login = async function() {
         lastActive: new Date().toISOString(),
         isOnline: true,
         hasAuthAccount: true,
-        authProvider: 'password',
+        authProvider: 'anonymous',
         updatedAt: new Date()
       }, { merge: true });
     } catch (presenceError) {
@@ -964,9 +978,15 @@ export async function maintainAuthPersistence() {
 
   // Listen for Firebase auth state changes
   const unsubscribe = onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      // Firebase user is authenticated, all good
-      console.log("User authenticated with Firebase");
+    if (user?.isAnonymous) {
+      console.log("User authenticated anonymously with Firebase");
+    } else if (user) {
+      try {
+        await ensureAuthenticatedForFirestore();
+        console.log("Converted Firebase session to anonymous auth");
+      } catch (error) {
+        console.error("Failed to convert Firebase session to anonymous auth:", error);
+      }
     } else {
       // Firebase auth expired, re-authenticate anonymously
       console.log("Firebase auth expired, re-authenticating...");

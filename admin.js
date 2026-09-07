@@ -1566,10 +1566,21 @@ async function loadAllCreatedAccounts() {
       ...(Array.isArray(activeOrganization.adminEmails) ? activeOrganization.adminEmails : []),
       ...(Array.isArray(activeOrganization.memberEmails) ? activeOrganization.memberEmails : [])
     ].map(normalizeEmail));
+    const organizationsSnapshot = await getDocs(collection(db, 'organizations'));
+    const associatedEmails = new Set();
+    organizationsSnapshot.docs.forEach((organizationDoc) => {
+      const organization = organizationDoc.data() || {};
+      if (organization.archived === true) return;
+      [
+        organization.ownerEmail,
+        ...(Array.isArray(organization.adminEmails) ? organization.adminEmails : []),
+        ...(Array.isArray(organization.memberEmails) ? organization.memberEmails : [])
+      ].map(normalizeEmail).filter(Boolean).forEach((email) => associatedEmails.add(email));
+    });
     const snapshot = await getDocs(collection(db, 'userRoles'));
     const accounts = snapshot.docs
       .map((docSnap) => ({ email: normalizeEmail(docSnap.id), ...(docSnap.data() || {}) }))
-      .filter((account) => account.email && isTrackedAuthMember(account))
+      .filter((account) => account.email && associatedEmails.has(account.email) && isTrackedAuthMember(account))
       .sort((left, right) => String(left.displayName || left.email).localeCompare(String(right.displayName || right.email)));
 
     if (!accounts.length) {

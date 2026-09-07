@@ -125,10 +125,10 @@
       const data = snapshot.exists() ? snapshot.data() : {};
       const enabled = data.enabled === true;
       maintenanceMessage.textContent = data.message || 'The site is currently under maintenance. Please try again shortly.';
-      maintenanceOverlay.classList.toggle('visible', enabled);
-      maintenanceOverlay.setAttribute('aria-hidden', String(!enabled));
-      grid.setAttribute('aria-hidden', String(enabled));
-      grid.style.pointerEvents = enabled ? 'none' : '';
+      maintenanceOverlay.classList.remove('visible');
+      maintenanceOverlay.setAttribute('aria-hidden', 'true');
+      grid.removeAttribute('aria-hidden');
+      grid.style.pointerEvents = '';
     };
     getDoc(maintenanceRef).then(applyMaintenanceState).catch((error) => {
       console.warn('Unable to read maintenance mode on organization selection:', error);
