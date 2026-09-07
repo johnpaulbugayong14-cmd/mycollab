@@ -818,6 +818,20 @@ function renderAdminProgressReport(sections) {
   `).join('');
 }
 
+function refreshProgressReportMemberOptions() {
+  document.querySelectorAll('select[id^="assignedTo-"]').forEach((select) => {
+    const selectedValues = new Set(Array.from(select.selectedOptions).map((option) => option.value));
+    const memberOptions = members.filter(member => !isHiddenMember(member)).map((member) => `
+      <option value="${escapeHtml(member.uid)}">${escapeHtml(member.name)}</option>
+    `).join('');
+
+    select.innerHTML = `<option value="">Unassigned</option>${memberOptions}`;
+    Array.from(select.options).forEach((option) => {
+      option.selected = selectedValues.has(option.value);
+    });
+  });
+}
+
 function addAdminProgressSection() {
   if (!Array.isArray(adminProgressSections) || !adminProgressSections.length) {
     adminProgressSections = getDefaultProgressStructure();
@@ -1292,6 +1306,7 @@ async function loadMemberRoles() {
         member.accessAllowed = member.accessAllowed;
       }
     });
+    refreshProgressReportMemberOptions();
   } catch (error) {
     console.warn("Could not load member roles from Firestore:", error);
   }
@@ -1340,6 +1355,7 @@ function subscribeToMemberRoles() {
     loadInAppNotificationRecipients();
     renderMemberManagementPanel();
     renderWalletBalances();
+    refreshProgressReportMemberOptions();
 
     if (document.getElementById('task-analytics')?.classList.contains('active')) {
       members
