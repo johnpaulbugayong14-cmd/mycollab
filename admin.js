@@ -824,9 +824,12 @@ function isProgressReportMember(member) {
 }
 
 function getProgressReportMemberName(member) {
-  return normalizeEmail(member?.uid || member) === normalizeEmail(adminEmail)
-    ? 'John Paul Bugayong'
-    : member.name;
+  const memberEmail = normalizeEmail(member?.uid || member);
+  if (memberEmail === 'johnpaulbugayong@gmail.com') return 'John Paul Bugayong';
+
+  const memberName = String(member?.name || '').trim();
+  if (memberName && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(memberName)) return memberName;
+  return memberEmail.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) || 'Member';
 }
 
 function refreshProgressReportMemberOptions() {

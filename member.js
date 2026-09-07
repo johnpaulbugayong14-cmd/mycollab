@@ -705,7 +705,8 @@ function formatDisplayNameFromEmail(email) {
 function getUserName(email) {
   const normalized = normalizeEmail(email);
   const member = members.find(m => normalizeEmail(m.uid) === normalized);
-  if (member) return member.name;
+  if (normalized === 'johnpaulbugayong@gmail.com') return 'John Paul Bugayong';
+  if (member?.name && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(member.name)) return member.name;
 
   const created = ensureMemberEntry(email, email);
   const fallbackName = created ? created.name : formatDisplayNameFromEmail(email);
@@ -715,6 +716,7 @@ function getUserName(email) {
 function getFriendlyName(value) {
   const text = String(value || '').trim();
   if (!text) return 'Unknown';
+  if (normalizeEmail(text) === 'johnpaulbugayong@gmail.com') return 'John Paul Bugayong';
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text) ? formatDisplayNameFromEmail(text) : text;
 }
 
@@ -2771,7 +2773,9 @@ function renderMemberProgressReport(sections) {
     <div style="margin-bottom: 1.25rem;">
       <h3 style="margin: 0 0 0.75rem 0; color: #3b82f6;">${section.title}</h3>
       ${Array.isArray(section.items) ? section.items.map(item => {
-        const assignedToName = Array.isArray(item.assignedToName) ? item.assignedToName.join(', ') : (item.assignedToName || (item.assignedTo ? getUserName(item.assignedTo) : 'Unassigned'));
+        const assignedToName = Array.isArray(item.assignedToName)
+          ? item.assignedToName.map(getFriendlyName).join(', ')
+          : (item.assignedToName ? getFriendlyName(item.assignedToName) : (item.assignedTo ? getUserName(item.assignedTo) : 'Unassigned'));
         const itemName = item.name === 'New Item' ? '' : (item.name || '');
         return `
           <div style="padding: 0.75rem; background: #111827; border: 1px solid #374151; border-radius: 0.5rem; margin-bottom: 0.5rem;">
