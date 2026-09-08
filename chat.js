@@ -1292,7 +1292,7 @@ function setupBackButton(from) {
 }
 
 async function init() {
-  await requireAuth(['member', 'admin']);
+  await requireAuth(['member', 'limited-admin', 'admin']);
   currentUserEmail = await getStoredUserEmail();
   syncChatTheme(currentUserEmail);
   await refreshMentionMembers();

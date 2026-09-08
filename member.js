@@ -3568,11 +3568,14 @@ function loadMeetings() {
     return;
   }
 
-  const meetingsQuery = query(collection(db, 'meetings'), where('organizationId', '==', activeMemberOrganization.id), where('assignedTo', 'in', [userEmail, 'everyone']));
+  const meetingsQuery = query(collection(db, 'meetings'), where('organizationId', '==', activeMemberOrganization.id));
   meetingsUnsubscribe = onSnapshot(meetingsQuery, (snapshot) => {
     const meetings = [];
     snapshot.forEach(docSnap => {
-      meetings.push({ id: docSnap.id, ...docSnap.data() });
+      const meeting = { id: docSnap.id, ...docSnap.data() };
+      const assignedTo = Array.isArray(meeting.assignedTo) ? meeting.assignedTo : (meeting.assignedTo ? [meeting.assignedTo] : []);
+      const visibleToMember = !assignedTo.length || assignedTo.some((value) => normalizeEmail(value) === normalizeEmail(userEmail) || normalizeEmail(value) === 'everyone');
+      if (visibleToMember) meetings.push(meeting);
     });
 
     meetings.sort((a, b) => {
@@ -4514,6 +4517,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     }
     loadResources();
     loadProgressReport();
+    loadMeetings();
     checkMaintenance();
     if (typeof window.initEventsCalendar === 'function') await window.initEventsCalendar('member');
     console.log('Starting data synchronization...');

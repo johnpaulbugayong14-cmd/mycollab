@@ -1284,6 +1284,10 @@ function showSection(sectionId) {
 }
 
 window.showSection = showSection;
+const requestedMemberSection = window.location.hash.slice(1);
+if (requestedMemberSection) {
+  setTimeout(() => showSection(requestedMemberSection), 0);
+}
 window.openMaintenanceAllowedSection = function(sectionId) {
   const allowedSections = ['submit-ticket', 'ticket-history'];
   if (!allowedSections.includes(sectionId)) return;

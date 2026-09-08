@@ -1,7 +1,7 @@
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'task-manager-v13';
+const CACHE_NAME = 'task-manager-v14';
 const UPDATE_META_CACHE = 'mycollab-update-meta-v1';
 const IS_GITHUB_PAGES = self.location.hostname.endsWith('.github.io');
 const ACTIVE_KEY = new Request('/__mycollab_active_version__');
@@ -14,6 +14,7 @@ const urlsToCache = [
   'organization-management.html',
   'organization-selection.html',
   'myspace.html',
+  'myspace.js',
   'member.html',
   'events.js',
   'events.css',
