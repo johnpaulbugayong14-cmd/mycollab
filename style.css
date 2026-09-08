@@ -301,6 +301,101 @@ h2 {
   color: #cbd5e1;
 }
 
+.withdrawal-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.withdrawal-dialog[hidden] {
+  display: none;
+}
+
+.withdrawal-panel {
+  position: relative;
+  width: min(100%, 440px);
+  padding: 1.5rem;
+  border: 1px solid #475569;
+  border-radius: 0.75rem;
+  background: #111827;
+  color: #f8fafc;
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.35);
+}
+
+.withdrawal-panel h2 {
+  margin: 0 2rem 1rem 0;
+}
+
+.withdrawal-panel label {
+  display: block;
+  margin-top: 0.85rem;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.withdrawal-panel input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.35rem;
+  padding: 0.65rem;
+  border: 1px solid #475569;
+  border-radius: 0.4rem;
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.withdrawal-balance {
+  margin: 0;
+  color: #93c5fd;
+}
+
+.withdrawal-close {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.75rem;
+  width: 2rem;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.withdrawal-form-message {
+  min-height: 1.25rem;
+  margin: 0.85rem 0 0;
+  color: #cbd5e1;
+}
+
+.withdrawal-form-message.error {
+  color: #fca5a5;
+}
+
+.withdrawal-submit {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.7rem 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: #10b981;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.withdrawal-submit:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 @media (max-width: 1024px) {
   .sidebar {
     width: 240px;

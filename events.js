@@ -42,6 +42,50 @@ function allHolidaysForView() {
   return [...getPhilippineHolidays(currentMonth.getFullYear() - 1), ...getPhilippineHolidays(currentMonth.getFullYear()), ...getPhilippineHolidays(currentMonth.getFullYear() + 1)];
 }
 
+function formatEventDate(date) {
+  const parsed = new Date(`${date}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+}
+
+function ensureEventDetailsDialog() {
+  if (document.getElementById('eventDetailsDialog')) return;
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="eventDetailsDialog" class="event-details-dialog" role="dialog" aria-modal="true" aria-labelledby="eventDetailsTitle" hidden>
+      <div class="event-details-panel">
+        <button type="button" class="event-details-close" aria-label="Close event details">&times;</button>
+        <p class="event-details-label">Event details</p>
+        <h2 id="eventDetailsTitle"></h2>
+        <p id="eventDetailsDate" class="event-details-date"></p>
+        <p id="eventDetailsDescription" class="event-details-description"></p>
+      </div>
+    </div>
+  `);
+
+  const dialog = document.getElementById('eventDetailsDialog');
+  const close = () => { dialog.hidden = true; };
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog || event.target.closest('.event-details-close')) close();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !dialog.hidden) close();
+  });
+}
+
+function showEventDetails(item) {
+  ensureEventDetailsDialog();
+  const dialog = document.getElementById('eventDetailsDialog');
+  document.getElementById('eventDetailsTitle').textContent = item.title || 'Untitled event';
+  document.getElementById('eventDetailsDate').textContent = item.date ? formatEventDate(item.date) : 'Date not specified';
+  document.getElementById('eventDetailsDescription').textContent = item.description || 'No additional details provided.';
+  dialog.hidden = false;
+  dialog.querySelector('.event-details-close')?.focus();
+}
+
 function renderCalendar() {
   const label = document.getElementById('eventsMonthLabel');
   const grid = document.getElementById('eventsGrid');
@@ -60,7 +104,7 @@ function renderCalendar() {
     const day = new Date(start); day.setDate(start.getDate() + index);
     const key = dateKey(day); const items = itemsByDate.get(key) || [];
     const isMuted = day.getMonth() !== currentMonth.getMonth(); const isToday = key === dateKey(new Date());
-    html += `<div class="events-day${isMuted ? ' muted' : ''}${isToday ? ' today' : ''}"><div class="events-day-number">${day.getDate()}</div>${items.map((item) => `<div class="events-item ${item.type === 'holiday' ? 'holiday' : 'user-event'}" title="${escapeHtml(item.description || item.title)}">${escapeHtml(item.title)}${item.type !== 'holiday' && (currentRole === 'admin' || item.creatorEmail === currentUserEmail) ? `<button type="button" aria-label="Delete event" data-delete-event="${escapeHtml(item.id)}">&times;</button>` : ''}</div>`).join('')}</div>`;
+    html += `<div class="events-day${isMuted ? ' muted' : ''}${isToday ? ' today' : ''}"><div class="events-day-number">${day.getDate()}</div>${items.map((item) => `<div class="events-item ${item.type === 'holiday' ? 'holiday' : 'user-event'}" title="${escapeHtml(item.description || item.title)}" role="button" tabindex="0" data-event-id="${escapeHtml(item.id)}">${escapeHtml(item.title)}${item.type !== 'holiday' && (currentRole === 'admin' || item.creatorEmail === currentUserEmail) ? `<button type="button" aria-label="Delete event" data-delete-event="${escapeHtml(item.id)}">&times;</button>` : ''}</div>`).join('')}</div>`;
   }
   grid.innerHTML = html;
 }
@@ -99,7 +143,26 @@ async function initEventsCalendar(role = 'member') {
   document.getElementById('eventsPrevious')?.addEventListener('click', () => { currentMonth.setMonth(currentMonth.getMonth() - 1); renderCalendar(); });
   document.getElementById('eventsNext')?.addEventListener('click', () => { currentMonth.setMonth(currentMonth.getMonth() + 1); renderCalendar(); });
   document.getElementById('eventsToday')?.addEventListener('click', () => { currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1); renderCalendar(); });
-  document.getElementById('eventsGrid')?.addEventListener('click', (event) => { const button = event.target.closest('[data-delete-event]'); if (button) void deleteEvent(button.dataset.deleteEvent); });
+  document.getElementById('eventsGrid')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-delete-event]');
+    if (button) {
+      event.stopPropagation();
+      void deleteEvent(button.dataset.deleteEvent);
+      return;
+    }
+    const eventItem = event.target.closest('[data-event-id]');
+    if (!eventItem) return;
+    const selectedEvent = [...getPhilippineHolidays(currentMonth.getFullYear() - 1), ...getPhilippineHolidays(currentMonth.getFullYear()), ...getPhilippineHolidays(currentMonth.getFullYear() + 1), ...userEvents]
+      .find((item) => item.id === eventItem.dataset.eventId);
+    if (selectedEvent) showEventDetails(selectedEvent);
+  });
+  document.getElementById('eventsGrid')?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const eventItem = event.target.closest('[data-event-id]');
+    if (!eventItem) return;
+    event.preventDefault();
+    eventItem.click();
+  });
   renderCalendar();
   eventsUnsubscribe?.();
   const organizationId = getActiveOrganizationId();

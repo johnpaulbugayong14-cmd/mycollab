@@ -24,7 +24,18 @@
 .events-form label { display: block; margin-top: 0.75rem; color: #cbd5e1; font-size: 0.85rem; }
 .events-form input, .events-form textarea { width: 100%; box-sizing: border-box; margin-top: 0.3rem; padding: 0.55rem; border: 1px solid #475569; border-radius: 0.4rem; background: #0f172a; color: #f8fafc; }
 .events-form textarea { min-height: 80px; resize: vertical; }
+.events-optional { color: #94a3b8; font-weight: 400; }
 .events-form .events-submit { width: 100%; margin-top: 0.9rem; background: #2563eb; border-color: #2563eb; }
 .events-message { min-height: 1.2rem; margin-top: 0.7rem; color: #cbd5e1; font-size: 0.85rem; }
+.events-item[role="button"] { cursor: pointer; }
+.events-item[role="button"]:focus-visible { outline: 2px solid #f8fafc; outline-offset: 2px; }
+.event-details-dialog { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1rem; background: rgba(2, 6, 23, 0.72); }
+.event-details-dialog[hidden] { display: none; }
+.event-details-panel { position: relative; width: min(100%, 460px); padding: 1.5rem; border: 1px solid #475569; border-radius: 0.75rem; background: #111827; color: #f8fafc; box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.35); }
+.event-details-close { position: absolute; top: 0.65rem; right: 0.75rem; width: 2rem; height: 2rem; min-width: 0; margin: 0; padding: 0; border: 0; background: transparent; color: #cbd5e1; font-size: 1.5rem; line-height: 1; cursor: pointer; box-shadow: none; }
+.event-details-label { margin: 0 0 0.4rem; color: #86efac; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.event-details-panel h2 { margin: 0 2rem 0.5rem 0; font-size: 1.3rem; }
+.event-details-date { margin: 0; color: #93c5fd; font-weight: 600; }
+.event-details-description { margin: 1rem 0 0; color: #cbd5e1; line-height: 1.6; white-space: pre-wrap; }
 @media (max-width: 900px) { .events-layout { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .events-day { min-height: 80px; padding: 0.25rem; } .events-weekdays span { padding: 0.35rem 0.1rem; font-size: 0.68rem; } .events-item { font-size: 0.65rem; } .events-month-label { min-width: 125px; } }

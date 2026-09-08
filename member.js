@@ -1,4 +1,4 @@
-import { collection, onSnapshot, doc, updateDoc, addDoc, getDoc, setDoc, deleteField, arrayUnion, getDocs, getDocsFromServer, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, onSnapshot, doc, updateDoc, addDoc, getDoc, setDoc, deleteField, arrayUnion, getDocs, getDocsFromServer, query, orderBy, where, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db, auth } from "./firebase.js";
 import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStoredUserEmail, signOutUser, getPasswordChangeRequired, getAccountPasswordHint, updateAccountPassword } from "./auth.js";
@@ -31,6 +31,7 @@ let ticketSyncState = 'inactive'; // 'inactive', 'starting', 'active', 'error'
 const optimisticTicketHistory = new Map();
 let walletUnsubscribe = null;
 let walletTransactionsUnsubscribe = null;
+let memberWalletBalance = 0;
 let memberGradientUnsubscribe = null;
 let surveyGateUnsubscribe = null;
 let memberStatusUnsubscribe = null;
@@ -1173,7 +1174,7 @@ function getActiveOrganizationMemberEmails() {
 
 function getMemberStatusFlashcardItems() {
   const adminEmail = 'johnpaulbugayong@gmail.com';
-  const adminEntry = { uid: adminEmail, name: 'Admin' };
+  const adminEntry = { uid: adminEmail, name: 'John Paul Bugayong' };
   const seenStatusMembers = new Set();
 
   const organizationMemberEmails = getActiveOrganizationMemberEmails();
@@ -1187,7 +1188,7 @@ function getMemberStatusFlashcardItems() {
     const statusData = memberStatusDocs[normalizedId] || {};
     statusItems.push({
       memberUid: member.uid,
-      memberName: normalizedId === normalizeEmail(adminEmail) ? 'Admin' : (member.name || member.uid),
+      memberName: normalizedId === normalizeEmail(adminEmail) ? 'John Paul Bugayong' : (member.name || member.uid),
       status: isMemberCurrentlyActive(statusData) ? 'ACTIVE' : 'OFFLINE',
       lastSeen: statusData.lastActive ? getTimeAgo(statusData.lastActive) : 'Unknown'
     });
@@ -1873,7 +1874,7 @@ function renderMemberStatusPanel() {
   if (!panel) return;
 
   const adminEmail = 'johnpaulbugayong@gmail.com';
-  const adminEntry = { uid: adminEmail, name: 'Admin' };
+  const adminEntry = { uid: adminEmail, name: 'John Paul Bugayong' };
   const seen = new Set();
   const statusEntries = [...members, adminEntry].filter((member) => {
     if (!member || !member.uid || member.uid === 'everyone') return false;
@@ -1894,7 +1895,7 @@ function renderMemberStatusPanel() {
     const lastSeenLabel = statusData.lastActive ? getTimeAgo(statusData.lastActive) : 'Unknown';
     const statusNote = active ? `Last active ${lastSeenLabel}` : `Last seen active ${lastSeenLabel}`;
     const restrictedNote = restricted ? '<p style="margin: 0.5rem 0 0 0; color: #fca5a5; font-size: 0.9rem; font-weight: 600;">Restricted access</p>' : '';
-    const displayName = normalizedId === normalizeEmail(adminEmail) ? 'Admin' : (member.name || member.uid);
+    const displayName = normalizedId === normalizeEmail(adminEmail) ? 'John Paul Bugayong' : (member.name || member.uid);
 
     return `
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; border: 1px solid #374151; border-radius: 0.75rem; margin-bottom: 0.75rem; background: rgba(17, 24, 39, 0.88);">
@@ -2387,6 +2388,7 @@ function watchMemberWallet() {
   const normalizedEmail = normalizeEmail(userEmail);
   walletUnsubscribe = onSnapshot(doc(db, 'userRoles', normalizedEmail), (snapshot) => {
     const balance = Number(snapshot.data()?.walletBalance) || 0;
+    memberWalletBalance = balance;
     const balanceEl = document.getElementById('memberWalletBalance');
     if (balanceEl) {
       balanceEl.textContent = balance.toFixed(2);
@@ -2404,6 +2406,133 @@ function watchMemberWallet() {
     const history = document.getElementById('memberWalletHistory');
     if (history) history.innerHTML = '<p style="color:#f87171; text-align:center;">Unable to load transaction history.</p>';
   });
+}
+
+function initializeWithdrawalAction() {
+  document.getElementById('withdrawBalanceButton')?.addEventListener('click', openWithdrawalDialog);
+}
+
+function ensureWithdrawalDialog() {
+  if (document.getElementById('withdrawalDialog')) return;
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="withdrawalDialog" class="withdrawal-dialog" role="dialog" aria-modal="true" aria-labelledby="withdrawalDialogTitle" hidden>
+      <form id="withdrawalForm" class="withdrawal-panel">
+        <button type="button" class="withdrawal-close" aria-label="Close withdrawal form">&times;</button>
+        <h2 id="withdrawalDialogTitle">Request withdrawal</h2>
+        <p class="withdrawal-balance">Available balance: <strong id="withdrawalAvailableBalance">0.00</strong></p>
+        <label for="withdrawalAmount">Amount</label>
+        <input id="withdrawalAmount" type="number" min="0.01" step="0.01" required placeholder="0.00">
+        <label for="withdrawalAccountNumber">Account number</label>
+        <input id="withdrawalAccountNumber" type="text" maxlength="100" required placeholder="Enter your account number">
+        <p id="withdrawalFormMessage" class="withdrawal-form-message" role="alert"></p>
+        <button type="submit" class="withdrawal-submit">Submit withdrawal request</button>
+      </form>
+    </div>
+  `);
+
+  const dialog = document.getElementById('withdrawalDialog');
+  const close = () => { dialog.hidden = true; };
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog || event.target.closest('.withdrawal-close')) close();
+  });
+  document.getElementById('withdrawalForm').addEventListener('submit', submitWithdrawalRequest);
+}
+
+function openWithdrawalDialog() {
+  ensureWithdrawalDialog();
+  const dialog = document.getElementById('withdrawalDialog');
+  const message = document.getElementById('withdrawalFormMessage');
+  if (memberWalletBalance <= 0) {
+    message.textContent = 'Insufficient balance.';
+    message.className = 'withdrawal-form-message error';
+  } else {
+    message.textContent = '';
+    message.className = 'withdrawal-form-message';
+  }
+  document.getElementById('withdrawalAvailableBalance').textContent = memberWalletBalance.toFixed(2);
+  dialog.hidden = false;
+  document.getElementById('withdrawalAmount').focus();
+}
+
+async function submitWithdrawalRequest(event) {
+  event.preventDefault();
+  const message = document.getElementById('withdrawalFormMessage');
+  const amount = Number(document.getElementById('withdrawalAmount').value);
+  const accountNumber = document.getElementById('withdrawalAccountNumber').value.trim();
+  if (memberWalletBalance <= 0 || amount <= 0 || amount > memberWalletBalance) {
+    message.textContent = 'Insufficient balance.';
+    message.className = 'withdrawal-form-message error';
+    return;
+  }
+  if (!accountNumber) {
+    message.textContent = 'Please enter your account number.';
+    message.className = 'withdrawal-form-message error';
+    return;
+  }
+
+  const submitButton = document.querySelector('.withdrawal-submit');
+  submitButton.disabled = true;
+  try {
+    const organizationId = activeMemberOrganization?.id;
+    if (!organizationId) throw new Error('You must be assigned to an organization before requesting a withdrawal.');
+    const title = `Withdrawal request - ${amount.toFixed(2)}`;
+    const description = `Withdrawal amount: ${amount.toFixed(2)}\nAccount number: ${accountNumber}`;
+    const normalizedEmail = normalizeEmail(userEmail);
+    const memberRef = doc(db, 'userRoles', normalizedEmail);
+    const ticketRef = doc(collection(db, 'tickets'));
+    const walletTransactionRef = doc(collection(db, 'userRoles', normalizedEmail, 'walletTransactions'));
+    let nextBalance = 0;
+    await runTransaction(db, async (transaction) => {
+      const memberSnapshot = await transaction.get(memberRef);
+      const currentBalance = Number(memberSnapshot.data()?.walletBalance) || 0;
+      if (currentBalance <= 0 || amount > currentBalance) {
+        throw new Error('Insufficient balance.');
+      }
+
+      nextBalance = currentBalance - amount;
+      transaction.set(memberRef, { walletBalance: nextBalance, updatedAt: serverTimestamp() }, { merge: true });
+      transaction.set(walletTransactionRef, {
+        type: 'debit',
+        amount,
+        description: `Withdrawal request - ${amount.toFixed(2)}`,
+        createdAt: serverTimestamp(),
+        relatedTicketId: ticketRef.id,
+        balanceAfter: nextBalance
+      });
+      transaction.set(ticketRef, {
+        title,
+        description,
+        organizationId,
+        submittedBy: userEmail,
+        submittedByName: getUserName(userEmail),
+        assignedTo: userEmail,
+        status: 'open',
+        ticketType: 'withdrawal',
+        withdrawalAmount: amount,
+        withdrawalAccountNumber: accountNumber,
+        adminEmailNotificationSent: false,
+        createdAt: serverTimestamp(),
+        responses: []
+      });
+    });
+    renderSubmittedTicketImmediately(ticketRef.id, {
+      title, description, organizationId, submittedBy: userEmail, submittedByName: getUserName(userEmail),
+      assignedTo: userEmail, status: 'open', ticketType: 'withdrawal', withdrawalAmount: amount,
+      withdrawalAccountNumber: accountNumber, createdAt: new Date(), responses: []
+    });
+    document.getElementById('withdrawalForm').reset();
+    document.getElementById('withdrawalDialog').hidden = true;
+    document.getElementById('withdrawalNote').textContent = 'Withdrawal request submitted. Check your withdrawal status in Ticket History.';
+    ticketHistoryTarget = { containerId: 'ticketHistory', emptyStateId: 'ticketHistoryEmptyState' };
+    void startTicketHistorySync();
+  } catch (error) {
+    console.error('Unable to submit withdrawal request:', error);
+    message.textContent = error.message || 'Unable to submit withdrawal request.';
+    message.className = 'withdrawal-form-message error';
+  } finally {
+    submitButton.disabled = false;
+  }
 }
 
 async function updateMemberPresence(isOnline = true, options = {}) {
@@ -4397,6 +4526,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     loadHomeDashboard();
     watchMemberAccessState();
     watchMemberWallet();
+    initializeWithdrawalAction();
     startMemberPresenceHeartbeat();
     void refreshMentionMembers();
     subscribeToMemberRoster();
