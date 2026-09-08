@@ -1400,14 +1400,12 @@ function renderTaskFeedback(task) {
   ))) {
     feedbacks.push(latestFeedback);
   }
-  if (!feedbacks.length) return '';
-
   return `
     <div class="task-feedback">
-      <strong>Admin Feedback</strong>
-      ${feedbacks.map((feedback) => {
+      <strong>Feedback</strong>
+      ${feedbacks.length ? feedbacks.map((feedback) => {
         return `<div class="task-feedback-item"><div>${escapeHtml(feedback.message || '')}</div></div>`;
-      }).join('')}
+      }).join('') : '<div class="task-feedback-empty">No feedback yet.</div>'}
     </div>`;
 }
 
@@ -1428,7 +1426,7 @@ function renderMemberTasks(snapshot) {
 
   container.innerHTML = activeTasks.map((task) => {
     const status = String(task.status || 'pending').trim().toLowerCase();
-    const deadline = task.deadline ? new Date(task.deadline).toLocaleDateString() : 'No deadline';
+    const deadline = task.deadline ? new Date(task.deadline).toISOString().slice(0, 10) : 'No deadline';
     const warning = getDeadlineWarning(task.deadline, status);
     if (warning.message && !shownDeadlineTaskIds.has(task.id)) {
       deadlineWarnings.push({ title: task.title || 'Untitled task', status: warning.message.replace('⚠️ ', ''), deadline });
@@ -1441,19 +1439,20 @@ function renderMemberTasks(snapshot) {
         : status === 'needs action' || status === 'needs_action'
           ? 'status-needs-action'
           : 'status-pending';
+    const displayStatus = status === 'pending validation' ? 'pending' : status;
     return `
-      <div class="task-item${warning.class ? ` ${warning.class}` : ''}">
+      <div class="task-item">
         <div class="task-header">
           <h4 class="task-title">${escapeHtml(task.title || 'Untitled task')}</h4>
-          <span class="task-status ${statusClass}">${escapeHtml(status === 'pending validation' ? 'Pending Validation' : status.charAt(0).toUpperCase() + status.slice(1))}</span>
+          <span class="task-status ${statusClass}">${escapeHtml(displayStatus)}</span>
         </div>
         <p class="task-description">${escapeHtml(task.description || '')}</p>
-        ${renderTaskFeedback(task)}
-        <div class="task-meta">Deadline: ${escapeHtml(deadline)}${warning.message ? ` · ${escapeHtml(warning.message)}` : ''}</div>
+        <div class="task-meta"><i class="fas fa-calendar-alt" aria-hidden="true"></i> ${escapeHtml(deadline)}</div>
         <div class="task-actions">
           ${task.linkURL ? `<a href="${escapeHtml(task.linkURL)}" target="_blank" rel="noopener">Open task link</a>` : ''}
-          ${status !== 'pending validation' ? `<button type="button" onclick="markDone('${escapeHtml(task.id)}')">Mark done</button>` : ''}
+          <button type="button" class="${status === 'pending validation' ? 'task-submitted' : ''}" ${status === 'pending validation' ? 'disabled' : `onclick="markDone('${escapeHtml(task.id)}')"`}>${status === 'pending validation' ? 'Already Submitted' : 'Submit task'}</button>
         </div>
+        ${renderTaskFeedback(task)}
       </div>`;
   }).join('');
 
@@ -1464,7 +1463,7 @@ function renderMemberTasks(snapshot) {
       <div class="task-item">
         <div class="task-header">
           <h4 class="task-title">${escapeHtml(task.title || 'Untitled task')}</h4>
-          <span class="task-status">Completed</span>
+          <span class="task-status status-completed">completed</span>
         </div>
         <p class="task-description">${escapeHtml(task.description || '')}</p>
         ${renderTaskFeedback(task)}
@@ -2063,7 +2062,7 @@ function showTaskDeadlineModal(warnings) {
 
   const title = document.createElement('h2');
   title.className = 'deadline-notification-title';
-  title.textContent = warnings.some(w => w.status.includes('Overdue')) ? 'Overdue task alert' : 'Due soon task alert';
+  title.textContent = 'Task Alert';
 
   const description = document.createElement('p');
   description.className = 'deadline-notification-description';

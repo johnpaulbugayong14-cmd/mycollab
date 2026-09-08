@@ -304,7 +304,7 @@ h2 {
 .withdrawal-dialog {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 5000;
   display: grid;
   place-items: center;
   padding: 1rem;
@@ -1090,29 +1090,26 @@ button:active {
 }
 
 .task-item {
-  background: rgba(15, 23, 42, 0.6);
-  border-left: 4px solid #3b82f6;
-  padding: 1.25rem;
+  background: #111827;
+  border: 1px solid #334155;
+  padding: 1.5rem;
   margin-bottom: 1rem;
-  border-radius: 8px;
+  border-radius: 0.6rem;
   transition: all 0.3s ease;
-  border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
 .task-item.warning-overdue {
-  border-left-color: #ef4444;
   background: rgba(239, 68, 68, 0.1);
 }
 
 .task-item.warning-near {
-  border-left-color: #f59e0b;
   background: rgba(245, 158, 11, 0.1);
 }
 
 .task-item:hover {
-  background: rgba(15, 23, 42, 0.8);
-  border-color: #3b82f6;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+  background: #111827;
+  border-color: #475569;
+  box-shadow: none;
 }
 
 .task-header {
@@ -1138,6 +1135,7 @@ button:active {
 
 .task-status {
   display: inline-block;
+  margin-left: auto;
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
   font-size: 0.85rem;
@@ -1152,28 +1150,28 @@ button:active {
 }
 
 .task-feedback {
-  margin-top: 0.85rem;
-  padding: 0.75rem;
-  border-left: 3px solid #60a5fa;
-  border-radius: 4px;
-  background: rgba(30, 41, 59, 0.72);
+  margin-top: 1rem;
+  padding: 0;
   color: #cbd5e1;
-  white-space: pre-wrap;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
 .task-feedback > strong {
   display: block;
-  margin-bottom: 0.5rem;
-  color: #93c5fd;
+  margin-bottom: 0.75rem;
+  color: #f1f5f9;
 }
 
 .task-feedback-item {
-  padding-top: 0.5rem;
-  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  padding-top: 0;
   color: #f1f5f9;
   font-size: 0.9rem;
   line-height: 1.45;
+}
+
+.task-feedback-item > div {
+  white-space: pre-wrap;
 }
 
 .task-feedback-item + .task-feedback-item {
@@ -1235,10 +1233,15 @@ button:active {
 
 .task-meta {
   display: flex;
-  gap: 1rem;
+  align-items: center;
+  gap: 0.45rem;
   margin-top: 0.75rem;
   font-size: 0.9rem;
   color: #94a3b8;
+}
+
+.task-meta i {
+  color: #c4b5fd;
 }
 
 .task-actions {
@@ -1249,9 +1252,25 @@ button:active {
 
 .task-actions button {
   flex: 1;
-  padding: 0.5rem;
+  padding: 0.65rem;
   font-size: 0.9rem;
   margin: 0;
+}
+
+.task-actions .task-submitted {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);
+  cursor: default;
+}
+
+.task-actions .task-submitted:hover {
+  background: linear-gradient(135deg, #10b981, #059669);
+  transform: none;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);
+}
+
+.task-feedback-empty {
+  color: #94a3b8;
 }
 
 .poll-option {
@@ -1440,14 +1459,15 @@ canvas {
   }
 
   .task-header {
-    flex-direction: column;
+    flex-direction: row;
     align-items: flex-start;
     gap: 0.5rem;
   }
 
   .task-meta {
-    flex-direction: column;
-}
+    flex-direction: row;
+    align-items: flex-start;
+  }
   }
 
   /* Enhanced mobile comment styling */

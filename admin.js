@@ -2611,8 +2611,8 @@ window.addTaskFeedback = async function(taskId) {
   try {
     const input = document.getElementById(`feedback-input-${taskId}`);
     if (!input) return;
-    const msg = input.value.trim();
-    if (!msg) {
+    const msg = input.value;
+    if (!msg.trim()) {
       alert('Please enter feedback before submitting.');
       return;
     }
