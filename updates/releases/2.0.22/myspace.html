@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Space - MyCollab</title>
+  <link rel="stylesheet" href="style.css?v=1">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body { min-height: 100vh; margin: 0; padding: 2rem 1rem; background: #1f1f1f; color: #f8fafc; }
+    .space-shell { width: min(900px, 100%); margin: 0 auto; }
+    .space-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #3f3f46; }
+    .space-header h1 { margin: 0; color: #fff !important; font-size: clamp(1.8rem, 5vw, 2.5rem); }
+    .space-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+    .space-button { border: 1px solid #475569; border-radius: 0.45rem; padding: 0.6rem 0.85rem; background: #1e293b; color: #f8fafc; cursor: pointer; }
+    .space-button:hover { background: #334155; }
+    .coming-soon { margin-top: 3rem; padding: 4rem 1.5rem; border: 1px solid #3f3f46; border-radius: 0.6rem; background: #292929; text-align: center; }
+    .coming-soon i { color: #1db954; font-size: 3rem; }
+    .coming-soon h2 { margin: 1rem 0 0.5rem; color: #fff; font-size: clamp(1.8rem, 5vw, 2.5rem); }
+    .coming-soon p { margin: 0; color: #cbd5e1; font-size: 1rem; }
+    @media (max-width: 600px) { body { padding: 1rem; } .space-header { align-items: flex-start; flex-direction: column; } .space-actions { justify-content: flex-start; } }
+  </style>
+</head>
+<body>
+  <main class="space-shell">
+    <header class="space-header">
+      <h1><i class="fas fa-layer-group" aria-hidden="true"></i> My Space</h1>
+      <div class="space-actions">
+        <button type="button" class="space-button" onclick="window.location.href='organization-selection.html'"><i class="fas fa-arrow-left" aria-hidden="true"></i> Organizations</button>
+        <button type="button" class="space-button" id="logoutButton"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Logout</button>
+      </div>
+    </header>
+    <section class="coming-soon" aria-live="polite">
+      <i class="fas fa-hourglass-half" aria-hidden="true"></i>
+      <h2>Coming Soon</h2>
+      <p>My Space is currently under development.</p>
+    </section>
+  </main>
+  <script type="module">
+    import { requireAuth, signOutUser } from './auth.js?v=8';
+
+    await requireAuth(['member', 'limited-admin']);
+    document.getElementById('logoutButton').addEventListener('click', signOutUser);
+  </script>
+</body>
+</html>
