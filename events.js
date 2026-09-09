@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from './firebase.js';
 import { getActiveOrganizationId } from './organizations.js';
 import { getStoredUserEmail } from './auth.js';
@@ -12,6 +12,63 @@ let currentRole = 'member';
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character]));
+}
+
+function getBackendUrl() {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return localStorage.getItem('fcm_backend_url') || 'http://localhost:3001';
+  }
+  return localStorage.getItem('fcm_backend_url') || '/backend';
+}
+
+async function sendEventPush(userEmails, title, body, data = {}) {
+  const recipients = [...new Set((userEmails || []).map(email => String(email || '').trim().toLowerCase()).filter(Boolean))];
+  if (!recipients.length) return false;
+  try {
+    const response = await fetch(`${getBackendUrl()}/api/push-notification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userEmails: recipients, title, body, type: 'event', data })
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('Could not send event push notification:', error.message);
+    return false;
+  }
+}
+
+async function getOrganizationRecipients(organizationId) {
+  const organizationSnapshot = await getDoc(doc(db, 'organizations', organizationId));
+  if (!organizationSnapshot.exists()) return [];
+  const organization = organizationSnapshot.data() || {};
+  return [
+    organization.ownerEmail,
+    ...(Array.isArray(organization.adminEmails) ? organization.adminEmails : []),
+    ...(Array.isArray(organization.memberEmails) ? organization.memberEmails : [])
+  ].filter(Boolean);
+}
+
+async function checkEventReminders(events) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (const event of events) {
+    if (!event.date || event.type === 'holiday') continue;
+    const eventDate = new Date(`${event.date}T00:00:00`);
+    if (Number.isNaN(eventDate.getTime())) continue;
+    eventDate.setHours(0, 0, 0, 0);
+    const dayDifference = Math.round((eventDate - today) / 86400000);
+    const reminderType = dayDifference === 1 ? 'tomorrow' : dayDifference === 0 ? 'today' : null;
+    if (!reminderType) continue;
+    const reminderKey = `fcm-event-${event.id}-${reminderType}-${currentUserEmail}`;
+    if (localStorage.getItem(reminderKey)) continue;
+    const sent = await sendEventPush(
+      [currentUserEmail],
+      reminderType === 'today' ? 'Event Today' : 'Event Tomorrow',
+      `${event.title || 'Your event'} is ${reminderType === 'today' ? 'scheduled for today.' : 'scheduled for tomorrow.'}`,
+      { eventId: event.id, reminderType, organizationId: event.organizationId }
+    );
+    if (sent) localStorage.setItem(reminderKey, new Date().toISOString());
+  }
 }
 
 function pad(value) { return String(value).padStart(2, '0'); }
@@ -122,7 +179,9 @@ async function createEvent(event) {
   const description = document.getElementById('eventDescription')?.value.trim() || '';
   if (!organizationId || !title || !date) return renderEventsMessage('Title and date are required.', '#fca5a5');
   try {
-    await addDoc(collection(db, 'events'), { organizationId, title, date, description, creatorEmail: currentUserEmail, createdAt: serverTimestamp() });
+    const eventRef = await addDoc(collection(db, 'events'), { organizationId, title, date, description, creatorEmail: currentUserEmail, createdAt: serverTimestamp() });
+    const recipients = await getOrganizationRecipients(organizationId);
+    void sendEventPush(recipients, 'New Organization Event', `${title} is scheduled for ${formatEventDate(date)}.`, { eventId: eventRef.id, organizationId, date });
     document.getElementById('eventsForm')?.reset();
     renderEventsMessage('Event added for this organization.', '#86efac');
   } catch (error) { console.error('Unable to create event:', error); renderEventsMessage('Unable to add event. Please try again.', '#fca5a5'); }
@@ -170,6 +229,7 @@ async function initEventsCalendar(role = 'member') {
   eventsUnsubscribe = onSnapshot(query(collection(db, 'events'), where('organizationId', '==', organizationId)), (snapshot) => {
     userEvents = snapshot.docs.map((eventDoc) => ({ id: eventDoc.id, ...(eventDoc.data() || {}), type: 'event' }));
     renderCalendar();
+    void checkEventReminders(userEvents);
   }, (error) => { console.error('Unable to load organization events:', error); renderEventsMessage('Unable to load events.', '#fca5a5'); });
 }
 

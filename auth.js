@@ -883,7 +883,14 @@ if (document.readyState === 'loading') {
 async function safeInitializeNotifications() {
   try {
     const { initializeNotifications } = await import("./notifications.js");
+    const { initializeNativePushNotifications } = await import("./native-notifications.js");
+    
     await initializeNotifications();
+    
+    // Initialize native push notifications
+    initializeNativePushNotifications().catch(err => {
+      console.warn('Native push notifications initialization failed:', err);
+    });
   } catch (err) {
     console.error("Failed to initialize notifications:", err);
   }

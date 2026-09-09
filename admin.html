@@ -980,6 +980,17 @@ function initializeAdminMeetingForm() {
     loadAdminMeetings();
     meetingForm.reset();
 
+    const organizationRecipients = members
+      .filter(member => !isHiddenMember(member) && member.uid !== 'everyone')
+      .map(member => member.uid);
+    window.sendFcmNotification?.(
+      organizationRecipients,
+      'New Video Conference',
+      `${title} is scheduled for ${new Date(`${date}T${time}`).toLocaleString()}.`,
+      'meeting',
+      { meetingId: docRef.id, title, date, time, roomName, organizationId: meeting.organizationId }
+    );
+
     // Send notification emails to all members
     try {
       const memberEmails = [

@@ -97,11 +97,66 @@ import {
 import { db } from "./firebase.js";
 import { signOutUser, getStoredUserEmail, getStoredUserRole, getEffectiveRole, setUserRole, setUserAccess, createMemberAccount, deleteMemberAccount, approvePasswordReset } from "./auth.js";
 import { sendNotificationToUsers, showLocalNotification, initializeNotifications } from "./notifications.js";
+import { initializeNativePushNotifications } from "./native-notifications.js";
 import { addOrganizationMember, getActiveOrganizationId, setActiveOrganizationId, subscribeToOrganizations } from "./organizations.js";
 
 window.signOutUser = signOutUser;
 
 const pushNotificationsManager = new PushNotificationsManager();
+
+// FCM Backend URL configuration
+function getBackendUrl() {
+  // Check if we're in development (localhost)
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return localStorage.getItem('fcm_backend_url') || 'http://localhost:3001';
+  }
+  // Production: try to get from localStorage or use relative path
+  return localStorage.getItem('fcm_backend_url') || '/backend';
+}
+
+// Send FCM announcement notification to backend
+async function sendFcmAnnouncementNotification(announcementTitle, userEmails) {
+  try {
+    const backendUrl = getBackendUrl();
+    const response = await fetch(`${backendUrl}/api/notify/announcement`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        announcementTitle,
+        announcementBody: announcementTitle,
+        organizationId: getActiveOrganizationId(),
+        createdBy: await getStoredUserEmail(),
+        userEmails
+      })
+    });
+    if (response.ok) {
+      const result = await response.json();
+      console.log(`✓ FCM announcement notification sent to ${result.sentCount} device(s)`);
+    } else {
+      console.warn('FCM backend returned non-success status:', response.status);
+    }
+  } catch (error) {
+    console.warn('Could not send FCM announcement notification:', error.message);
+  }
+}
+
+async function sendFcmNotification(userEmails, title, body, type, data = {}) {
+  const recipients = [...new Set((userEmails || []).map(email => String(email || '').trim().toLowerCase()).filter(Boolean))];
+  if (recipients.length === 0) return;
+
+  try {
+    const response = await fetch(`${getBackendUrl()}/api/push-notification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userEmails: recipients, title, body, type, data })
+    });
+    if (!response.ok) console.warn('FCM backend returned non-success status:', response.status);
+  } catch (error) {
+    console.warn('Could not send FCM notification:', error.message);
+  }
+}
+
+window.sendFcmNotification = sendFcmNotification;
 
 let chart;
 let chartUpdateTimeout;
@@ -2016,6 +2071,11 @@ loadLiveChatRooms();
 
   // Initialize notifications
   initializeNotifications();
+  
+  // Initialize native push notifications for Android and iOS
+  initializeNativePushNotifications().catch(err => {
+    console.warn('Native push notifications initialization failed:', err);
+  });
 
   // Initialize native push notifications
   pushNotificationsManager.requestPermissions().then(result => {
@@ -2382,6 +2442,11 @@ window.createTask = async function () {
       const notificationBody = `You have been assigned a new task: "${title}"`;
       await sendNotificationToUsers([recipient.uid], notificationTitle, notificationBody, 'task');
       showLocalNotification(notificationTitle, notificationBody);
+      sendFcmNotification([recipient.uid], notificationTitle, notificationBody, 'task', {
+        taskTitle: title,
+        deadline,
+        organizationId: getActiveOrganizationId()
+      });
     }
 
     document.getElementById("title").value = "";
@@ -3140,6 +3205,11 @@ window.createAnnouncement = async function () {
     const notificationBody = `New announcement: "${title}"`;
     await sendNotificationToUsers(assignedTo, notificationTitle, notificationBody, 'announcement');
     showLocalNotification(notificationTitle, notificationBody);
+
+    // Send FCM push notification to devices (non-blocking)
+    sendFcmAnnouncementNotification(title, assignedTo).catch(err => 
+      console.warn('FCM notification could not be sent:', err)
+    );
 
     document.getElementById("announcementTitle").value = "";
     document.getElementById("announcementContent").value = "";

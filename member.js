@@ -3,6 +3,7 @@ import { db, auth } from "./firebase.js";
 import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStoredUserEmail, signOutUser, getPasswordChangeRequired, getAccountPasswordHint, updateAccountPassword } from "./auth.js";
 import { initializeNotifications, sendNotificationToUsers, showLocalNotification } from "./notifications.js";
+import { initializeNativePushNotifications } from "./native-notifications.js";
 import { getActiveOrganizationId, getOrganizationsForEmail, setActiveOrganizationId } from "./organizations.js";
 import { getPhilippineHolidays } from "./events.js";
 
@@ -1476,9 +1477,125 @@ function renderMemberTasks(snapshot) {
   if (deadlineWarnings.length) showTaskDeadlineModal(deadlineWarnings);
 }
 
+// FCM Backend URL configuration
+function getMemberBackendUrl() {
+  // Check if we're in development (localhost)
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return localStorage.getItem('fcm_backend_url') || 'http://localhost:3001';
+  }
+  // Production: try to get from localStorage or use relative path
+  return localStorage.getItem('fcm_backend_url') || '/backend';
+}
+
+// Check for task deadline and send FCM notification
+async function checkAndNotifyTaskDeadlines(tasks) {
+  try {
+    const backendUrl = getMemberBackendUrl();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    for (const task of tasks) {
+      // Skip completed tasks
+      const status = String(task.status || '').trim().toLowerCase();
+      if (status === 'done' || status === 'completed') continue;
+      
+      // Skip tasks without deadline or without assignedTo
+      if (!task.deadline || !task.assignedTo || task.assignedTo.length === 0) continue;
+      
+      // Parse deadline
+      let deadline;
+      if (typeof task.deadline === 'string') {
+        deadline = new Date(task.deadline);
+      } else if (typeof task.deadline === 'number') {
+        deadline = new Date(task.deadline);
+      } else if (task.deadline && typeof task.deadline.toDate === 'function') {
+        deadline = task.deadline.toDate();
+      } else {
+        continue;
+      }
+      
+      if (isNaN(deadline.getTime())) continue;
+      
+      deadline.setHours(0, 0, 0, 0);
+      
+      // Calculate days until deadline
+      const daysUntil = Math.ceil((deadline - today) / (24 * 60 * 60 * 1000));
+      
+      // Send notification if deadline is today or tomorrow
+      if (daysUntil === 0 || daysUntil === 1) {
+        try {
+          const response = await fetch(`${backendUrl}/api/notify/task-deadline`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              taskTitle: task.title,
+              assignedEmails: Array.isArray(task.assignedTo) ? task.assignedTo : [task.assignedTo],
+              daysUntilDeadline: daysUntil
+            })
+          });
+          if (response.ok) {
+            const result = await response.json();
+            console.log(`✓ FCM task deadline notification sent: ${task.title} (${result.sentCount} device(s))`);
+          }
+        } catch (error) {
+          console.warn(`Could not send FCM notification for task ${task.title}:`, error.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Error checking task deadlines for FCM:', error.message);
+  }
+}
+
+async function checkAndNotifyMeetingReminders(meetings) {
+  try {
+    const currentEmail = String(userEmail || '').trim().toLowerCase();
+    if (!currentEmail) return;
+    const today = new Date();
+    const backendUrl = getMemberBackendUrl();
+
+    for (const meeting of meetings) {
+      if (!meeting.date || !meeting.time || String(meeting.status || '').toLowerCase() === 'cancelled') continue;
+      const meetingDate = new Date(`${meeting.date}T${meeting.time}`);
+      if (Number.isNaN(meetingDate.getTime())) continue;
+      const dayDifference = Math.floor((new Date(meetingDate.getFullYear(), meetingDate.getMonth(), meetingDate.getDate()) - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
+      const isOngoing = today >= meetingDate && today <= new Date(meetingDate.getTime() + 2 * 60 * 60 * 1000);
+      const reminderType = dayDifference === 1 ? 'tomorrow' : isOngoing ? 'ongoing' : null;
+      if (!reminderType) continue;
+
+      const reminderKey = `fcm-meeting-${meeting.id}-${reminderType}-${currentEmail}`;
+      if (localStorage.getItem(reminderKey)) continue;
+      const title = reminderType === 'ongoing' ? 'Video Conference Started' : 'Video Conference Tomorrow';
+      const body = reminderType === 'ongoing'
+        ? `${meeting.title || 'Your meeting'} is starting now.`
+        : `${meeting.title || 'Your meeting'} is scheduled for tomorrow at ${meeting.time}.`;
+      const response = await fetch(`${backendUrl}/api/push-notification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userEmails: [currentEmail], title, body, type: 'meeting', data: { meetingId: meeting.id, reminderType } })
+      });
+      if (response.ok) localStorage.setItem(reminderKey, new Date().toISOString());
+    }
+  } catch (error) {
+    console.warn('FCM meeting reminder check failed:', error.message);
+  }
+}
+
 function loadMemberTasks() {
   if (!userEmail) return;
-  onSnapshot(activeMemberOrganization?.id ? query(collection(db, 'tasks'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'tasks'), renderMemberTasks, (error) => {
+  onSnapshot(activeMemberOrganization?.id ? query(collection(db, 'tasks'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'tasks'), async (snapshot) => {
+    const tasks = [];
+    snapshot.forEach(docSnap => {
+      tasks.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    
+    // Check and notify for upcoming deadlines (non-blocking)
+    checkAndNotifyTaskDeadlines(tasks).catch(err => 
+      console.warn('FCM task deadline check failed:', err)
+    );
+    
+    renderMemberTasks(snapshot);
+  }, (error) => {
     console.error('Member tasks listener error:', error);
     if (emptyState) emptyState.style.display = 'block';
   });
@@ -1692,6 +1809,7 @@ async function refreshHomeDashboard() {
         meetingRefs.push(meeting);
       }
     });
+    checkAndNotifyMeetingReminders(meetingRefs).catch(error => console.warn('Meeting FCM reminder failed:', error));
   } catch (error) {
     console.warn('Unable to load meetings for home dashboard:', error);
   }
@@ -4523,6 +4641,12 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     
     // Initialize notifications
     initializeNotifications();
+    
+    // Initialize native push notifications for Android and iOS
+    initializeNativePushNotifications().catch(err => {
+      console.warn('Native push notifications initialization failed:', err);
+    });
+    
     void loadInAppNotifications();
 
     loadMemberTasks();

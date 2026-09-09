@@ -1180,6 +1180,52 @@ async function subscribeChatMessages(chatId) {
   });
 }
 
+// FCM Backend URL configuration
+function getBackendUrl() {
+  // Check if we're in development (localhost)
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return localStorage.getItem('fcm_backend_url') || 'http://localhost:3001';
+  }
+  // Production: try to get from localStorage or use relative path
+  return localStorage.getItem('fcm_backend_url') || '/backend';
+}
+
+// Send FCM chat message notification to backend
+async function sendFcmChatNotification(senderName, messagePreview, roomId) {
+  try {
+    const backendUrl = getBackendUrl();
+    
+    // Get chat room members (excluding sender)
+    const chatDoc = await getDoc(doc(db, 'liveChats', roomId));
+    if (!chatDoc.exists()) return;
+    
+    const chatData = chatDoc.data();
+    const currentEmail = await getStoredUserEmail();
+    const recipientEmails = (chatData.members || []).filter(email => email !== currentEmail);
+    
+    if (recipientEmails.length === 0) return;
+    
+    const response = await fetch(`${backendUrl}/api/notify/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        senderName,
+        messagePreview: messagePreview.substring(0, 50),
+        recipientEmails,
+        roomId
+      })
+    });
+    if (response.ok) {
+      const result = await response.json();
+      console.log(`✓ FCM chat notification sent to ${result.sentCount} device(s)`);
+    } else {
+      console.warn('FCM backend returned non-success status:', response.status);
+    }
+  } catch (error) {
+    console.warn('Could not send FCM chat notification:', error.message);
+  }
+}
+
 async function sendChatMessage(event) {
   if (event && event.preventDefault) event.preventDefault();
   if (!selectedChatId) return;
@@ -1234,6 +1280,12 @@ async function sendChatMessage(event) {
 
   try {
     await addDoc(collection(db, 'liveChats', selectedChatId, 'messages'), messageData);
+    
+    // Send FCM push notification to chat room members (non-blocking)
+    sendFcmChatNotification(messageData.senderName, cleanedMessage, selectedChatId).catch(err => 
+      console.warn('FCM chat notification could not be sent:', err)
+    );
+    
     cancelReply();
     clearError();
   } catch (error) {
