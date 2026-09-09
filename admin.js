@@ -3782,6 +3782,20 @@ function insertMentionAtCursor(input, dropdown, name) {
   const newCursor = atIndex + token.length;
   input.setSelectionRange(newCursor, newCursor);
   input.focus();
+}
+
+// End Admin Meeting - Mark meeting as completed
+async function endAdminMeeting(meetingId) {
+  try {
+    await updateDoc(doc(db, 'meetings', meetingId), {
+      status: 'Completed'
+    });
+    loadAdminMeetings();
+  } catch (error) {
+    console.error('Error ending meeting:', error);
+    alert('Failed to end meeting. Please try again.');
+  }
+}
   dropdown.style.display = 'none';
 }
 
