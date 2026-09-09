@@ -13,6 +13,9 @@ const messaging = getMessaging(app);
 const now = new Date();
 const today = startOfDay(now);
 const tomorrow = addDays(today, 1);
+const todayKey = dateKey(today);
+const tomorrowKey = dateKey(tomorrow);
+const recentCreationCutoff = Date.now() - 20 * 60 * 1000;
 
 function startOfDay(value) {
   const result = new Date(value);
@@ -24,6 +27,16 @@ function addDays(value, days) {
   const result = new Date(value);
   result.setDate(result.getDate() + days);
   return result;
+}
+
+function dateKey(value) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+}
+
+function mergeDocuments(...snapshots) {
+  const documents = new Map();
+  snapshots.forEach(snapshot => snapshot.docs.forEach(document => documents.set(document.id, document)));
+  return [...documents.values()];
 }
 
 function asDate(value) {
@@ -79,15 +92,15 @@ async function claimDispatch(key, details) {
 async function sendPush({ emails, title, body, type, data, key, details }) {
   const recipients = normalizeEmails(emails);
   if (!recipients.length) return;
-  const shouldSend = await claimDispatch(key, details);
-  if (!shouldSend) return;
+  const existingDispatch = await db.collection('fcmDispatches').doc(key).get();
+  if (existingDispatch.exists) return;
 
-  const tokenSnapshot = await db.collection('fcmTokens').get();
-  const recipientSet = new Set(recipients);
-  const tokens = tokenSnapshot.docs
-    .map(document => document.data())
-    .filter(token => recipientSet.has(String(token.email || '').trim().toLowerCase()) && token.token)
-    .map(token => token.token);
+  const tokenDocuments = await Promise.all(
+    recipients.map(email => db.collection('fcmTokens').doc(email).get())
+  );
+  const tokens = tokenDocuments
+    .filter(document => document.exists && document.data()?.token)
+    .map(document => document.data().token);
   if (!tokens.length) return;
 
   const response = await messaging.sendEachForMulticast({
@@ -97,12 +110,17 @@ async function sendPush({ emails, title, body, type, data, key, details }) {
     android: { priority: 'high', notification: { sound: 'default' } },
     apns: { payload: { aps: { sound: 'default' } } }
   });
+  if (response.successCount > 0) await claimDispatch(key, details);
   console.log(`${type}: ${title} sent ${response.successCount}/${tokens.length}`);
 }
 
 async function processTasks() {
-  const snapshot = await db.collection('tasks').get();
-  for (const document of snapshot.docs) {
+  const tasks = db.collection('tasks');
+  const [dueSnapshot, recentSnapshot] = await Promise.all([
+    tasks.where('deadline', 'in', [todayKey, tomorrowKey]).get(),
+    tasks.where('createdAt', '>=', recentCreationCutoff).get()
+  ]);
+  for (const document of mergeDocuments(dueSnapshot, recentSnapshot)) {
     const task = document.data();
     const recipients = normalizeEmails(task.assignedTo);
     const deadline = asDate(task.deadline);
@@ -137,8 +155,12 @@ async function processTasks() {
 }
 
 async function processMeetings() {
-  const snapshot = await db.collection('meetings').get();
-  for (const document of snapshot.docs) {
+  const meetings = db.collection('meetings');
+  const [dueSnapshot, recentSnapshot] = await Promise.all([
+    meetings.where('date', 'in', [todayKey, tomorrowKey]).get(),
+    meetings.where('createdAt', '>=', recentCreationCutoff).get()
+  ]);
+  for (const document of mergeDocuments(dueSnapshot, recentSnapshot)) {
     const meeting = document.data();
     if (String(meeting.status || '').toLowerCase() === 'cancelled') continue;
     const recipients = meeting.assignedTo && meeting.assignedTo !== 'everyone'
@@ -175,8 +197,12 @@ async function processMeetings() {
 }
 
 async function processEvents() {
-  const snapshot = await db.collection('events').get();
-  for (const document of snapshot.docs) {
+  const events = db.collection('events');
+  const [dueSnapshot, recentSnapshot] = await Promise.all([
+    events.where('date', 'in', [todayKey, tomorrowKey]).get(),
+    events.where('createdAt', '>=', Timestamp.fromDate(new Date(recentCreationCutoff))).get()
+  ]);
+  for (const document of mergeDocuments(dueSnapshot, recentSnapshot)) {
     const event = document.data();
     const eventDate = dateFromEvent(event);
     if (!eventDate || Number.isNaN(eventDate.getTime())) continue;
