@@ -946,7 +946,9 @@ async function endAdminMeeting(meetingId) {
   await updateDoc(doc(db, 'meetings', meetingId), {
     status: 'Completed'
   });
+  loadAdminMeetings();
 }
+window.endAdminMeeting = endAdminMeeting;
 
 function initializeAdminMeetingForm() {
   const meetingForm = document.getElementById('adminMeetingForm');

@@ -3784,19 +3784,6 @@ function insertMentionAtCursor(input, dropdown, name) {
   input.focus();
 }
 
-// End Admin Meeting - Mark meeting as completed
-async function endAdminMeeting(meetingId) {
-  try {
-    await updateDoc(doc(db, 'meetings', meetingId), {
-      status: 'Completed'
-    });
-    loadAdminMeetings();
-  } catch (error) {
-    console.error('Error ending meeting:', error);
-    alert('Failed to end meeting. Please try again.');
-  }
-}
-
 function setupMentionAutocomplete(inputId, dropdownId) {
   const input = document.getElementById(inputId);
   const dropdown = document.getElementById(dropdownId);
