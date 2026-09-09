@@ -21,7 +21,7 @@ jobs:
           node-version: 22
 
       - name: Install notification worker dependencies
-        run: npm ci --prefix www
+        run: npm install --prefix www --no-audit --no-fund
 
       - name: Send scheduled notifications
         env:
