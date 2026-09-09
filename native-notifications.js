@@ -3,20 +3,57 @@
  * Uses Capacitor Firebase Cloud Messaging for Android and iOS
  */
 
-import { Capacitor } from '@capacitor/core';
-import { FirebaseMessaging } from '@capacitor-firebase/messaging';
 import { db } from './firebase.js';
 import { setDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getStoredUserEmail } from './auth.js';
 
 let isNativePushInitialized = false;
+let nativeBridgePromise = null;
+
+async function getNativeBridge() {
+  if (nativeBridgePromise) return nativeBridgePromise;
+
+  nativeBridgePromise = (async () => {
+    let capacitor = window.Capacitor;
+    if (!capacitor) return null;
+
+    if (typeof capacitor.isNativePlatform !== 'function' || !capacitor.isNativePlatform()) {
+      return null;
+    }
+
+    // These files are copied into the APK by Capacitor. They are imported only
+    // on native platforms, so GitHub Pages never tries to resolve npm specifiers.
+    const coreModule = await import('./node_modules/@capacitor/core/dist/index.js');
+    capacitor = coreModule.Capacitor || capacitor;
+
+    return {
+      capacitor,
+      messaging: capacitor.Plugins?.FirebaseMessaging || coreModule.registerPlugin('FirebaseMessaging')
+    };
+  })().catch(error => {
+    nativeBridgePromise = null;
+    console.warn('Native Capacitor plugins are unavailable:', error.message);
+    return null;
+  });
+
+  return nativeBridgePromise;
+}
+
+async function getNativeBridgePlatform() {
+  const capacitor = window.Capacitor;
+  if (!capacitor || typeof capacitor.isNativePlatform !== 'function' || !capacitor.isNativePlatform()) {
+    return null;
+  }
+  return getNativeBridge();
+}
 
 /**
  * Initialize native push notifications using Capacitor Firebase
  */
 export async function initializeNativePushNotifications() {
   try {
-    if (!Capacitor.isNativePlatform()) {
+    const nativeBridge = await getNativeBridgePlatform();
+    if (!nativeBridge?.messaging) {
       console.log('Not running on native platform, skipping native push initialization');
       return false;
     }
@@ -29,7 +66,7 @@ export async function initializeNativePushNotifications() {
     console.log('Initializing native push notifications...');
 
     // Request push notification permissions
-    const result = await FirebaseMessaging.requestPermissions();
+    const result = await nativeBridge.messaging.requestPermissions();
     
     if (result.receive === 'granted') {
       console.log('Push notification permissions granted');
@@ -38,14 +75,14 @@ export async function initializeNativePushNotifications() {
     }
 
     // Get FCM token for this device
-    const tokenResult = await FirebaseMessaging.getToken();
+    const tokenResult = await nativeBridge.messaging.getToken();
     if (tokenResult.token) {
       console.log('FCM Token obtained:', tokenResult.token);
       await saveFcmTokenForCurrentUser(tokenResult.token);
     }
 
     // Listen for incoming messages when app is in foreground
-    FirebaseMessaging.addListener('message', async (event) => {
+    nativeBridge.messaging.addListener('message', async (event) => {
       console.log('Foreground message received:', event);
       
       const remoteMessage = event.message;
@@ -66,7 +103,7 @@ export async function initializeNativePushNotifications() {
     });
 
     // Listen for token refresh events
-    FirebaseMessaging.addListener('tokenReceived', async (event) => {
+    nativeBridge.messaging.addListener('tokenReceived', async (event) => {
       console.log('New FCM token received:', event.token);
       await saveFcmTokenForCurrentUser(event.token);
     });
@@ -98,7 +135,7 @@ async function saveFcmTokenForCurrentUser(token) {
       email,
       token,
       updatedAt: new Date(),
-      platform: Capacitor.getPlatform(),
+      platform: window.Capacitor?.getPlatform?.() || 'android',
       appVersion: '2.0.27',
       lastUpdated: new Date().toISOString()
     }, { merge: true });
@@ -147,9 +184,10 @@ function handleForegroundNotification(title, body, data) {
  */
 export async function unsubscribeFromNativePushNotifications() {
   try {
-    if (Capacitor.isNativePlatform()) {
+    const nativeBridge = await getNativeBridgePlatform();
+    if (nativeBridge?.messaging) {
       // Optionally delete the token
-      const result = await FirebaseMessaging.deleteToken();
+      const result = await nativeBridge.messaging.deleteToken();
       console.log('FCM token deleted:', result);
     }
     isNativePushInitialized = false;
@@ -163,12 +201,13 @@ export async function unsubscribeFromNativePushNotifications() {
  */
 export async function requestNativePushPermissions() {
   try {
-    if (!Capacitor.isNativePlatform()) {
+    const nativeBridge = await getNativeBridgePlatform();
+    if (!nativeBridge?.messaging) {
       console.log('Not running on native platform');
       return false;
     }
 
-    const result = await FirebaseMessaging.requestPermissions();
+    const result = await nativeBridge.messaging.requestPermissions();
     console.log('Permission request result:', result);
     
     return result.receive === 'granted';
