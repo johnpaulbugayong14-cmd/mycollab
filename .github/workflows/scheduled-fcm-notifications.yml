@@ -2,11 +2,15 @@ name: Scheduled FCM Notifications
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: scheduled-fcm-notifications
+  cancel-in-progress: false
 
 jobs:
   send-notifications:
