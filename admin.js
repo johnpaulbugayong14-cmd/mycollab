@@ -3796,8 +3796,6 @@ async function endAdminMeeting(meetingId) {
     alert('Failed to end meeting. Please try again.');
   }
 }
-  dropdown.style.display = 'none';
-}
 
 function setupMentionAutocomplete(inputId, dropdownId) {
   const input = document.getElementById(inputId);
