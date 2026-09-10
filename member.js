@@ -3354,6 +3354,11 @@ window.votePoll = async function(pollId, optionIndex) {
 };
 
 function loadPolls() {
+  if (!pollsContainer || !pollsEmptyState) {
+    console.warn('Polls section elements not found.');
+    return;
+  }
+
   onSnapshot(activeMemberOrganization?.id ? query(collection(db, "polls"), where("organizationId", "==", activeMemberOrganization.id)) : collection(db, "polls"), (snap) => {
     pollsContainer.innerHTML = "";
     let activePollCount = 0;
@@ -3361,7 +3366,11 @@ function loadPolls() {
 
     const docs = [];
     snap.forEach(doc => docs.push(doc));
-    docs.sort((a, b) => b.data().createdAt.toMillis() - a.data().createdAt.toMillis());
+    docs.sort((a, b) => {
+      const firstTime = parseDateValue(a.data()?.createdAt || a.data()?.date || a.data()?.timestamp || a.data()?.postedAt)?.getTime() || 0;
+      const secondTime = parseDateValue(b.data()?.createdAt || b.data()?.date || b.data()?.timestamp || b.data()?.postedAt)?.getTime() || 0;
+      return secondTime - firstTime;
+    });
 
     // Notify on newly created polls after the first snapshot
     docs.forEach(doc => {
@@ -3571,29 +3580,46 @@ function renderAnnouncementComments(announcementId, comments) {
 }
 
 function loadAnnouncements() {
-  onSnapshot(activeMemberOrganization?.id ? query(collection(db, "announcements"), where("organizationId", "==", activeMemberOrganization.id)) : collection(db, "announcements"), (snap) => {
+  if (!announcementsContainer || !announcementsEmptyState) {
+    console.warn('Announcements section elements not found.');
+    return;
+  }
+
+  if (!activeMemberOrganization?.id) {
+    announcementsContainer.innerHTML = '';
+    announcementsEmptyState.textContent = 'No announcement as of the moment.';
+    announcementsEmptyState.style.display = 'block';
+    return;
+  }
+
+  onSnapshot(query(collection(db, "announcements"), where("organizationId", "==", activeMemberOrganization.id)), (snap) => {
     announcementsContainer.innerHTML = "";
     let announcementCount = 0;
     const archivedAnnouncements = [];
 
     const docs = [];
     snap.forEach(doc => docs.push(doc));
-    docs.sort((a, b) => b.data().createdAt.toMillis() - a.data().createdAt.toMillis());
+    docs.sort((a, b) => {
+      const firstTime = parseDateValue(a.data()?.createdAt || a.data()?.date || a.data()?.timestamp || a.data()?.postedAt)?.getTime() || 0;
+      const secondTime = parseDateValue(b.data()?.createdAt || b.data()?.date || b.data()?.timestamp || b.data()?.postedAt)?.getTime() || 0;
+      return secondTime - firstTime;
+    });
 
     docs.forEach(doc => {
       const announcement = doc.data() || {};
       const previous = previousAnnouncementMap.get(doc.id);
       const assignedTo = Array.isArray(announcement.assignedTo) ? announcement.assignedTo : ["everyone"];
+      const assignedToNames = Array.isArray(announcement.assignedToNames) ? announcement.assignedToNames : [];
 
       if (announcementNotificationsInitialized && !previous && announcement.archived !== true && announcement.title) {
-        const shouldNotify = matchesAnnouncementTarget(assignedTo, userEmail);
+        const shouldNotify = matchesAnnouncementTarget(assignedTo, assignedToNames, userEmail);
         if (shouldNotify) {
           showAdminUpdateNotification('New Announcement', `New announcement: "${announcement.title}"`);
         }
       }
       previousAnnouncementMap.set(doc.id, announcement);
 
-      if (!matchesAnnouncementTarget(assignedTo, userEmail)) return;
+      if (!matchesAnnouncementTarget(assignedTo, assignedToNames, userEmail)) return;
 
       if (announcement.archived === true) {
         archivedAnnouncements.push({ id: doc.id, ...announcement });
@@ -3603,8 +3629,8 @@ function loadAnnouncements() {
       const announcementDate = formatAnnouncementDate(announcement.createdAt);
       const commentsEnabled = announcement.commentsEnabled !== false;
       const commentHtml = renderAnnouncementComments(doc.id, announcement.comments);
-      const assignedToNames = Array.isArray(announcement.assignedToNames) ? announcement.assignedToNames : ["Everyone"];
-      const assignedToText = assignedToNames.length > 1 ? `Assigned to: ${assignedToNames.join(", ")}` : `Assigned to: ${assignedToNames[0]}`;
+      const displayAssignedToNames = assignedToNames.length ? assignedToNames : ["Everyone"];
+      const assignedToText = displayAssignedToNames.length > 1 ? `Assigned to: ${displayAssignedToNames.join(", ")}` : `Assigned to: ${displayAssignedToNames[0]}`;
       announcementCount++;
 
       announcementsContainer.innerHTML += `
@@ -3648,6 +3674,7 @@ function loadAnnouncements() {
     }
 
     announcementNotificationsInitialized = true;
+    announcementsEmptyState.textContent = 'No announcement as of the moment.';
     announcementsEmptyState.style.display = announcementCount === 0 ? "block" : "none";
     void hydrateProfileAvatars();
     refreshHomeDashboard();
@@ -4666,6 +4693,8 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
       return;
     }
     loadResources();
+    loadAnnouncements();
+    loadPolls();
     loadProgressReport();
     loadMeetings();
     checkMaintenance();
