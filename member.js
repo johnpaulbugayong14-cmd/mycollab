@@ -80,7 +80,7 @@ const welcomeEl = document.getElementById("welcome");
 const datetimeEl = document.getElementById("datetime");
 const pollsContainer = document.getElementById("polls");
 const pollsEmptyState = document.getElementById("pollsEmptyState");
-const announcementsContainer = document.getElementById("announcements");
+const announcementsContainer = document.getElementById("announcementsList");
 const announcementsEmptyState = document.getElementById("announcementsEmptyState");
 const members = [
   { uid: "everyone", name: "Everyone" }
@@ -3475,8 +3475,8 @@ function loadPolls() {
 
       pollsContainer.innerHTML += `
         <div style="margin-top: 2rem;">
-          <div style="display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; margin-bottom: 1rem;">
-            <button onclick="toggleArchivedPolls()" style="padding: 0.4rem 0.75rem; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
+            <div style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; margin-bottom: 1rem;">
+            <button class="member-archive-toggle" onclick="toggleArchivedPolls()" style="padding: 0.4rem 0.75rem; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
               ${archivedPollsCollapsed ? 'Show Archived Polls' : 'Hide Archived Polls'}
             </button>
           </div>
@@ -3490,6 +3490,22 @@ function loadPolls() {
     console.error('Polls onSnapshot error:', error);
   });
 }
+
+window.toggleArchivedPolls = function() {
+  archivedPollsCollapsed = !archivedPollsCollapsed;
+  const archiveContent = document.getElementById('archivedPollsContent');
+
+  if (archiveContent) {
+    archiveContent.style.display = archivedPollsCollapsed ? 'none' : 'block';
+  }
+
+  document.querySelectorAll('button[onclick="toggleArchivedPolls()"]')
+    .forEach((button) => {
+      button.textContent = archivedPollsCollapsed ? 'Show Archived Polls' : 'Hide Archived Polls';
+    });
+
+  localStorage.setItem('archivedPollsCollapsed', archivedPollsCollapsed ? 'true' : 'false');
+};
 
 function formatAnnouncementDate(dateValue) {
   if (!dateValue) return "Unknown date";
@@ -3655,9 +3671,8 @@ function loadAnnouncements() {
       announcementsContainer.innerHTML += `
         <div style="margin-top: 2rem;">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem;">
-            <h3 style="color: #e2e8f0; margin: 0;">Archived Announcements</h3>
-            <button onclick="toggleArchivedAnnouncements()" style="padding: 0.4rem 0.75rem; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
-              ${archivedAnnouncementsCollapsed ? 'Show' : 'Hide'} (${archivedAnnouncements.length})
+            <button class="member-archive-toggle" onclick="toggleArchivedAnnouncements()" style="padding: 0.4rem 0.75rem; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
+              ${archivedAnnouncementsCollapsed ? 'Show Archived Announcements' : 'Hide Archived Announcements'}
             </button>
           </div>
           <div id="archivedAnnouncementsContent" style="display: ${archivedAnnouncementsCollapsed ? 'none' : 'block'};">
@@ -3682,6 +3697,22 @@ function loadAnnouncements() {
     console.error('Announcements onSnapshot error:', error);
   });
 }
+
+window.toggleArchivedAnnouncements = function() {
+  archivedAnnouncementsCollapsed = !archivedAnnouncementsCollapsed;
+  const archiveContent = document.getElementById('archivedAnnouncementsContent');
+
+  if (archiveContent) {
+    archiveContent.style.display = archivedAnnouncementsCollapsed ? 'none' : 'block';
+  }
+
+  document.querySelectorAll('button[onclick="toggleArchivedAnnouncements()"]')
+    .forEach((button) => {
+      button.textContent = archivedAnnouncementsCollapsed ? 'Show Archived Announcements' : 'Hide Archived Announcements';
+    });
+
+  localStorage.setItem('archivedAnnouncementsCollapsed', archivedAnnouncementsCollapsed ? 'true' : 'false');
+};
 
 function loadResources() {
   const container = document.getElementById("resourcesList");

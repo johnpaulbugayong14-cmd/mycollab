@@ -124,6 +124,11 @@
       right: 0;
       transform: translateY(-50%);
     }
+    .member-archive-toggle {
+      width: auto;
+      flex: 0 0 auto;
+      margin-top: 0;
+    }
     @keyframes restrictedPulse {
       0%, 100% { transform: scale(1); opacity: 1; }
       50% { transform: scale(1.06); opacity: 0.85; }
@@ -961,7 +966,7 @@
               <button onclick="createAnnouncement()" style="width: fit-content; padding: 0.75rem 1rem; border: none; border-radius: 0.5rem; background: #3b82f6; color: white; cursor: pointer;">Create Announcement</button>
             </div>
           </div>
-          <div id="announcements"></div>
+          <div id="announcementsList"></div>
           <p id="announcementsEmptyState" style="text-align: center; color: #94a3b8; padding: 2rem;">
             No announcement as of the moment.
           </p>
