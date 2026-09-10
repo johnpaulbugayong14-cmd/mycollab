@@ -44,6 +44,38 @@
     .member-profile-setup-card p { margin: 0 0 1.25rem; color: #cbd5e1; }
     .member-profile-setup-button { border: 0; border-radius: 0.5rem; padding: 0.7rem 1rem; background: #2563eb; color: #ffffff; cursor: pointer; font-weight: 700; }
     .member-profile-setup-message { min-height: 1.25rem; margin-top: 0.75rem; color: #fca5a5; font-size: 0.85rem; }
+    .member-global-loading {
+      position: fixed;
+      inset: 0;
+      z-index: 12000;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      background: rgba(2, 6, 23, 0.18);
+      opacity: 1;
+      transition: opacity 0.25s ease;
+    }
+    .member-global-loading.hidden { opacity: 0; visibility: hidden; }
+    .member-global-loading-content {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.65rem 0.85rem;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 0.65rem;
+      background: rgba(15, 23, 42, 0.78);
+      color: #e2e8f0;
+      font-size: 0.85rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+    .member-loading-dots { display: inline-flex; align-items: center; gap: 0.22rem; }
+    .member-loading-dot { width: 0.38rem; height: 0.38rem; border-radius: 50%; background: #93c5fd; animation: member-loading-dance 0.9s ease-in-out infinite; }
+    .member-loading-dot:nth-child(2) { animation-delay: 0.15s; }
+    .member-loading-dot:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes member-loading-dance {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+      30% { transform: translateY(-0.3rem); opacity: 1; }
+    }
     .header-actions {
       flex-direction: column;
       align-items: flex-end;
@@ -702,6 +734,12 @@
   </style>
 </head>
 <body>
+  <div id="memberGlobalLoading" class="member-global-loading" role="status" aria-live="polite">
+    <div class="member-global-loading-content">
+      <span class="member-loading-dots" aria-hidden="true"><span class="member-loading-dot"></span><span class="member-loading-dot"></span><span class="member-loading-dot"></span></span>
+      <span>Loading your workspace...</span>
+    </div>
+  </div>
 <div id="memberProfileSetupOverlay" class="member-profile-setup-overlay" role="dialog" aria-modal="true" aria-labelledby="memberProfileSetupTitle">
   <div class="member-profile-setup-card">
     <h2 id="memberProfileSetupTitle">Set up your profile</h2>

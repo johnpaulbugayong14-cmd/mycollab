@@ -16,6 +16,8 @@ const isComplete = (task) => ['done', 'completed', 'complete', 'finished'].inclu
 const assignedToUser = (task) => { const values = Array.isArray(task.assignedTo) ? task.assignedTo : [task.assignedTo]; return values.filter(Boolean).some((value) => normalize(value) === normalize(state.email) || normalize(value) === 'everyone'); };
 const orgName = (organizationId) => state.organizations.find((organization) => organization.id === organizationId)?.name || 'Organization';
 
+function setSpaceGlobalLoading(isLoading) { document.getElementById('spaceGlobalLoading')?.classList.toggle('hidden', !isLoading); }
+
 function setText(id, text) { const element = document.getElementById(id); if (element) element.textContent = text; }
 function setContent(id, html) { const element = document.getElementById(id); if (element) element.innerHTML = html; }
 function emptyState(icon, title, detail, action = '') { return `<div class="space-empty"><i class="fas ${icon}" aria-hidden="true"></i><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span>${action}</div>`; }
@@ -82,6 +84,7 @@ async function loadData() {
   if (!ids.length) {
     state.docs = { tasks: [], events: [], meetings: [], resources: [], announcements: [], messages: [], activity: [] };
     renderAll();
+    setSpaceGlobalLoading(false);
     return;
   }
   const readCollection = async (name) => { const results = await Promise.all(ids.map(async (organizationId) => { const snapshot = await getDocs(query(collection(db, name), where('organizationId', '==', organizationId))); return snapshot.docs.map((item) => ({ id: item.id, ...item.data() })); })); return results.flat(); };
@@ -99,12 +102,75 @@ async function loadData() {
   const messages = messagesByOrganization.flat(2);
   state.docs.messages = messages;
   renderMessages();
+  setSpaceGlobalLoading(false);
 }
 
 let liveRefreshTimer;
-function subscribeLive() { state.unsubscribers.forEach((unsubscribe) => unsubscribe()); state.unsubscribers = []; const ids = state.organizations.map((organization) => organization.id); ['tasks', 'events', 'meetings', 'resources', 'inAppNotifications', 'liveChats'].forEach((name) => ids.forEach((organizationId) => { let initialSnapshot = true; state.unsubscribers.push(onSnapshot(query(collection(db, name), where('organizationId', '==', organizationId)), () => { if (initialSnapshot) { initialSnapshot = false; return; } clearTimeout(liveRefreshTimer); liveRefreshTimer = setTimeout(() => { void loadData().catch((error) => setText('spaceError', error.message)); }, 150); }, (error) => setText('spaceError', error.message))); })); }
+function scheduleLiveRefresh() {
+  clearTimeout(liveRefreshTimer);
+  liveRefreshTimer = setTimeout(() => {
+    void loadData().catch((error) => setText('spaceError', error.message));
+  }, 150);
+}
 
-async function initialize() { try { await requireAuth(['member', 'limited-admin']); state.email = await getStoredUserEmail(); const profile = await getDoc(doc(db, 'userRoles', normalize(state.email))); renderProfile(profile.exists() ? profile.data() : {}); state.organizations = await getOrganizationsForEmail(state.email); await loadData(); subscribeLive(); state.organizationUnsubscribe = subscribeToOrganizations(state.email, (organizations) => { state.organizations = organizations; void loadData().then(() => subscribeLive()).catch((error) => setText('spaceError', error.message)); }, (error) => setText('spaceError', error.message)); } catch (error) { setText('spaceError', 'Unable to load your workspace. Please try again.'); console.error('My Space initialization failed:', error); } }
+async function subscribeLiveChatMessages(organizationIds) {
+  await Promise.all(organizationIds.map(async (organizationId) => {
+    try {
+      const rooms = await getDocs(query(collection(db, 'liveChats'), where('organizationId', '==', organizationId)));
+      rooms.docs.forEach((room) => {
+        let initialSnapshot = true;
+        const unsubscribe = onSnapshot(
+          query(collection(db, 'liveChats', room.id, 'messages'), orderBy('createdAt', 'desc'), limit(5)),
+          () => {
+            if (initialSnapshot) {
+              initialSnapshot = false;
+              return;
+            }
+            scheduleLiveRefresh();
+          },
+          (error) => setText('spaceError', error.message)
+        );
+        state.unsubscribers.push(unsubscribe);
+      });
+    } catch (error) {
+      setText('spaceError', error.message);
+    }
+  }));
+}
+
+function subscribeLive() {
+  state.unsubscribers.forEach((unsubscribe) => unsubscribe());
+  state.unsubscribers = [];
+  const ids = state.organizations.map((organization) => organization.id);
+
+  ['tasks', 'events', 'meetings', 'resources', 'inAppNotifications', 'liveChats'].forEach((name) => {
+    ids.forEach((organizationId) => {
+      let initialSnapshot = true;
+      state.unsubscribers.push(onSnapshot(
+        query(collection(db, name), where('organizationId', '==', organizationId)),
+        () => {
+          if (initialSnapshot) {
+            initialSnapshot = false;
+            return;
+          }
+          if (name === 'liveChats') {
+            clearTimeout(liveRefreshTimer);
+            liveRefreshTimer = setTimeout(() => {
+              void loadData().then(() => subscribeLive()).catch((error) => setText('spaceError', error.message));
+            }, 150);
+            return;
+          }
+          scheduleLiveRefresh();
+        },
+        (error) => setText('spaceError', error.message)
+      ));
+    });
+  });
+
+  void subscribeLiveChatMessages(ids);
+}
+
+async function initialize() { try { await requireAuth(['member', 'limited-admin']); state.email = await getStoredUserEmail(); const profile = await getDoc(doc(db, 'userRoles', normalize(state.email))); renderProfile(profile.exists() ? profile.data() : {}); state.organizations = await getOrganizationsForEmail(state.email); await loadData(); subscribeLive(); state.organizationUnsubscribe = subscribeToOrganizations(state.email, (organizations) => { state.organizations = organizations; void loadData().then(() => subscribeLive()).catch((error) => { setSpaceGlobalLoading(false); setText('spaceError', error.message); }); }, (error) => { setSpaceGlobalLoading(false); setText('spaceError', error.message); }); } catch (error) { setSpaceGlobalLoading(false); setText('spaceError', 'Unable to load your workspace. Please try again.'); console.error('My Space initialization failed:', error); } }
 
 document.getElementById('logoutButton')?.addEventListener('click', signOutUser);
 document.addEventListener('click', (event) => { const link = event.target.closest('[data-task-link], [data-schedule-link], [data-message-link]'); if (link) { if (link.dataset.organizationId) setActiveOrganizationId(link.dataset.organizationId); window.location.href = link.dataset.taskLink || link.dataset.scheduleLink || link.dataset.messageLink; } });

@@ -138,6 +138,44 @@
       border-radius: 999px;
     }
 
+    .chat-loading-state {
+      display: flex;
+      flex: 1 1 auto;
+      min-height: 8rem;
+      align-items: center;
+      justify-content: center;
+      gap: 0.65rem;
+      color: #cbd5e1;
+      font-size: 0.85rem;
+    }
+
+    .chat-loading-dots {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.22rem;
+    }
+
+    .chat-loading-dot {
+      width: 0.38rem;
+      height: 0.38rem;
+      border-radius: 50%;
+      background: #93c5fd;
+      animation: chat-loading-dance 0.9s ease-in-out infinite;
+    }
+
+    .chat-loading-dot:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+
+    .chat-loading-dot:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+
+    @keyframes chat-loading-dance {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+      30% { transform: translateY(-0.3rem); opacity: 1; }
+    }
+
     .chat-message {
       width: 100%;
       max-width: none;
@@ -392,13 +430,14 @@
       background: transparent;
       border: none;
       padding: 0;
-      font-family: Arial, Helvetica, sans-serif;
+      font-family: Arial, Helvetica, sans-serif !important;
       font-size: 0.74rem;
       font-weight: 700;
       line-height: 1;
       letter-spacing: 0.035em;
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
+      font-variant-emoji: text;
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
       margin-left: auto;
@@ -413,11 +452,12 @@
       border-radius: 0;
       background: transparent;
       color: #cbd5e1;
-      font-family: Arial, Helvetica, sans-serif;
+      font-family: Arial, Helvetica, sans-serif !important;
       font-size: 0.7rem;
       font-weight: 600;
       letter-spacing: 0.08em;
       white-space: nowrap;
+      font-variant-emoji: text;
       box-shadow: none;
     }
 
@@ -481,6 +521,8 @@
       border: 1px solid rgba(255, 255, 255, 0.18);
       box-shadow: 0 4px 14px rgba(15, 23, 42, 0.2);
       color: #f8fafc;
+      font-family: Arial, Helvetica, sans-serif !important;
+      font-variant-emoji: text;
       line-height: 1.55;
       white-space: pre-wrap;
       word-break: break-word;
@@ -981,7 +1023,7 @@
         </button>
         <div id="pinnedMessagesList" class="pinned-messages-list"></div>
       </section>
-      <div id="chatMessages"></div>
+      <div id="chatMessages"><div class="chat-loading-state" role="status" aria-live="polite"><span class="chat-loading-dots" aria-hidden="true"><span class="chat-loading-dot"></span><span class="chat-loading-dot"></span><span class="chat-loading-dot"></span></span><span>Loading messages...</span></div></div>
       <div id="chatImagePreview"></div>
       <div id="replyPreview" class="reply-preview">
         <div class="reply-preview-row">

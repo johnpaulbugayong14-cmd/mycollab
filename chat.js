@@ -506,17 +506,30 @@ function scrollToPinnedMessage(messageId) {
   setTimeout(() => { messageElement.style.outline = ''; }, 1600);
 }
 
+function setChatLoading(isLoading) {
+  const chatMessagesEl = document.getElementById('chatMessages');
+  if (!chatMessagesEl || !isLoading) return;
+  chatMessagesEl.innerHTML = '<div class="chat-loading-state" role="status" aria-live="polite"><span class="chat-loading-dots" aria-hidden="true"><span class="chat-loading-dot"></span><span class="chat-loading-dot"></span><span class="chat-loading-dot"></span></span><span>Loading messages...</span></div>';
+}
+
 function scrollChatToLatestMessage(chatMessagesEl) {
   if (!chatMessagesEl) return;
 
   const scrollLatest = () => {
     chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+    const messages = chatMessagesEl.querySelectorAll('.chat-message');
+    const latestMessage = messages[messages.length - 1];
+    latestMessage?.scrollIntoView({ behavior: 'auto', block: 'end' });
   };
 
   scrollLatest();
   requestAnimationFrame(() => {
     scrollLatest();
     requestAnimationFrame(scrollLatest);
+  });
+
+  chatMessagesEl.querySelectorAll('img').forEach((image) => {
+    if (!image.complete) image.addEventListener('load', scrollLatest, { once: true });
   });
 }
 
@@ -1224,6 +1237,7 @@ async function subscribeChatMessages(chatId) {
     chatMessagesUnsubscribe();
   }
 
+  setChatLoading(true);
   const messagesQuery = query(collection(db, 'liveChats', chatId, 'messages'), orderBy('createdAt', 'asc'));
   chatMessagesUnsubscribe = onSnapshot(messagesQuery, (snapshot) => {
     const messages = [];
@@ -1232,6 +1246,7 @@ async function subscribeChatMessages(chatId) {
     renderChatMessages(messages);
   }, (error) => {
     console.error('Chat messages listener error:', error);
+    document.getElementById('chatMessages')?.replaceChildren();
     showError('Unable to load chat messages right now.');
   });
 }

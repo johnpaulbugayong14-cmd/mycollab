@@ -18,6 +18,10 @@ let archivedAnnouncementsCollapsed = localStorage.getItem('archivedAnnouncements
 let selectedChatId = null;
 let chatRoomsById = {};
 let chatMessagesById = {};
+
+function setMemberGlobalLoading(isLoading) {
+  document.getElementById('memberGlobalLoading')?.classList.toggle('hidden', !isLoading);
+}
 let replyToMessage = null;
 let selectedChatImageData = null;
 let selectedChatImageName = null;
@@ -829,6 +833,8 @@ function getAnnouncementValidityState(announcement) {
 function renderHomeFlashcard(items = []) {
   const flashcard = document.getElementById('home-flashcard');
   if (!flashcard) return;
+
+  setMemberGlobalLoading(false);
 
   const currentTitle = homeFlashcardItems[homeFlashcardIndex]?.title;
   const currentIndex = items.findIndex((item) => item?.title === currentTitle);

@@ -136,7 +136,7 @@ async function saveFcmTokenForCurrentUser(token) {
       token,
       updatedAt: new Date(),
       platform: window.Capacitor?.getPlatform?.() || 'android',
-      appVersion: '2.0.27',
+      appVersion: '2.0.32',
       lastUpdated: new Date().toISOString()
     }, { merge: true });
 
