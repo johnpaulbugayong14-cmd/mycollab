@@ -73,9 +73,6 @@ function applyChatTheme(theme) {
   const interfaceGradient = `linear-gradient(${direction}, ${start} 0%, ${end} 100%)`;
   document.querySelector('.chat-page-card')?.style.setProperty('background', interfaceGradient, 'important');
   document.getElementById('chatMessages')?.style.setProperty('background', card, 'important');
-  document.querySelectorAll('.chat-message').forEach((message) => {
-    message.style.setProperty('background', card, 'important');
-  });
 }
 
 function syncChatTheme(email) {
@@ -248,7 +245,15 @@ function showError(message) {
 }
 
 function formatMessageWithMentions(text) {
-  return text.replace(/@\[([^\]]+)\]/g, '<span class="mention">@$1</span>');
+  const withMentions = text.replace(/@\[([^\]]+)\]/g, '<span class="mention">@$1</span>');
+  return withMentions.replace(/(?:https?:\/\/|www\.)[^\s<]+/gi, (matchedUrl) => {
+    const trailingPunctuation = matchedUrl.match(/[.,!?;:)\]}]+$/)?.[0] || '';
+    const url = trailingPunctuation
+      ? matchedUrl.slice(0, -trailingPunctuation.length)
+      : matchedUrl;
+    const href = url.toLowerCase().startsWith('www.') ? `https://${url}` : url;
+    return `<a class="chat-link" href="${href}" target="_blank" rel="noopener noreferrer">${url}</a>${trailingPunctuation}`;
+  });
 }
 
 function getMentionContext(input) {
@@ -307,7 +312,18 @@ function insertMentionAtCursor(input, dropdown, name) {
   const newCursor = atIndex + token.length;
   input.setSelectionRange(newCursor, newCursor);
   input.focus();
+  resizeChatMessageInput(input);
   dropdown.style.display = 'none';
+}
+
+function resizeChatMessageInput(input) {
+  if (!input) return;
+  input.style.height = 'auto';
+  const maxHeight = parseFloat(getComputedStyle(input).maxHeight);
+  const nextHeight = Number.isFinite(maxHeight)
+    ? Math.min(input.scrollHeight, maxHeight)
+    : input.scrollHeight;
+  input.style.height = `${nextHeight}px`;
 }
 
 function setupMentionAutocomplete(inputId, dropdownId) {
@@ -315,7 +331,11 @@ function setupMentionAutocomplete(inputId, dropdownId) {
   const dropdown = document.getElementById(dropdownId);
   if (!input || !dropdown) return;
 
-  input.addEventListener('input', () => updateMentionDropdown(input, dropdown));
+  input.addEventListener('input', () => {
+    resizeChatMessageInput(input);
+    updateMentionDropdown(input, dropdown);
+  });
+  resizeChatMessageInput(input);
 
   dropdown.addEventListener('click', (event) => {
     const item = event.target.closest('.mention-item');
@@ -486,6 +506,20 @@ function scrollToPinnedMessage(messageId) {
   setTimeout(() => { messageElement.style.outline = ''; }, 1600);
 }
 
+function scrollChatToLatestMessage(chatMessagesEl) {
+  if (!chatMessagesEl) return;
+
+  const scrollLatest = () => {
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  };
+
+  scrollLatest();
+  requestAnimationFrame(() => {
+    scrollLatest();
+    requestAnimationFrame(scrollLatest);
+  });
+}
+
 function updateChatAlbumGrid() {
   const grid = document.getElementById('chatAlbumGrid');
   if (!grid) return;
@@ -608,22 +642,24 @@ function renderChatMessages(messages) {
     const unsendButton = isOwnMessage && !msg.deleted ? `<button type="button" class="chat-unsend-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(248, 113, 113, 0.12); color: #f97316; border: 1px solid rgba(248, 113, 113, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">Unsend</button>` : '';
     const pinButton = !msg.deleted ? `<button type="button" class="chat-pin-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: ${msg.pinned ? 'rgba(250, 204, 21, 0.2)' : 'rgba(148, 163, 184, 0.12)'}; color: ${msg.pinned ? '#facc15' : '#cbd5e1'}; border: 1px solid ${msg.pinned ? 'rgba(250, 204, 21, 0.45)' : 'rgba(148, 163, 184, 0.35)'}; border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">${msg.pinned ? 'Unpin' : 'Pin'}</button>` : '';
     const replyButton = !msg.deleted ? `<button type="button" class="chat-reply-btn" data-message-id="${msg.id}">↩ Reply</button>` : '';
-    const actionButtons = [replyButton, unsendButton, pinButton].filter(Boolean).join('<span style="margin: 0 0.35rem; color: #374151;">|</span>');
+    const actionButtons = [
+      replyButton,
+      pinButton,
+      !msg.deleted ? `<button type="button" class="chat-react-btn" data-message-id="${msg.id}" title="React">😊</button>` : '',
+      unsendButton
+    ].filter(Boolean).join('<span class="chat-action-separator">·</span>');
 
     msgDiv.innerHTML = `
       ${msg.pinned ? '<div style="color: #facc15; font-size: 0.75rem; font-weight: 700; margin-bottom: 0.35rem;">Pinned message</div>' : ''}
-      <div style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; min-width: 0;">
+      <div class="chat-message-header">
+        <div class="chat-message-author">
           ${renderUserAvatarMarkup(msg.senderEmail || sender, 26)}
-          <div style="font-size: 0.9rem; color: #94a3b8;">${escapeHtml(sender)}</div>
+          <div class="chat-message-author-name">${escapeHtml(sender)}</div>
         </div>
-        <div class="chat-message-time"><span class="chat-sent-label">Sent</span>${timestamp}</div>
+        <div class="chat-message-time">${timestamp}</div>
       </div>
-      <div class="chat-message-text" style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; white-space: pre-wrap; word-break: break-word;">${replyQuote}${imageMarkup}${renderedText}</div>
-      <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; margin-bottom: ${msg.reactions && Object.keys(msg.reactions).length > 0 ? '0.5rem' : '0'};">
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">${actionButtons}</div>
-        ${!msg.deleted ? `<button type="button" class="chat-react-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">😊 React</button>` : ''}
-      </div>
+      <div class="chat-message-content">${replyQuote}${imageMarkup}${renderedText}</div>
+      <div class="chat-message-actions">${actionButtons}</div>
       ${msg.reactions && Object.keys(msg.reactions).length > 0 ? `
         <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; padding-top: 0.5rem; border-top: 1px solid #374151;">
           ${Object.entries(msg.reactions).map(([emoji, users]) => `
@@ -640,7 +676,7 @@ function renderChatMessages(messages) {
   });
 
   void hydrateProfileAvatars();
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  scrollChatToLatestMessage(chatMessagesEl);
   const albumModal = document.getElementById('chatAlbumModal');
   if (albumModal && albumModal.style.display === 'flex') {
     updateChatAlbumGrid();
@@ -747,22 +783,24 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
     const unsendButton = isOwnMessage && !msg.deleted ? `<button type="button" class="chat-unsend-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(248, 113, 113, 0.12); color: #f97316; border: 1px solid rgba(248, 113, 113, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">Unsend</button>` : '';
     const pinButton = !msg.deleted ? `<button type="button" class="chat-pin-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: ${msg.pinned ? 'rgba(250, 204, 21, 0.2)' : 'rgba(148, 163, 184, 0.12)'}; color: ${msg.pinned ? '#facc15' : '#cbd5e1'}; border: 1px solid ${msg.pinned ? 'rgba(250, 204, 21, 0.45)' : 'rgba(148, 163, 184, 0.35)'}; border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">${msg.pinned ? 'Unpin' : 'Pin'}</button>` : '';
     const replyButton = !msg.deleted ? `<button type="button" class="chat-reply-btn" data-message-id="${msg.id}">↩ Reply</button>` : '';
-    const actionButtons = [replyButton, unsendButton, pinButton].filter(Boolean).join('<span style="margin: 0 0.35rem; color: #374151;">|</span>');
+    const actionButtons = [
+      replyButton,
+      pinButton,
+      !msg.deleted ? `<button type="button" class="chat-react-btn" data-message-id="${msg.id}" title="React">😊</button>` : '',
+      unsendButton
+    ].filter(Boolean).join('<span class="chat-action-separator">·</span>');
 
     msgDiv.innerHTML = `
       ${msg.pinned ? '<div style="color: #facc15; font-size: 0.75rem; font-weight: 700; margin-bottom: 0.35rem;">Pinned message</div>' : ''}
-      <div style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; min-width: 0;">
+      <div class="chat-message-header">
+        <div class="chat-message-author">
           ${renderUserAvatarMarkup(msg.senderEmail || sender, 26)}
-          <div style="font-size: 0.9rem; color: #94a3b8;">${escapeHtml(sender)}</div>
+          <div class="chat-message-author-name">${escapeHtml(sender)}</div>
         </div>
-        <div class="chat-message-time"><span class="chat-sent-label">Sent</span>${timestamp}</div>
+        <div class="chat-message-time">${timestamp}</div>
       </div>
-      <div style="color: ${msg.deleted ? '#9ca3af' : '#e5e7eb'}; line-height: 1.6; white-space: pre-wrap; word-break: break-word;">${replyQuote}${imageMarkup}${renderedText}</div>
-      <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; margin-bottom: ${msg.reactions && Object.keys(msg.reactions).length > 0 ? '0.5rem' : '0'};">
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">${actionButtons}</div>
-        ${!msg.deleted ? `<button type="button" class="chat-react-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">😊 React</button>` : ''}
-      </div>
+      <div class="chat-message-content">${replyQuote}${imageMarkup}${renderedText}</div>
+      <div class="chat-message-actions">${actionButtons}</div>
       ${msg.reactions && Object.keys(msg.reactions).length > 0 ? `
         <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; padding-top: 0.5rem; border-top: 1px solid #374151;">
           ${Object.entries(msg.reactions).map(([emoji, users]) => `
@@ -779,7 +817,7 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
   });
 
   void hydrateProfileAvatars();
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  scrollChatToLatestMessage(chatMessagesEl);
   const albumModal = document.getElementById('chatAlbumModal');
   if (albumModal && albumModal.style.display === 'flex') {
     updateChatAlbumGrid();
@@ -947,13 +985,16 @@ function showReactionMenu(messageId, event) {
   const emojis = ['😀', '😂', '😢', '😠', '❤️', '👍', '🎉'];
   menu = document.createElement('div');
   menu.id = 'chatReactionMenu';
-  menu.style.cssText = 'position: fixed; z-index: 100000; display: flex; gap: 0.5rem; flex-wrap: wrap; padding: 0.75rem; background: #0f172a; border: 1px solid #374151; border-radius: 1rem; box-shadow: 0 10px 40px rgba(0,0,0,0.25);';
+  menu.style.cssText = 'position: fixed; z-index: 100000; display: flex; justify-content: center; align-items: center; gap: 0.4rem; flex-wrap: wrap; max-width: calc(100vw - 1rem); padding: 0.6rem; background: #0f172a; border: 1px solid #374151; border-radius: 0.85rem; box-shadow: 0 10px 40px rgba(0,0,0,0.25);';
 
   emojis.forEach((emoji) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.textContent = emoji;
-    btn.style.cssText = 'width: 2.5rem; height: 2.5rem; font-size: 1.2rem; border: none; border-radius: 0.75rem; background: #111827; color: #f8fafc; cursor: pointer;';
+    btn.style.cssText = 'width: 2.75rem; height: 2.75rem; padding: 0; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; text-align: center; border: none; border-radius: 0.7rem; background: #111827; color: #f8fafc; cursor: pointer;';
+    const emojiLabel = document.createElement('span');
+    emojiLabel.textContent = emoji;
+    emojiLabel.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; font-size: 1.35rem; line-height: 1;';
+    btn.appendChild(emojiLabel);
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       toggleMessageReaction(messageId, emoji);
@@ -1120,8 +1161,7 @@ function compressImage(dataUrl, maxSizeKB = 500) {
   });
 }
 
-function handleChatImageInputChange(event) {
-  const file = event.target.files?.[0];
+async function processChatImageFile(file) {
   if (!file) {
     selectedChatImageData = null;
     selectedChatImageName = null;
@@ -1161,6 +1201,22 @@ function handleChatImageInputChange(event) {
     showError('Failed to read the image file.');
   };
   reader.readAsDataURL(file);
+}
+
+function handleChatImageInputChange(event) {
+  processChatImageFile(event.target.files?.[0]);
+}
+
+function handleChatImagePaste(event) {
+  const imageItem = [...(event.clipboardData?.items || [])]
+    .find(item => item.kind === 'file' && item.type.startsWith('image/'));
+  if (!imageItem) return;
+
+  const imageFile = imageItem.getAsFile();
+  if (!imageFile) return;
+
+  event.preventDefault();
+  processChatImageFile(imageFile);
 }
 
 async function subscribeChatMessages(chatId) {
@@ -1242,6 +1298,7 @@ async function sendChatMessage(event) {
 
   // Clear preview immediately for better UX
   messageInput.value = '';
+  resizeChatMessageInput(messageInput);
   selectedChatImageData = null;
   selectedChatImageName = null;
   updateChatImagePreview();
@@ -1309,7 +1366,7 @@ async function loadChatRoomInfo(chatId) {
 
   const data = chatDoc.data();
   if (currentUserEmail && chatId) {
-    localStorage.setItem(`chatLastRead:${currentUserEmail}:${chatId}`, String(Date.now()));
+    localStorage.setItem(`chatLastRead:${normalizeEmail(currentUserEmail)}:${chatId}`, String(Date.now()));
   }
   const titleEl = document.getElementById('chatTitle');
   const metaEl = document.getElementById('chatMeta');
@@ -1360,6 +1417,7 @@ async function init() {
   setupBackButton(from);
   document.getElementById('attachImageButton')?.addEventListener('click', triggerChatImageInput);
   document.getElementById('chatImageInput')?.addEventListener('change', handleChatImageInputChange);
+  document.getElementById('chatMessageInput')?.addEventListener('paste', handleChatImagePaste);
   document.getElementById('chatMessageForm')?.addEventListener('submit', sendChatMessage);
   document.getElementById('cancelReplyButton')?.addEventListener('click', cancelReply);
   setupMentionAutocomplete('chatMessageInput', 'chatMentionDropdown');

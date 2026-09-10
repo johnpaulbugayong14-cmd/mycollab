@@ -883,7 +883,7 @@ if (document.readyState === 'loading') {
 async function safeInitializeNotifications() {
   try {
     const { initializeNotifications } = await import("./notifications.js");
-    const { initializeNativePushNotifications } = await import("./native-notifications.js");
+    const { initializeNativePushNotifications } = await import("./native-notifications.js?v=9");
     
     await initializeNotifications();
     

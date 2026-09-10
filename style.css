@@ -437,14 +437,15 @@ body.member-theme .sidebar {
 
 @media (max-width: 640px) {
   .app-footer {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 0.5rem;
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: flex-end;
+    text-align: right;
+    gap: 0;
   }
 
   .footer-right {
-    text-align: center;
+    text-align: right;
   }
 }
 

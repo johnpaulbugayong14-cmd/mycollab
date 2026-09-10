@@ -97,7 +97,7 @@ import {
 import { db } from "./firebase.js";
 import { signOutUser, getStoredUserEmail, getStoredUserRole, getEffectiveRole, setUserRole, setUserAccess, createMemberAccount, deleteMemberAccount, approvePasswordReset } from "./auth.js";
 import { sendNotificationToUsers, showLocalNotification, initializeNotifications } from "./notifications.js";
-import { initializeNativePushNotifications } from "./native-notifications.js";
+import { initializeNativePushNotifications } from "./native-notifications.js?v=9";
 import { addOrganizationMember, getActiveOrganizationId, setActiveOrganizationId, subscribeToOrganizations } from "./organizations.js";
 
 window.signOutUser = signOutUser;

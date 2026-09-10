@@ -3,7 +3,7 @@ import { db, auth } from "./firebase.js";
 import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStoredUserEmail, signOutUser, getPasswordChangeRequired, getAccountPasswordHint, updateAccountPassword } from "./auth.js";
 import { initializeNotifications, sendNotificationToUsers, showLocalNotification } from "./notifications.js";
-import { initializeNativePushNotifications } from "./native-notifications.js";
+import { initializeNativePushNotifications } from "./native-notifications.js?v=9";
 import { getActiveOrganizationId, getOrganizationsForEmail, setActiveOrganizationId } from "./organizations.js";
 import { getPhilippineHolidays } from "./events.js";
 
@@ -1220,8 +1220,30 @@ function updateChatUnreadFlashcard(unreadMessages = []) {
   }
 }
 
+function getChatLastReadKey(roomId) {
+  return `chatLastRead:${normalizeEmail(userEmail)}:${roomId}`;
+}
+
 function getUnreadChatMessages(roomId, messages) {
-  const lastReadKey = `chatLastRead:${userEmail}:${roomId}`;
+  const lastReadKey = getChatLastReadKey(roomId);
+  let storedLastRead = localStorage.getItem(lastReadKey);
+  const legacyLastReadKey = `chatLastRead:${userEmail}:${roomId}`;
+  if (storedLastRead === null && legacyLastReadKey !== lastReadKey) {
+    storedLastRead = localStorage.getItem(legacyLastReadKey);
+    if (storedLastRead !== null) {
+      localStorage.setItem(lastReadKey, storedLastRead);
+    }
+  }
+  if (storedLastRead === null && messages.length > 0) {
+    const latestMessageTime = messages.reduce((latest, message) => {
+      const parsedCreatedAt = parseDateValue(message.createdAt);
+      const createdAt = parsedCreatedAt ? parsedCreatedAt.getTime() : Number(message.createdAt || 0);
+      return Math.max(latest, Number.isFinite(createdAt) ? createdAt : 0);
+    }, 0);
+    if (latestMessageTime > 0) {
+      localStorage.setItem(lastReadKey, String(latestMessageTime));
+    }
+  }
   const lastRead = Number(localStorage.getItem(lastReadKey) || 0);
   return messages
     .filter((message) => {
@@ -1721,6 +1743,11 @@ async function refreshHomeDashboard() {
         resourceRefs.push(resource);
       }
     });
+    resourceRefs.sort((firstResource, secondResource) => {
+      const firstDate = parseDateValue(firstResource.updatedAt || firstResource.createdAt)?.getTime() || 0;
+      const secondDate = parseDateValue(secondResource.updatedAt || secondResource.createdAt)?.getTime() || 0;
+      return secondDate - firstDate;
+    });
   } catch (error) {
     console.warn('Unable to load resources for home dashboard:', error);
   }
@@ -1754,7 +1781,7 @@ async function refreshHomeDashboard() {
     for (const docSnap of chatRoomsSnap.docs) {
       const room = { id: docSnap.id, ...docSnap.data() };
       const messagesSnap = await getDocs(collection(db, 'liveChats', docSnap.id, 'messages'));
-      const lastReadKey = `chatLastRead:${userEmail}:${docSnap.id}`;
+      const lastReadKey = getChatLastReadKey(docSnap.id);
       const lastRead = Number(localStorage.getItem(lastReadKey) || 0);
       const unreadMessages = messagesSnap.docs
         .map((messageDoc) => ({ id: messageDoc.id, ...messageDoc.data() }))
