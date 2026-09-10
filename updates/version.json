@@ -1,6 +1,6 @@
 {
-  "version": "2.0.32",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.32/",
+  "version": "2.0.34",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.34/",
   "required": true,
   "releaseNotes": [
     "Fix and improve chat UI"
