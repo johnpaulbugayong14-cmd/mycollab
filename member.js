@@ -92,6 +92,14 @@ const progressReportCollection = "progressReports";
 const progressReportDocId = "thesisProgress";
 const progressStorageKey = "thesisProgressReportBackup";
 let latestProgressReportSections = null;
+
+function getProgressReportDocId(organizationId = activeMemberOrganization?.id) {
+  return organizationId ? `${progressReportDocId}_${organizationId}` : null;
+}
+
+function getProgressStorageKey(organizationId = activeMemberOrganization?.id) {
+  return organizationId ? `${progressStorageKey}:${organizationId}` : null;
+}
 const memberGradientStorageKey = 'memberInterfaceGradient';
 const defaultMemberGradientTheme = {
   start: '#0f172a',
@@ -327,7 +335,9 @@ async function loadMemberGradientTheme(email) {
 function getProgressBackupSections() {
   try {
     if (typeof window === "undefined" || !window.localStorage) return null;
-    const cached = window.localStorage.getItem(progressStorageKey);
+    const storageKey = getProgressStorageKey();
+    if (!storageKey) return null;
+    const cached = window.localStorage.getItem(storageKey);
     if (!cached) return null;
     const parsed = JSON.parse(cached);
     if (Array.isArray(parsed?.sections)) return parsed.sections;
@@ -340,8 +350,9 @@ function getProgressBackupSections() {
 
 function saveProgressBackupSections(sections) {
   try {
-    if (typeof window !== "undefined" && window.localStorage) {
-      window.localStorage.setItem(progressStorageKey, JSON.stringify({ sections, updatedAt: new Date().toISOString() }));
+    const storageKey = getProgressStorageKey();
+    if (typeof window !== "undefined" && window.localStorage && storageKey) {
+      window.localStorage.setItem(storageKey, JSON.stringify({ sections, updatedAt: new Date().toISOString() }));
     }
   } catch (error) {
     console.warn("Unable to cache progress report locally:", error);
@@ -350,8 +361,11 @@ function saveProgressBackupSections(sections) {
 
 async function persistProgressReportSections(sections) {
   try {
-    const progressRef = doc(db, progressReportCollection, progressReportDocId);
-    await setDoc(progressRef, { sections, organizationId: activeMemberOrganization?.id || '', updatedAt: new Date().toISOString() }, { merge: true });
+    const organizationId = activeMemberOrganization?.id;
+    const progressDocId = getProgressReportDocId(organizationId);
+    if (!progressDocId) return false;
+    const progressRef = doc(db, progressReportCollection, progressDocId);
+    await setDoc(progressRef, { sections, organizationId, updatedAt: new Date().toISOString() }, { merge: true });
     saveProgressBackupSections(sections);
     return true;
   } catch (error) {
@@ -1732,7 +1746,9 @@ async function refreshHomeDashboard() {
   try {
     let progressSections = latestProgressReportSections;
     if (!Array.isArray(progressSections)) {
-      const progressDoc = await getDoc(doc(db, progressReportCollection, progressReportDocId));
+      const progressDocId = getProgressReportDocId();
+      if (!progressDocId) return;
+      const progressDoc = await getDoc(doc(db, progressReportCollection, progressDocId));
       progressSections = progressDoc.exists() && Array.isArray(progressDoc.data()?.sections)
         ? progressDoc.data().sections
         : [];
@@ -1918,14 +1934,17 @@ function subscribeToHomeFlashcardUpdates() {
     onSnapshot(activeMemberOrganization?.id ? query(collection(db, 'resources'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'resources'), () => refreshHomeDashboard(), (error) => console.warn('Home flashcard resource listener error:', error))
   );
 
-  homeFlashcardListeners.push(
-    onSnapshot(doc(db, progressReportCollection, progressReportDocId), (snapshot) => {
-      latestProgressReportSections = snapshot.exists() && Array.isArray(snapshot.data()?.sections)
-        ? snapshot.data().sections
-        : [];
-      void refreshHomeDashboard();
-    }, (error) => console.warn('Home flashcard progress listener error:', error))
-  );
+  const progressDocId = getProgressReportDocId();
+  if (progressDocId) {
+    homeFlashcardListeners.push(
+      onSnapshot(doc(db, progressReportCollection, progressDocId), (snapshot) => {
+        latestProgressReportSections = snapshot.exists() && Array.isArray(snapshot.data()?.sections)
+          ? snapshot.data().sections
+          : [];
+        void refreshHomeDashboard();
+      }, (error) => console.warn('Home flashcard progress listener error:', error))
+    );
+  }
 
   if (activeMemberOrganization?.id) {
     homeFlashcardListeners.push(
@@ -3097,8 +3116,21 @@ function mergeProgressStructures(defaultSections, savedSections) {
   return [...mergedSections, ...extraSections];
 }
 
-function loadProgressReport() {
-  const progressRef = doc(db, progressReportCollection, progressReportDocId);
+async function loadProgressReport() {
+  const progressDocId = getProgressReportDocId();
+  if (!progressDocId) {
+    latestProgressReportSections = [];
+    renderMemberProgressReport([]);
+    return;
+  }
+  const progressRef = doc(db, progressReportCollection, progressDocId);
+  const scopedSnapshot = await getDoc(progressRef);
+  if (!scopedSnapshot.exists()) {
+    const legacySnapshot = await getDoc(doc(db, progressReportCollection, progressReportDocId));
+    if (legacySnapshot.exists() && legacySnapshot.data()?.organizationId === activeMemberOrganization?.id) {
+      await setDoc(progressRef, legacySnapshot.data(), { merge: true });
+    }
+  }
 
   onSnapshot(progressRef, async (snap) => {
     if (snap.exists()) {
