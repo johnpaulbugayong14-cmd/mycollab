@@ -2252,6 +2252,21 @@ function persistDismissedInAppNotifications() {
   // No-op: do not persist dismissals to local storage. Use Firestore `shownTo` instead.
 }
 
+async function markInAppNotificationSeen(notification) {
+  if (!notification?.id || notification.displayMode !== 'once') return;
+
+  try {
+    const currentEmail = normalizeEmail(userEmail || await getStoredUserEmail());
+    if (!currentEmail) return;
+
+    await updateDoc(doc(db, 'inAppNotifications', notification.id), {
+      shownTo: arrayUnion(currentEmail)
+    });
+  } catch (error) {
+    console.warn('Failed to persist shownTo for in-app notification:', error);
+  }
+}
+
 function displayNotificationBanner({ title, message, type = 'info', duration = 9000 }) {
   const bannerContainer = document.getElementById('notificationBanner');
   if (!bannerContainer) return;
@@ -2333,18 +2348,7 @@ async function showInAppNotificationOverlay(notification) {
   button.onclick = async () => {
     dismissedInAppNotificationIds.add(notificationId);
     persistDismissedInAppNotifications();
-
-    // If displayMode is 'once', record that this user has seen it in Firestore
-    try {
-      const currentEmail = userEmail || await getStoredUserEmail();
-      if (notification.displayMode === 'once' && currentEmail) {
-        const notifRef = doc(db, 'inAppNotifications', notificationId);
-        await updateDoc(notifRef, { shownTo: arrayUnion(currentEmail) });
-      }
-    } catch (err) {
-      console.warn('Failed to persist shownTo for in-app notification:', err);
-    }
-
+    await markInAppNotificationSeen(notification);
     closeInAppNotificationOverlay();
   };
 
@@ -2353,10 +2357,11 @@ async function showInAppNotificationOverlay(notification) {
   modal.appendChild(button);
   overlay.appendChild(modal);
 
-  overlay.addEventListener("click", (event) => {
+  overlay.addEventListener("click", async (event) => {
     if (event.target === overlay) {
       dismissedInAppNotificationIds.add(notificationId);
       persistDismissedInAppNotifications();
+      await markInAppNotificationSeen(notification);
       closeInAppNotificationOverlay();
     }
   });
