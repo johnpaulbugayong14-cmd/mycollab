@@ -9,6 +9,10 @@ import { getPhilippineHolidays } from "./events.js";
 
 window.signOutUser = signOutUser;
 
+function setMemberGlobalLoading(isLoading) {
+  document.getElementById('memberGlobalLoading')?.classList.toggle('hidden', !isLoading);
+}
+
 let userEmail = null;
 let meetingsUnsubscribe = null;
 let chatRoomsUnsubscribe = null;
@@ -18,10 +22,6 @@ let archivedAnnouncementsCollapsed = localStorage.getItem('archivedAnnouncements
 let selectedChatId = null;
 let chatRoomsById = {};
 let chatMessagesById = {};
-
-function setMemberGlobalLoading(isLoading) {
-  document.getElementById('memberGlobalLoading')?.classList.toggle('hidden', !isLoading);
-}
 let replyToMessage = null;
 let selectedChatImageData = null;
 let selectedChatImageName = null;
@@ -80,7 +80,7 @@ const welcomeEl = document.getElementById("welcome");
 const datetimeEl = document.getElementById("datetime");
 const pollsContainer = document.getElementById("polls");
 const pollsEmptyState = document.getElementById("pollsEmptyState");
-const announcementsContainer = document.getElementById("announcementsList");
+const announcementsContainer = document.getElementById("announcements");
 const announcementsEmptyState = document.getElementById("announcementsEmptyState");
 const members = [
   { uid: "everyone", name: "Everyone" }
@@ -834,8 +834,6 @@ function renderHomeFlashcard(items = []) {
   const flashcard = document.getElementById('home-flashcard');
   if (!flashcard) return;
 
-  setMemberGlobalLoading(false);
-
   const currentTitle = homeFlashcardItems[homeFlashcardIndex]?.title;
   const currentIndex = items.findIndex((item) => item?.title === currentTitle);
   if (homeFlashcardTimer && currentIndex >= 0 && homeFlashcardSetContent) {
@@ -1226,30 +1224,8 @@ function updateChatUnreadFlashcard(unreadMessages = []) {
   }
 }
 
-function getChatLastReadKey(roomId) {
-  return `chatLastRead:${normalizeEmail(userEmail)}:${roomId}`;
-}
-
 function getUnreadChatMessages(roomId, messages) {
-  const lastReadKey = getChatLastReadKey(roomId);
-  let storedLastRead = localStorage.getItem(lastReadKey);
-  const legacyLastReadKey = `chatLastRead:${userEmail}:${roomId}`;
-  if (storedLastRead === null && legacyLastReadKey !== lastReadKey) {
-    storedLastRead = localStorage.getItem(legacyLastReadKey);
-    if (storedLastRead !== null) {
-      localStorage.setItem(lastReadKey, storedLastRead);
-    }
-  }
-  if (storedLastRead === null && messages.length > 0) {
-    const latestMessageTime = messages.reduce((latest, message) => {
-      const parsedCreatedAt = parseDateValue(message.createdAt);
-      const createdAt = parsedCreatedAt ? parsedCreatedAt.getTime() : Number(message.createdAt || 0);
-      return Math.max(latest, Number.isFinite(createdAt) ? createdAt : 0);
-    }, 0);
-    if (latestMessageTime > 0) {
-      localStorage.setItem(lastReadKey, String(latestMessageTime));
-    }
-  }
+  const lastReadKey = `chatLastRead:${userEmail}:${roomId}`;
   const lastRead = Number(localStorage.getItem(lastReadKey) || 0);
   return messages
     .filter((message) => {
@@ -1749,11 +1725,6 @@ async function refreshHomeDashboard() {
         resourceRefs.push(resource);
       }
     });
-    resourceRefs.sort((firstResource, secondResource) => {
-      const firstDate = parseDateValue(firstResource.updatedAt || firstResource.createdAt)?.getTime() || 0;
-      const secondDate = parseDateValue(secondResource.updatedAt || secondResource.createdAt)?.getTime() || 0;
-      return secondDate - firstDate;
-    });
   } catch (error) {
     console.warn('Unable to load resources for home dashboard:', error);
   }
@@ -1787,7 +1758,7 @@ async function refreshHomeDashboard() {
     for (const docSnap of chatRoomsSnap.docs) {
       const room = { id: docSnap.id, ...docSnap.data() };
       const messagesSnap = await getDocs(collection(db, 'liveChats', docSnap.id, 'messages'));
-      const lastReadKey = getChatLastReadKey(docSnap.id);
+      const lastReadKey = `chatLastRead:${userEmail}:${docSnap.id}`;
       const lastRead = Number(localStorage.getItem(lastReadKey) || 0);
       const unreadMessages = messagesSnap.docs
         .map((messageDoc) => ({ id: messageDoc.id, ...messageDoc.data() }))
@@ -3354,11 +3325,6 @@ window.votePoll = async function(pollId, optionIndex) {
 };
 
 function loadPolls() {
-  if (!pollsContainer || !pollsEmptyState) {
-    console.warn('Polls section elements not found.');
-    return;
-  }
-
   onSnapshot(activeMemberOrganization?.id ? query(collection(db, "polls"), where("organizationId", "==", activeMemberOrganization.id)) : collection(db, "polls"), (snap) => {
     pollsContainer.innerHTML = "";
     let activePollCount = 0;
@@ -3366,11 +3332,7 @@ function loadPolls() {
 
     const docs = [];
     snap.forEach(doc => docs.push(doc));
-    docs.sort((a, b) => {
-      const firstTime = parseDateValue(a.data()?.createdAt || a.data()?.date || a.data()?.timestamp || a.data()?.postedAt)?.getTime() || 0;
-      const secondTime = parseDateValue(b.data()?.createdAt || b.data()?.date || b.data()?.timestamp || b.data()?.postedAt)?.getTime() || 0;
-      return secondTime - firstTime;
-    });
+    docs.sort((a, b) => b.data().createdAt.toMillis() - a.data().createdAt.toMillis());
 
     // Notify on newly created polls after the first snapshot
     docs.forEach(doc => {
@@ -3475,8 +3437,8 @@ function loadPolls() {
 
       pollsContainer.innerHTML += `
         <div style="margin-top: 2rem;">
-            <div style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; margin-bottom: 1rem;">
-            <button class="member-archive-toggle" onclick="toggleArchivedPolls()" style="padding: 0.4rem 0.75rem; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
+          <div style="display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; margin-bottom: 1rem;">
+            <button onclick="toggleArchivedPolls()" style="padding: 0.4rem 0.75rem; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
               ${archivedPollsCollapsed ? 'Show Archived Polls' : 'Hide Archived Polls'}
             </button>
           </div>
@@ -3490,22 +3452,6 @@ function loadPolls() {
     console.error('Polls onSnapshot error:', error);
   });
 }
-
-window.toggleArchivedPolls = function() {
-  archivedPollsCollapsed = !archivedPollsCollapsed;
-  const archiveContent = document.getElementById('archivedPollsContent');
-
-  if (archiveContent) {
-    archiveContent.style.display = archivedPollsCollapsed ? 'none' : 'block';
-  }
-
-  document.querySelectorAll('button[onclick="toggleArchivedPolls()"]')
-    .forEach((button) => {
-      button.textContent = archivedPollsCollapsed ? 'Show Archived Polls' : 'Hide Archived Polls';
-    });
-
-  localStorage.setItem('archivedPollsCollapsed', archivedPollsCollapsed ? 'true' : 'false');
-};
 
 function formatAnnouncementDate(dateValue) {
   if (!dateValue) return "Unknown date";
@@ -3596,46 +3542,29 @@ function renderAnnouncementComments(announcementId, comments) {
 }
 
 function loadAnnouncements() {
-  if (!announcementsContainer || !announcementsEmptyState) {
-    console.warn('Announcements section elements not found.');
-    return;
-  }
-
-  if (!activeMemberOrganization?.id) {
-    announcementsContainer.innerHTML = '';
-    announcementsEmptyState.textContent = 'No announcement as of the moment.';
-    announcementsEmptyState.style.display = 'block';
-    return;
-  }
-
-  onSnapshot(query(collection(db, "announcements"), where("organizationId", "==", activeMemberOrganization.id)), (snap) => {
+  onSnapshot(activeMemberOrganization?.id ? query(collection(db, "announcements"), where("organizationId", "==", activeMemberOrganization.id)) : collection(db, "announcements"), (snap) => {
     announcementsContainer.innerHTML = "";
     let announcementCount = 0;
     const archivedAnnouncements = [];
 
     const docs = [];
     snap.forEach(doc => docs.push(doc));
-    docs.sort((a, b) => {
-      const firstTime = parseDateValue(a.data()?.createdAt || a.data()?.date || a.data()?.timestamp || a.data()?.postedAt)?.getTime() || 0;
-      const secondTime = parseDateValue(b.data()?.createdAt || b.data()?.date || b.data()?.timestamp || b.data()?.postedAt)?.getTime() || 0;
-      return secondTime - firstTime;
-    });
+    docs.sort((a, b) => b.data().createdAt.toMillis() - a.data().createdAt.toMillis());
 
     docs.forEach(doc => {
       const announcement = doc.data() || {};
       const previous = previousAnnouncementMap.get(doc.id);
       const assignedTo = Array.isArray(announcement.assignedTo) ? announcement.assignedTo : ["everyone"];
-      const assignedToNames = Array.isArray(announcement.assignedToNames) ? announcement.assignedToNames : [];
 
       if (announcementNotificationsInitialized && !previous && announcement.archived !== true && announcement.title) {
-        const shouldNotify = matchesAnnouncementTarget(assignedTo, assignedToNames, userEmail);
+        const shouldNotify = matchesAnnouncementTarget(assignedTo, userEmail);
         if (shouldNotify) {
           showAdminUpdateNotification('New Announcement', `New announcement: "${announcement.title}"`);
         }
       }
       previousAnnouncementMap.set(doc.id, announcement);
 
-      if (!matchesAnnouncementTarget(assignedTo, assignedToNames, userEmail)) return;
+      if (!matchesAnnouncementTarget(assignedTo, userEmail)) return;
 
       if (announcement.archived === true) {
         archivedAnnouncements.push({ id: doc.id, ...announcement });
@@ -3645,8 +3574,8 @@ function loadAnnouncements() {
       const announcementDate = formatAnnouncementDate(announcement.createdAt);
       const commentsEnabled = announcement.commentsEnabled !== false;
       const commentHtml = renderAnnouncementComments(doc.id, announcement.comments);
-      const displayAssignedToNames = assignedToNames.length ? assignedToNames : ["Everyone"];
-      const assignedToText = displayAssignedToNames.length > 1 ? `Assigned to: ${displayAssignedToNames.join(", ")}` : `Assigned to: ${displayAssignedToNames[0]}`;
+      const assignedToNames = Array.isArray(announcement.assignedToNames) ? announcement.assignedToNames : ["Everyone"];
+      const assignedToText = assignedToNames.length > 1 ? `Assigned to: ${assignedToNames.join(", ")}` : `Assigned to: ${assignedToNames[0]}`;
       announcementCount++;
 
       announcementsContainer.innerHTML += `
@@ -3671,8 +3600,9 @@ function loadAnnouncements() {
       announcementsContainer.innerHTML += `
         <div style="margin-top: 2rem;">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem;">
-            <button class="member-archive-toggle" onclick="toggleArchivedAnnouncements()" style="padding: 0.4rem 0.75rem; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
-              ${archivedAnnouncementsCollapsed ? 'Show Archived Announcements' : 'Hide Archived Announcements'}
+            <h3 style="color: #e2e8f0; margin: 0;">Archived Announcements</h3>
+            <button onclick="toggleArchivedAnnouncements()" style="padding: 0.4rem 0.75rem; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;">
+              ${archivedAnnouncementsCollapsed ? 'Show' : 'Hide'} (${archivedAnnouncements.length})
             </button>
           </div>
           <div id="archivedAnnouncementsContent" style="display: ${archivedAnnouncementsCollapsed ? 'none' : 'block'};">
@@ -3689,7 +3619,6 @@ function loadAnnouncements() {
     }
 
     announcementNotificationsInitialized = true;
-    announcementsEmptyState.textContent = 'No announcement as of the moment.';
     announcementsEmptyState.style.display = announcementCount === 0 ? "block" : "none";
     void hydrateProfileAvatars();
     refreshHomeDashboard();
@@ -3697,22 +3626,6 @@ function loadAnnouncements() {
     console.error('Announcements onSnapshot error:', error);
   });
 }
-
-window.toggleArchivedAnnouncements = function() {
-  archivedAnnouncementsCollapsed = !archivedAnnouncementsCollapsed;
-  const archiveContent = document.getElementById('archivedAnnouncementsContent');
-
-  if (archiveContent) {
-    archiveContent.style.display = archivedAnnouncementsCollapsed ? 'none' : 'block';
-  }
-
-  document.querySelectorAll('button[onclick="toggleArchivedAnnouncements()"]')
-    .forEach((button) => {
-      button.textContent = archivedAnnouncementsCollapsed ? 'Show Archived Announcements' : 'Hide Archived Announcements';
-    });
-
-  localStorage.setItem('archivedAnnouncementsCollapsed', archivedAnnouncementsCollapsed ? 'true' : 'false');
-};
 
 function loadResources() {
   const container = document.getElementById("resourcesList");
@@ -4681,6 +4594,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
 
   if (!userEmail) {
     console.log('No userEmail found after retries, showing login message');
+    setMemberGlobalLoading(false);
     container.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Please log in to view your tasks.</p>';
     if (emptyState) emptyState.style.display = "none";
     if (welcomeEl) welcomeEl.style.display = "none";
@@ -4697,6 +4611,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     const requiresPasswordChange = await enforcePasswordChangeIfNeeded();
     if (requiresPasswordChange) {
       console.log('Password change required; stopping member dashboard initialization.');
+      setMemberGlobalLoading(false);
       return;
     }
 
@@ -4721,11 +4636,11 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     const hasOrganization = await initializeMemberOrganization();
     if (!hasOrganization) {
       console.warn('No organization is assigned to this member; dashboard synchronization stopped.');
+      setMemberGlobalLoading(false);
       return;
     }
+    setMemberGlobalLoading(false);
     loadResources();
-    loadAnnouncements();
-    loadPolls();
     loadProgressReport();
     loadMeetings();
     checkMaintenance();
