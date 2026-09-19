@@ -723,7 +723,7 @@ window.adminOrganizationReady = new Promise((resolve) => {
 </script>
 
 <script type="module">
-import { collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, addDoc, getDoc, onSnapshot, doc, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from "./firebase.js";
 import { getActiveOrganizationId } from "./organizations.js";
 
@@ -744,6 +744,19 @@ let currentMeetingId = null;
 function buildJaasRoomName(roomName) {
   if (!roomName) return roomName;
   return roomName.startsWith(JAASTOKEN_ROOM_PREFIX) ? roomName : `${JAASTOKEN_ROOM_PREFIX}${roomName}`;
+}
+
+function buildOrganizationMeetingRoomName() {
+  const organizationId = getActiveOrganizationId();
+  return `${PROJECT_DISCUSSION_ROOM}-${organizationId || 'unassigned'}`;
+}
+
+function getMeetingRoomName(meeting) {
+  const legacyRoomName = buildJaasRoomName(PROJECT_DISCUSSION_ROOM);
+  if (meeting?.organizationId && (!meeting.roomName || meeting.roomName === legacyRoomName)) {
+    return buildJaasRoomName(buildOrganizationMeetingRoomName());
+  }
+  return meeting.roomName;
 }
 
 function initializeJitsiConference(roomName = null) {
@@ -847,7 +860,9 @@ async function loadAdminMeetings() {
   adminMeetingsUnsubscribe = onSnapshot(query(collection(db, 'meetings'), where('organizationId', '==', activeOrganizationId)), (snapshot) => {
     const meetings = [];
     snapshot.forEach(docSnap => {
-      meetings.push({ id: docSnap.id, ...docSnap.data() });
+      const meeting = { id: docSnap.id, ...docSnap.data() };
+      meeting.roomName = getMeetingRoomName(meeting);
+      meetings.push(meeting);
     });
 
     meetings.sort((a, b) => {
@@ -961,7 +976,7 @@ function initializeAdminMeetingForm() {
     const date = document.getElementById('adminMeetingDate').value;
     const time = document.getElementById('adminMeetingTime').value;
     const assignedTo = 'everyone';
-    const roomName = buildJaasRoomName(PROJECT_DISCUSSION_ROOM);
+    const roomName = buildJaasRoomName(buildOrganizationMeetingRoomName());
 
     const meeting = {
       title,
@@ -980,9 +995,13 @@ function initializeAdminMeetingForm() {
     loadAdminMeetings();
     meetingForm.reset();
 
-    const organizationRecipients = members
-      .filter(member => !isHiddenMember(member) && member.uid !== 'everyone')
-      .map(member => member.uid);
+    const organizationSnapshot = await getDoc(doc(db, 'organizations', meeting.organizationId));
+    const organization = organizationSnapshot.exists() ? organizationSnapshot.data() : {};
+    const organizationRecipients = [...new Set([
+      organization.ownerEmail,
+      ...(Array.isArray(organization.adminEmails) ? organization.adminEmails : []),
+      ...(Array.isArray(organization.memberEmails) ? organization.memberEmails : [])
+    ].map(email => String(email || '').trim().toLowerCase()).filter(Boolean))];
     window.sendFcmNotification?.(
       organizationRecipients,
       'New Video Conference',
@@ -993,15 +1012,7 @@ function initializeAdminMeetingForm() {
 
     // Send notification emails to all members
     try {
-      const memberEmails = [
-        'kingfordnabor@gmail.com',
-        'allancorral@gmail.com',
-        'phricksborebor@gmail.com',
-        'moezarperez@gmail.com',
-        'rogelioledda@gmail.com'
-      ];
-
-      for (const email of memberEmails) {
+      for (const email of organizationRecipients) {
         const member = members.find(m => m.uid === email);
         const name = member ? member.name : email;
 
@@ -1031,7 +1042,7 @@ function initializeAdminMeetingForm() {
 
 async function startInstantMeeting() {
   const now = new Date();
-  const roomName = buildJaasRoomName(PROJECT_DISCUSSION_ROOM);
+  const roomName = buildJaasRoomName(buildOrganizationMeetingRoomName());
   const meeting = {
     title: 'Instant Meeting',
     date: now.toISOString().slice(0, 10),
@@ -1050,13 +1061,13 @@ async function startInstantMeeting() {
 
   // Send notification emails to all members
   try {
-    const memberEmails = [
-      'kingfordnabor@gmail.com',
-      'allancorral@gmail.com',
-      'phricksborebor@gmail.com',
-      'moezarperez@gmail.com',
-      'rogelioledda@gmail.com'
-    ];
+    const organizationSnapshot = await getDoc(doc(db, 'organizations', meeting.organizationId));
+    const organization = organizationSnapshot.exists() ? organizationSnapshot.data() : {};
+    const memberEmails = [...new Set([
+      organization.ownerEmail,
+      ...(Array.isArray(organization.adminEmails) ? organization.adminEmails : []),
+      ...(Array.isArray(organization.memberEmails) ? organization.memberEmails : [])
+    ].map(email => String(email || '').trim().toLowerCase()).filter(Boolean))];
 
     for (const email of memberEmails) {
       const member = members.find(m => m.uid === email);

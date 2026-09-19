@@ -3726,6 +3726,9 @@ function loadMeetings() {
     const meetings = [];
     snapshot.forEach(docSnap => {
       const meeting = { id: docSnap.id, ...docSnap.data() };
+      if (meeting.organizationId && (!meeting.roomName || meeting.roomName.endsWith('/ProjectDiscussion'))) {
+        meeting.roomName = `ProjectDiscussion-${meeting.organizationId}`;
+      }
       const assignedTo = Array.isArray(meeting.assignedTo) ? meeting.assignedTo : (meeting.assignedTo ? [meeting.assignedTo] : []);
       const visibleToMember = !assignedTo.length || assignedTo.some((value) => normalizeEmail(value) === normalizeEmail(userEmail) || normalizeEmail(value) === 'everyone');
       if (visibleToMember) meetings.push(meeting);
