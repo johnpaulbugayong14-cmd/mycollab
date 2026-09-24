@@ -1029,19 +1029,25 @@ function loadMembers() {
 function getOrganizationWalletDocRef(memberEmail, organizationId = getActiveOrganizationId()) {
   const normalizedEmail = normalizeEmail(memberEmail);
   if (!normalizedEmail) return null;
-  if (organizationId) {
-    return doc(db, 'organizations', organizationId, 'memberWallets', normalizedEmail);
-  }
-  return doc(db, 'userRoles', normalizedEmail);
+  if (!organizationId) return null;
+  return doc(db, 'organizations', organizationId, 'memberWallets', normalizedEmail);
 }
 
 function getOrganizationWalletTransactionCollection(memberEmail, organizationId = getActiveOrganizationId()) {
   const normalizedEmail = normalizeEmail(memberEmail);
-  if (!normalizedEmail) return null;
-  if (organizationId) {
-    return collection(db, 'organizations', organizationId, 'memberWallets', normalizedEmail, 'walletTransactions');
-  }
-  return collection(db, 'userRoles', normalizedEmail, 'walletTransactions');
+  if (!normalizedEmail || !organizationId) return null;
+  return collection(db, 'organizations', organizationId, 'memberWallets', normalizedEmail, 'walletTransactions');
+}
+
+async function getOrganizationWalletBalances(organizationId) {
+  if (!organizationId) return new Map();
+  const walletSnapshot = await getDocs(collection(db, 'organizations', organizationId, 'memberWallets'));
+  const balances = new Map();
+  await Promise.all(walletSnapshot.docs.map(async (walletDoc) => {
+    const historySnapshot = await getDocs(collection(db, 'organizations', organizationId, 'memberWallets', walletDoc.id, 'walletTransactions'));
+    balances.set(normalizeEmail(walletDoc.id), historySnapshot.empty ? 0 : (Number(walletDoc.data()?.walletBalance) || 0));
+  }));
+  return balances;
 }
 
 function loadWalletMembers() {
@@ -1079,8 +1085,8 @@ window.adjustMemberWallet = async function (type) {
   const description = descriptionInput?.value?.trim();
   const activeOrganizationId = getActiveOrganizationId();
 
-  if (!memberEmails.length || !Number.isFinite(amount) || amount <= 0 || !description) {
-    if (message) { message.textContent = 'Choose at least one member, enter a positive amount, and provide a description.'; message.style.color = '#fca5a5'; }
+  if (!activeOrganizationId || !memberEmails.length || !Number.isFinite(amount) || amount <= 0 || !description) {
+    if (message) { message.textContent = activeOrganizationId ? 'Choose at least one member, enter a positive amount, and provide a description.' : 'Select an organization before adjusting a wallet.'; message.style.color = '#fca5a5'; }
     return;
   }
 
@@ -1092,8 +1098,7 @@ window.adjustMemberWallet = async function (type) {
       const transactionRef = doc(getOrganizationWalletTransactionCollection(memberEmail, activeOrganizationId));
       await runTransaction(db, async (transaction) => {
         const memberSnapshot = await transaction.get(memberRef);
-        const legacySnapshot = activeOrganizationId ? await transaction.get(doc(db, 'userRoles', memberEmail)) : null;
-        const currentBalance = Number(memberSnapshot.data()?.walletBalance) || Number(legacySnapshot?.data()?.walletBalance) || 0;
+        const currentBalance = Number(memberSnapshot.data()?.walletBalance) || 0;
         const nextBalance = currentBalance + signedAmount;
         transaction.set(memberRef, { walletBalance: nextBalance, updatedAt: serverTimestamp() }, { merge: true });
         transaction.set(transactionRef, { type, amount, description, performedBy: adminEmail || 'Administrator', createdAt: serverTimestamp(), balanceAfter: nextBalance });
@@ -1466,11 +1471,7 @@ async function loadMemberRoles() {
     const snapshot = await getDocs(collection(db, "userRoles"));
     const activeOrganization = managedOrganizations.find((organization) => organization.id === getActiveOrganizationId());
     const organizationMembers = new Set((activeOrganization?.memberEmails || []).map(normalizeEmail));
-    const organizationWalletBalances = activeOrganization ? await getDocs(collection(db, 'organizations', activeOrganization.id, 'memberWallets')).then((walletSnapshot) => {
-      const balances = new Map();
-      walletSnapshot.forEach((walletDoc) => balances.set(normalizeEmail(walletDoc.id), Number(walletDoc.data()?.walletBalance) || 0));
-      return balances;
-    }) : new Map();
+    const organizationWalletBalances = await getOrganizationWalletBalances(activeOrganization?.id);
 
     members.splice(0, members.length, { uid: 'everyone', name: 'Everyone' });
     const seen = new Set();
@@ -1488,7 +1489,7 @@ async function loadMemberRoles() {
       }
 
       if (typeof data.role === 'string' && data.role) member.role = data.role;
-      member.walletBalance = organizationWalletBalances.has(docId) ? organizationWalletBalances.get(docId) : (Number(data.walletBalance) || 0);
+      member.walletBalance = organizationWalletBalances.get(docId) || 0;
       member.accessAllowed = typeof data.accessAllowed === 'boolean' ? data.accessAllowed : member.accessAllowed;
       member.accessReason = typeof data.accessReason === 'string' ? data.accessReason : member.accessReason;
       member.profilePicture = typeof data.profilePicture === 'string' ? data.profilePicture : null;
@@ -1518,11 +1519,7 @@ function subscribeToMemberRoles() {
   userRolesUnsubscribe = onSnapshot(collection(db, "userRoles"), async (snapshot) => {
     const activeOrganization = managedOrganizations.find((organization) => organization.id === getActiveOrganizationId());
     const organizationMembers = new Set((activeOrganization?.memberEmails || []).map(normalizeEmail));
-    const organizationWalletBalances = activeOrganization ? await getDocs(collection(db, 'organizations', activeOrganization.id, 'memberWallets')).then((walletSnapshot) => {
-      const balances = new Map();
-      walletSnapshot.forEach((walletDoc) => balances.set(normalizeEmail(walletDoc.id), Number(walletDoc.data()?.walletBalance) || 0));
-      return balances;
-    }) : new Map();
+    const organizationWalletBalances = await getOrganizationWalletBalances(activeOrganization?.id);
 
     members.splice(0, members.length, { uid: 'everyone', name: 'Everyone' });
     const seen = new Set();
@@ -1543,7 +1540,7 @@ function subscribeToMemberRoles() {
       }
 
       if (typeof data.role === 'string' && data.role) member.role = data.role;
-      member.walletBalance = organizationWalletBalances.has(docId) ? organizationWalletBalances.get(docId) : (Number(data.walletBalance) || 0);
+      member.walletBalance = organizationWalletBalances.get(docId) || 0;
       member.accessAllowed = typeof data.accessAllowed === 'boolean' ? data.accessAllowed : member.accessAllowed;
       member.accessReason = typeof data.accessReason === 'string' ? data.accessReason : member.accessReason;
       member.profilePicture = typeof data.profilePicture === 'string' ? data.profilePicture : null;
