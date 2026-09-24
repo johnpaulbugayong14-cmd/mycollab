@@ -20,6 +20,13 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
   <style>
+    body {
+      background: #1F1F1F !important;
+    }
+    body::before,
+    body::after {
+      display: none !important;
+    }
     .member-profile-setup-overlay {
       position: fixed;
       inset: 0;
@@ -128,6 +135,17 @@
       width: auto;
       flex: 0 0 auto;
       margin-top: 0;
+    }
+    .sidebar-footer {
+      padding: 0;
+      width: calc(100% - 1rem);
+    }
+    .sidebar-footer .nav-btn {
+      width: 100%;
+      margin: 0;
+    }
+    .sidebar.collapsed .sidebar-footer {
+      width: 100%;
     }
     @keyframes restrictedPulse {
       0%, 100% { transform: scale(1); opacity: 1; }
@@ -805,6 +823,8 @@
       <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-file-alt"></i> Progress Report</button></li>
       <li><button class="nav-btn" onclick="showSection('member-status')"><i class="fas fa-users"></i> Member Status</button></li>
       <li><button class="nav-btn" onclick="showSection('eventsSection')"><i class="fas fa-calendar-days"></i> Events</button></li>
+      <li><button type="button" class="nav-btn" onclick="window.location.href='organization-selection.html'"><i class="fas fa-arrow-left"></i> Switch Organization</button></li>
+      <li><button type="button" onclick="signOutUser()" class="logout-btn">Logout</button></li>
     </ul>
   </nav>
 
@@ -826,10 +846,6 @@
       </div>
       <div class="member-header-title-row">
         <h1 id="page-title"><i class="fas fa-briefcase"></i> My Collab</h1>
-        <div class="member-header-action-buttons">
-          <button type="button" onclick="window.location.href='organization-selection.html'" aria-label="Choose organization" title="Choose organization" style="width: 32px; height: 24px; padding: 0; border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 0.4rem; background: rgba(30, 41, 59, 0.9); color: #f8fafc; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem;"><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
-          <button onclick="signOutUser()" class="logout-btn header-logout">Logout</button>
-        </div>
       </div>
       <div id="memberActiveOrganization" style="color:#cbd5e1; font-size:0.9rem;">Loading organization...</div>
       <div id="datetime" class="datetime-center">Loading date...</div>
@@ -1141,6 +1157,8 @@ function renderMemberNavigation(isRestricted) {
     navList.innerHTML = `
       <li><button class="nav-btn active" onclick="showSection('submit-ticket')"><i class="fas fa-headset"></i> Submit Ticket</button></li>
       <li><button class="nav-btn" onclick="showSection('ticket-history')"><i class="fas fa-ticket-alt"></i> Ticket History</button></li>
+      <li><button type="button" class="nav-btn" onclick="window.location.href='organization-selection.html'"><i class="fas fa-arrow-left"></i> Switch Organization</button></li>
+      <li><button type="button" class="logout-btn" onclick="signOutUser()">Logout</button></li>
     `;
     applyLimitedAdminNavigationVisibility();
     return;
@@ -1168,6 +1186,8 @@ function renderMemberNavigation(isRestricted) {
     <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-file-alt"></i> Progress Report</button></li>
     <li><button class="nav-btn" onclick="showSection('member-status')"><i class="fas fa-users"></i> Member Status</button></li>
     <li><button class="nav-btn" onclick="showSection('eventsSection')"><i class="fas fa-calendar-days"></i> Events</button></li>
+    <li><button type="button" class="nav-btn" onclick="window.location.href='organization-selection.html'"><i class="fas fa-arrow-left"></i> Switch Organization</button></li>
+    <li><button type="button" class="logout-btn" onclick="signOutUser()">Logout</button></li>
   `;
   applyLimitedAdminNavigationVisibility();
   window.applyMemberThemeTextColors?.();

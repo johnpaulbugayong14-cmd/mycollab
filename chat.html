@@ -95,6 +95,11 @@
       flex: 1;
     }
 
+    .chat-header > div:last-child {
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
     .chat-page-card {
       width: 100%;
       background: transparent;
@@ -743,6 +748,9 @@
 
     .chat-album-button {
       padding: 0.65rem 1rem;
+      width: 200px;
+      height: 39.2px;
+      margin: 0;
       background: rgba(99, 102, 241, 0.15);
       color: #818cf8;
       border: 1px solid rgba(99, 102, 241, 0.35);
@@ -862,23 +870,34 @@
         padding: 1rem;
       }
       .chat-header {
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 140px;
         align-items: stretch;
         gap: 0.5rem;
         padding: 0.5rem;
         margin-bottom: 0.5rem;
       }
       .chat-header-left {
-        width: 100%;
+        width: auto;
         gap: 0.25rem;
       }
       .chat-header-left > div:first-child {
         gap: 0.5rem !important;
         margin-bottom: 0 !important;
+        min-width: 0;
       }
       .chat-header #backButton {
         padding: 0.4rem 0.65rem !important;
         font-size: 0.8rem;
+        width: auto !important;
+        height: 2.25rem;
+        min-width: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+        margin-top: 0;
       }
       .chat-header #chatTitle {
         font-size: 1.35rem !important;
@@ -891,9 +910,9 @@
         font-size: 0.75rem;
       }
       .chat-header > div:last-child {
-        width: 100%;
+        width: 140px;
         gap: 0.4rem !important;
-        align-items: center !important;
+        align-items: flex-end !important;
         justify-content: flex-start !important;
       }
       .chat-header #chatStatus {
@@ -901,13 +920,16 @@
         font-size: 0.75rem !important;
       }
       .chat-header .chat-album-button {
-        width: auto !important;
+        width: 140px !important;
+        height: 31.2px;
         max-width: none !important;
         padding: 0.4rem 0.65rem;
         font-size: 0.75rem;
       }
       .chat-header #chatSearchContainer {
-        margin-left: auto;
+        flex-basis: auto;
+        width: auto;
+        margin-left: 0;
         gap: 0.35rem !important;
       }
       .chat-header #chatSearchInput {
@@ -943,6 +965,11 @@
         padding: 0.75rem;
       }
       .chat-header {
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas:
+          "title title"
+          "meta meta"
+          "status controls";
         padding: 0.75rem;
         gap: 0.75rem;
       }
@@ -951,10 +978,26 @@
         min-height: calc(100vh - 4rem);
       }
       .chat-header-left {
-        gap: 0.25rem;
+        display: contents;
+      }
+      .chat-header-left > div:first-child {
+        grid-area: title;
+      }
+      .chat-header .chat-meta {
+        grid-area: meta;
+      }
+      .chat-header #chatStatus {
+        grid-area: status;
+        align-self: start;
+        margin-top: 0.15rem;
       }
       #chatTitle {
-        font-size: 1.4rem;
+        min-width: 0;
+        flex: 1 1 0;
+        width: 0;
+        font-size: 1.1rem;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
       }
       #chatMessages {
         padding: 0.75rem;
@@ -990,6 +1033,49 @@
       #chatAlbumModal {
         padding: 1rem;
       }
+      .chat-header > div:last-child {
+        grid-area: controls;
+        width: 140px;
+      }
+    }
+
+    @media (max-width: 360px) {
+      .chat-header {
+        grid-template-columns: auto minmax(0, 1fr);
+      }
+
+      .chat-header-left > div:first-child {
+        flex-direction: row;
+        align-items: center;
+      }
+
+      .chat-header > div:last-child {
+        width: 120px;
+      }
+
+      .chat-header .chat-album-button {
+        width: 120px !important;
+      }
+
+      .chat-header #chatSearchInput {
+        min-width: 120px !important;
+        width: 120px;
+      }
+
+      .chat-header #chatTitle {
+        width: auto;
+        flex: 1 1 auto;
+        font-size: 1rem;
+      }
+    }
+
+    body {
+      background: #1F1F1F !important;
+    }
+
+    body::before,
+    body::after {
+      display: none !important;
     }
   </style>
 </head>
@@ -1002,9 +1088,9 @@
           <h1 id="chatTitle" style="margin: 0; font-size: 1.8rem; color: #f8fafc; font-weight: 600;"><i class="fas fa-comments"></i> Live Chat</h1>
         </div>
         <p id="chatMeta" class="chat-meta"><i class="fas fa-circle" style="color: #10b981; font-size: 0.6rem;"></i> Loading chat...</p>
+        <span id="chatStatus" style="width: fit-content; padding: 0.5rem 0.9rem; border-radius: 0.5rem; background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.9rem; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 500;"><i class="fas fa-circle" style="font-size: 0.6rem;"></i> Active</span>
       </div>
       <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; justify-content: flex-end;">
-        <span id="chatStatus" style="padding: 0.5rem 0.9rem; border-radius: 0.5rem; background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.9rem; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 500;"><i class="fas fa-circle" style="font-size: 0.6rem;"></i> Active</span>
         <button id="chatAlbumButton" class="chat-album-button"><i class="fas fa-images"></i> Images</button>
         <div id="chatSearchContainer" style="display: flex; gap: 0.5rem; align-items: center;">
           <input id="chatSearchInput" type="text" placeholder="Search messages..." style="padding: 0.65rem 0.95rem; border-radius: 0.5rem; border: 1px solid rgba(148, 163, 184, 0.25); background: rgba(15, 23, 42, 0.8); color: #f8fafc; outline: none; min-width: 200px; font-size: 0.9rem; transition: all 0.2s ease;" />
