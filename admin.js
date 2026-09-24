@@ -1053,10 +1053,18 @@ async function getOrganizationWalletBalances(organizationId) {
 function loadWalletMembers() {
   const container = document.getElementById('walletMember');
   if (!container) return;
+  const selectedMemberEmails = new Set(
+    Array.from(container.querySelectorAll('.wallet-member-checkbox:checked'))
+      .map(input => normalizeEmail(input.value))
+      .filter(Boolean)
+  );
   const walletMembers = members.filter(member => member.uid !== 'everyone' && !isHiddenMember(member));
   container.innerHTML = walletMembers.length
     ? walletMembers.map(member => `<label class="wallet-member-option" style="gap:0.5rem; color:#f8fafc;"><input type="checkbox" value="${escapeHtml(member.uid)}" class="wallet-member-checkbox"><span>${escapeHtml(member.name)}<small style="display:block; color:#94a3b8;">${escapeHtml(member.uid)}</small></span></label>`).join('')
     : '<span style="color:#94a3b8;">No members available</span>';
+  container.querySelectorAll('.wallet-member-checkbox').forEach((input) => {
+    input.checked = selectedMemberEmails.has(normalizeEmail(input.value));
+  });
 }
 
 function renderWalletBalances() {
