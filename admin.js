@@ -1026,6 +1026,24 @@ function loadMembers() {
   }
 }
 
+function getOrganizationWalletDocRef(memberEmail, organizationId = getActiveOrganizationId()) {
+  const normalizedEmail = normalizeEmail(memberEmail);
+  if (!normalizedEmail) return null;
+  if (organizationId) {
+    return doc(db, 'organizations', organizationId, 'memberWallets', normalizedEmail);
+  }
+  return doc(db, 'userRoles', normalizedEmail);
+}
+
+function getOrganizationWalletTransactionCollection(memberEmail, organizationId = getActiveOrganizationId()) {
+  const normalizedEmail = normalizeEmail(memberEmail);
+  if (!normalizedEmail) return null;
+  if (organizationId) {
+    return collection(db, 'organizations', organizationId, 'memberWallets', normalizedEmail, 'walletTransactions');
+  }
+  return collection(db, 'userRoles', normalizedEmail, 'walletTransactions');
+}
+
 function loadWalletMembers() {
   const container = document.getElementById('walletMember');
   if (!container) return;
@@ -1059,6 +1077,7 @@ window.adjustMemberWallet = async function (type) {
   const message = document.getElementById('walletAdjustmentMessage');
   const amount = Number(amountInput?.value);
   const description = descriptionInput?.value?.trim();
+  const activeOrganizationId = getActiveOrganizationId();
 
   if (!memberEmails.length || !Number.isFinite(amount) || amount <= 0 || !description) {
     if (message) { message.textContent = 'Choose at least one member, enter a positive amount, and provide a description.'; message.style.color = '#fca5a5'; }
@@ -1069,11 +1088,12 @@ window.adjustMemberWallet = async function (type) {
   try {
     const signedAmount = type === 'credit' ? amount : -amount;
     for (const memberEmail of memberEmails) {
-      const memberRef = doc(db, 'userRoles', memberEmail);
-      const transactionRef = doc(collection(db, 'userRoles', memberEmail, 'walletTransactions'));
+      const memberRef = getOrganizationWalletDocRef(memberEmail, activeOrganizationId);
+      const transactionRef = doc(getOrganizationWalletTransactionCollection(memberEmail, activeOrganizationId));
       await runTransaction(db, async (transaction) => {
         const memberSnapshot = await transaction.get(memberRef);
-        const currentBalance = Number(memberSnapshot.data()?.walletBalance) || 0;
+        const legacySnapshot = activeOrganizationId ? await transaction.get(doc(db, 'userRoles', memberEmail)) : null;
+        const currentBalance = Number(memberSnapshot.data()?.walletBalance) || Number(legacySnapshot?.data()?.walletBalance) || 0;
         const nextBalance = currentBalance + signedAmount;
         transaction.set(memberRef, { walletBalance: nextBalance, updatedAt: serverTimestamp() }, { merge: true });
         transaction.set(transactionRef, { type, amount, description, performedBy: adminEmail || 'Administrator', createdAt: serverTimestamp(), balanceAfter: nextBalance });
@@ -1090,10 +1110,12 @@ window.adjustMemberWallet = async function (type) {
 
 window.deleteWalletHistory = async function (memberEmail) {
   const normalizedEmail = normalizeEmail(memberEmail);
+  const activeOrganizationId = getActiveOrganizationId();
   if (!normalizedEmail || !confirm(`Delete all wallet transaction history for ${normalizedEmail}? The current balance will not change.`)) return;
 
   try {
-    const snapshot = await getDocs(collection(db, 'userRoles', normalizedEmail, 'walletTransactions'));
+    const walletTransactionsCollection = getOrganizationWalletTransactionCollection(normalizedEmail, activeOrganizationId);
+    const snapshot = await getDocs(walletTransactionsCollection);
     for (let index = 0; index < snapshot.docs.length; index += 500) {
       const batch = writeBatch(db);
       snapshot.docs.slice(index, index + 500).forEach(transactionDoc => batch.delete(transactionDoc.ref));
@@ -1108,16 +1130,18 @@ window.deleteWalletHistory = async function (memberEmail) {
 
 window.resetMemberWallet = async function (memberEmail) {
   const normalizedEmail = normalizeEmail(memberEmail);
+  const activeOrganizationId = getActiveOrganizationId();
   if (!normalizedEmail || !confirm(`Reset the wallet for ${normalizedEmail}? This deletes all transaction history and sets the balance to 0.00.`)) return;
 
   try {
-    const historySnapshot = await getDocs(collection(db, 'userRoles', normalizedEmail, 'walletTransactions'));
+    const walletTransactionsCollection = getOrganizationWalletTransactionCollection(normalizedEmail, activeOrganizationId);
+    const historySnapshot = await getDocs(walletTransactionsCollection);
     for (let index = 0; index < historySnapshot.docs.length; index += 500) {
       const batch = writeBatch(db);
       historySnapshot.docs.slice(index, index + 500).forEach(transactionDoc => batch.delete(transactionDoc.ref));
       await batch.commit();
     }
-    await setDoc(doc(db, 'userRoles', normalizedEmail), { walletBalance: 0, updatedAt: serverTimestamp() }, { merge: true });
+    await setDoc(getOrganizationWalletDocRef(normalizedEmail, activeOrganizationId), { walletBalance: 0, updatedAt: serverTimestamp() }, { merge: true });
     alert(`Wallet reset for ${normalizedEmail}.`);
   } catch (error) {
     console.error('Wallet reset failed:', error);
@@ -1442,6 +1466,12 @@ async function loadMemberRoles() {
     const snapshot = await getDocs(collection(db, "userRoles"));
     const activeOrganization = managedOrganizations.find((organization) => organization.id === getActiveOrganizationId());
     const organizationMembers = new Set((activeOrganization?.memberEmails || []).map(normalizeEmail));
+    const organizationWalletBalances = activeOrganization ? await getDocs(collection(db, 'organizations', activeOrganization.id, 'memberWallets')).then((walletSnapshot) => {
+      const balances = new Map();
+      walletSnapshot.forEach((walletDoc) => balances.set(normalizeEmail(walletDoc.id), Number(walletDoc.data()?.walletBalance) || 0));
+      return balances;
+    }) : new Map();
+
     members.splice(0, members.length, { uid: 'everyone', name: 'Everyone' });
     const seen = new Set();
     snapshot.forEach((docSnap) => {
@@ -1458,7 +1488,7 @@ async function loadMemberRoles() {
       }
 
       if (typeof data.role === 'string' && data.role) member.role = data.role;
-      member.walletBalance = Number(data.walletBalance) || 0;
+      member.walletBalance = organizationWalletBalances.has(docId) ? organizationWalletBalances.get(docId) : (Number(data.walletBalance) || 0);
       member.accessAllowed = typeof data.accessAllowed === 'boolean' ? data.accessAllowed : member.accessAllowed;
       member.accessReason = typeof data.accessReason === 'string' ? data.accessReason : member.accessReason;
       member.profilePicture = typeof data.profilePicture === 'string' ? data.profilePicture : null;
@@ -1485,9 +1515,15 @@ function subscribeToMemberRoles() {
     userRolesUnsubscribe = null;
   }
 
-  userRolesUnsubscribe = onSnapshot(collection(db, "userRoles"), (snapshot) => {
+  userRolesUnsubscribe = onSnapshot(collection(db, "userRoles"), async (snapshot) => {
     const activeOrganization = managedOrganizations.find((organization) => organization.id === getActiveOrganizationId());
     const organizationMembers = new Set((activeOrganization?.memberEmails || []).map(normalizeEmail));
+    const organizationWalletBalances = activeOrganization ? await getDocs(collection(db, 'organizations', activeOrganization.id, 'memberWallets')).then((walletSnapshot) => {
+      const balances = new Map();
+      walletSnapshot.forEach((walletDoc) => balances.set(normalizeEmail(walletDoc.id), Number(walletDoc.data()?.walletBalance) || 0));
+      return balances;
+    }) : new Map();
+
     members.splice(0, members.length, { uid: 'everyone', name: 'Everyone' });
     const seen = new Set();
     snapshot.forEach((docSnap) => {
@@ -1507,7 +1543,7 @@ function subscribeToMemberRoles() {
       }
 
       if (typeof data.role === 'string' && data.role) member.role = data.role;
-      member.walletBalance = Number(data.walletBalance) || 0;
+      member.walletBalance = organizationWalletBalances.has(docId) ? organizationWalletBalances.get(docId) : (Number(data.walletBalance) || 0);
       member.accessAllowed = typeof data.accessAllowed === 'boolean' ? data.accessAllowed : member.accessAllowed;
       member.accessReason = typeof data.accessReason === 'string' ? data.accessReason : member.accessReason;
       member.profilePicture = typeof data.profilePicture === 'string' ? data.profilePicture : null;

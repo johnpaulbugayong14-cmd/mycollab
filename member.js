@@ -2509,6 +2509,26 @@ function watchMemberAccessState() {
   });
 }
 
+function getMemberWalletDocRef(email, organizationId = activeMemberOrganization?.id || getActiveOrganizationId()) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+  const targetOrganizationId = organizationId || activeMemberOrganization?.id || getActiveOrganizationId();
+  if (targetOrganizationId) {
+    return doc(db, 'organizations', targetOrganizationId, 'memberWallets', normalizedEmail);
+  }
+  return doc(db, 'userRoles', normalizedEmail);
+}
+
+function getMemberWalletTransactionCollection(email, organizationId = activeMemberOrganization?.id || getActiveOrganizationId()) {
+  const normalizedEmail = normalizeEmail(email);
+  const targetOrganizationId = organizationId || activeMemberOrganization?.id || getActiveOrganizationId();
+  if (!normalizedEmail) return null;
+  if (targetOrganizationId) {
+    return collection(db, 'organizations', targetOrganizationId, 'memberWallets', normalizedEmail, 'walletTransactions');
+  }
+  return collection(db, 'userRoles', normalizedEmail, 'walletTransactions');
+}
+
 function formatWalletDate(value) {
   const date = value?.toDate ? value.toDate() : new Date(value);
   return Number.isNaN(date.getTime()) ? 'Unknown date' : date.toLocaleString();
@@ -2536,8 +2556,20 @@ function watchMemberWallet() {
   walletUnsubscribe?.();
   walletTransactionsUnsubscribe?.();
   const normalizedEmail = normalizeEmail(userEmail);
-  walletUnsubscribe = onSnapshot(doc(db, 'userRoles', normalizedEmail), (snapshot) => {
-    const balance = Number(snapshot.data()?.walletBalance) || 0;
+  const walletDocRef = getMemberWalletDocRef(normalizedEmail);
+  walletUnsubscribe = onSnapshot(walletDocRef, async (snapshot) => {
+    let balance = Number(snapshot.data()?.walletBalance) || 0;
+    if (!snapshot.exists() && walletDocRef?.path?.startsWith('organizations/')) {
+      try {
+        const legacySnapshot = await getDoc(doc(db, 'userRoles', normalizedEmail));
+        balance = Number(legacySnapshot.data()?.walletBalance) || 0;
+        if (legacySnapshot.exists() && !snapshot.exists()) {
+          await setDoc(walletDocRef, { walletBalance: balance, updatedAt: serverTimestamp() }, { merge: true });
+        }
+      } catch (error) {
+        console.warn('Unable to reconcile organization wallet with legacy profile wallet:', error);
+      }
+    }
     memberWalletBalance = balance;
     const balanceEl = document.getElementById('memberWalletBalance');
     if (balanceEl) {
@@ -2548,14 +2580,17 @@ function watchMemberWallet() {
       balanceEl.style.setProperty('-webkit-text-fill-color', balanceColor, 'important');
     }
   }, (error) => console.warn('Unable to watch wallet balance:', error));
-  const transactionsQuery = query(collection(db, 'userRoles', normalizedEmail, 'walletTransactions'), orderBy('createdAt', 'desc'));
-  walletTransactionsUnsubscribe = onSnapshot(transactionsQuery, (snapshot) => {
-    renderWalletHistory(snapshot.docs.map(transactionDoc => ({ id: transactionDoc.id, ...transactionDoc.data() })));
-  }, (error) => {
-    console.warn('Unable to watch wallet history:', error);
-    const history = document.getElementById('memberWalletHistory');
-    if (history) history.innerHTML = '<p style="color:#f87171; text-align:center;">Unable to load transaction history.</p>';
-  });
+  const walletTransactionsRef = getMemberWalletTransactionCollection(normalizedEmail);
+  const transactionsQuery = walletTransactionsRef ? query(walletTransactionsRef, orderBy('createdAt', 'desc')) : null;
+  if (transactionsQuery) {
+    walletTransactionsUnsubscribe = onSnapshot(transactionsQuery, (snapshot) => {
+      renderWalletHistory(snapshot.docs.map(transactionDoc => ({ id: transactionDoc.id, ...transactionDoc.data() })));
+    }, (error) => {
+      console.warn('Unable to watch wallet history:', error);
+      const history = document.getElementById('memberWalletHistory');
+      if (history) history.innerHTML = '<p style="color:#f87171; text-align:center;">Unable to load transaction history.</p>';
+    });
+  }
 }
 
 function initializeWithdrawalAction() {
@@ -2629,13 +2664,14 @@ async function submitWithdrawalRequest(event) {
     const title = `Withdrawal request - ${amount.toFixed(2)}`;
     const description = `Withdrawal amount: ${amount.toFixed(2)}\nAccount number: ${accountNumber}`;
     const normalizedEmail = normalizeEmail(userEmail);
-    const memberRef = doc(db, 'userRoles', normalizedEmail);
+    const memberRef = getMemberWalletDocRef(normalizedEmail, organizationId);
     const ticketRef = doc(collection(db, 'tickets'));
-    const walletTransactionRef = doc(collection(db, 'userRoles', normalizedEmail, 'walletTransactions'));
+    const walletTransactionRef = doc(getMemberWalletTransactionCollection(normalizedEmail, organizationId));
     let nextBalance = 0;
     await runTransaction(db, async (transaction) => {
       const memberSnapshot = await transaction.get(memberRef);
-      const currentBalance = Number(memberSnapshot.data()?.walletBalance) || 0;
+      const legacySnapshot = organizationId ? await transaction.get(doc(db, 'userRoles', normalizedEmail)) : null;
+      const currentBalance = Number(memberSnapshot.data()?.walletBalance) || Number(legacySnapshot?.data()?.walletBalance) || 0;
       if (currentBalance <= 0 || amount > currentBalance) {
         throw new Error('Insufficient balance.');
       }
