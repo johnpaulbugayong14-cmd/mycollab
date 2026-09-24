@@ -2513,20 +2513,15 @@ function getMemberWalletDocRef(email, organizationId = activeMemberOrganization?
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return null;
   const targetOrganizationId = organizationId || activeMemberOrganization?.id || getActiveOrganizationId();
-  if (targetOrganizationId) {
-    return doc(db, 'organizations', targetOrganizationId, 'memberWallets', normalizedEmail);
-  }
-  return doc(db, 'userRoles', normalizedEmail);
+  if (!targetOrganizationId) return null;
+  return doc(db, 'organizations', targetOrganizationId, 'memberWallets', normalizedEmail);
 }
 
 function getMemberWalletTransactionCollection(email, organizationId = activeMemberOrganization?.id || getActiveOrganizationId()) {
   const normalizedEmail = normalizeEmail(email);
   const targetOrganizationId = organizationId || activeMemberOrganization?.id || getActiveOrganizationId();
-  if (!normalizedEmail) return null;
-  if (targetOrganizationId) {
-    return collection(db, 'organizations', targetOrganizationId, 'memberWallets', normalizedEmail, 'walletTransactions');
-  }
-  return collection(db, 'userRoles', normalizedEmail, 'walletTransactions');
+  if (!normalizedEmail || !targetOrganizationId) return null;
+  return collection(db, 'organizations', targetOrganizationId, 'memberWallets', normalizedEmail, 'walletTransactions');
 }
 
 function formatWalletDate(value) {
@@ -2557,19 +2552,16 @@ function watchMemberWallet() {
   walletTransactionsUnsubscribe?.();
   const normalizedEmail = normalizeEmail(userEmail);
   const walletDocRef = getMemberWalletDocRef(normalizedEmail);
-  walletUnsubscribe = onSnapshot(walletDocRef, async (snapshot) => {
-    let balance = Number(snapshot.data()?.walletBalance) || 0;
-    if (!snapshot.exists() && walletDocRef?.path?.startsWith('organizations/')) {
-      try {
-        const legacySnapshot = await getDoc(doc(db, 'userRoles', normalizedEmail));
-        balance = Number(legacySnapshot.data()?.walletBalance) || 0;
-        if (legacySnapshot.exists() && !snapshot.exists()) {
-          await setDoc(walletDocRef, { walletBalance: balance, updatedAt: serverTimestamp() }, { merge: true });
-        }
-      } catch (error) {
-        console.warn('Unable to reconcile organization wallet with legacy profile wallet:', error);
-      }
-    }
+  if (!walletDocRef) {
+    memberWalletBalance = 0;
+    renderWalletHistory([]);
+    return;
+  }
+  let walletTransactionsLoaded = false;
+  let walletHasTransactions = false;
+  let latestWalletDocumentBalance = 0;
+  const renderWalletBalance = () => {
+    const balance = walletTransactionsLoaded && !walletHasTransactions ? 0 : latestWalletDocumentBalance;
     memberWalletBalance = balance;
     const balanceEl = document.getElementById('memberWalletBalance');
     if (balanceEl) {
@@ -2579,11 +2571,18 @@ function watchMemberWallet() {
       balanceEl.style.setProperty('color', balanceColor, 'important');
       balanceEl.style.setProperty('-webkit-text-fill-color', balanceColor, 'important');
     }
+  };
+  walletUnsubscribe = onSnapshot(walletDocRef, async (snapshot) => {
+    latestWalletDocumentBalance = Number(snapshot.data()?.walletBalance) || 0;
+    renderWalletBalance();
   }, (error) => console.warn('Unable to watch wallet balance:', error));
   const walletTransactionsRef = getMemberWalletTransactionCollection(normalizedEmail);
   const transactionsQuery = walletTransactionsRef ? query(walletTransactionsRef, orderBy('createdAt', 'desc')) : null;
   if (transactionsQuery) {
     walletTransactionsUnsubscribe = onSnapshot(transactionsQuery, (snapshot) => {
+      walletTransactionsLoaded = true;
+      walletHasTransactions = !snapshot.empty;
+      renderWalletBalance();
       renderWalletHistory(snapshot.docs.map(transactionDoc => ({ id: transactionDoc.id, ...transactionDoc.data() })));
     }, (error) => {
       console.warn('Unable to watch wallet history:', error);
@@ -2670,8 +2669,7 @@ async function submitWithdrawalRequest(event) {
     let nextBalance = 0;
     await runTransaction(db, async (transaction) => {
       const memberSnapshot = await transaction.get(memberRef);
-      const legacySnapshot = organizationId ? await transaction.get(doc(db, 'userRoles', normalizedEmail)) : null;
-      const currentBalance = Number(memberSnapshot.data()?.walletBalance) || Number(legacySnapshot?.data()?.walletBalance) || 0;
+      const currentBalance = Number(memberSnapshot.data()?.walletBalance) || 0;
       if (currentBalance <= 0 || amount > currentBalance) {
         throw new Error('Insufficient balance.');
       }

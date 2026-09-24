@@ -35,8 +35,8 @@
     },
     {
       "path": "admin.js",
-      "size": 193661,
-      "sha256": "e6c0148e40c15e05dacb28d105df0d62489ac2b20af6edd86a228a0425cb29bc"
+      "size": 193709,
+      "sha256": "0ebd8605bfb017b082f6b98e6320ea388093054690d77da68deabf7b17dbc6f8"
     },
     {
       "path": "auth.js",
@@ -85,8 +85,8 @@
     },
     {
       "path": "firestore.rules",
-      "size": 8774,
-      "sha256": "5f93488ed80b14db79b9c67be9166750b77ed13abf4619a6014df8a070eee9ef"
+      "size": 9109,
+      "sha256": "114ce5960181bab4a0706c3f9a12c6fab6da4f0256de9c38107244bd3ee1c3ca"
     },
     {
       "path": "github-email-trigger.js",
@@ -115,8 +115,8 @@
     },
     {
       "path": "member.js",
-      "size": 210210,
-      "sha256": "3463e8287f1e2776da0fae31852b0f25d349a29c363ce2ffccaa70c47b9b7e2d"
+      "size": 209865,
+      "sha256": "295163bfe5d3d1c33e4d1b17ece18484a426550a744804d1c4cf82195636fab5"
     },
     {
       "path": "myspace.html",
