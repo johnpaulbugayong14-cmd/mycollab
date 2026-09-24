@@ -6,7 +6,7 @@ const members = [
   { uid: "everyone", name: "Everyone" }
 ];
 
-const mentionUsers = [];
+const mentionUsers = [{ uid: 'everyone', name: 'Everyone' }];
 
 let selectedChatId = null;
 let chatMessagesUnsubscribe = null;
@@ -182,12 +182,13 @@ function ensureMemberEntry(email, fallbackName = null) {
 }
 
 function syncMentionUsers() {
-  mentionUsers.splice(0, mentionUsers.length, ...members.filter(member => !isHiddenMember(member)));
+  const everyone = members.find(member => normalizeEmail(member.uid) === 'everyone') || { uid: 'everyone', name: 'Everyone' };
+  mentionUsers.splice(0, mentionUsers.length, everyone, ...members.filter(member => !isHiddenMember(member)));
 }
 
 function resetMemberCatalog() {
   members.splice(0, members.length, { uid: 'everyone', name: 'Everyone' });
-  mentionUsers.splice(0, mentionUsers.length);
+  mentionUsers.splice(0, mentionUsers.length, members[0]);
 }
 
 function isTrackedAuthMember(data = {}) {
@@ -249,6 +250,14 @@ function showError(message) {
 
 function formatMessageWithMentions(text) {
   return text.replace(/@\[([^\]]+)\]/g, '<span class="mention">@$1</span>');
+}
+
+function formatMessageWithLinks(text) {
+  return text.replace(/(https?:\/\/[^\s<]+)/gi, (match) => {
+    const trailingPunctuation = match.match(/[.,!?;:)\]}]+$/)?.[0] || '';
+    const url = trailingPunctuation ? match.slice(0, -trailingPunctuation.length) : match;
+    return `<a class="chat-link" href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${trailingPunctuation}`;
+  });
 }
 
 function getMentionContext(input) {
@@ -595,7 +604,7 @@ function renderChatMessages(messages) {
     const timestamp = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
     const messageText = msg.deleted ? 'This message was unsent.' : msg.text || '';
     const safeText = escapeHtml(messageText);
-    const renderedText = msg.deleted ? safeText : formatMessageWithMentions(safeText);
+    const renderedText = msg.deleted ? safeText : formatMessageWithLinks(formatMessageWithMentions(safeText));
     const imageMarkup = !msg.deleted && msg.imageData ? `<div style="margin: 0.35rem 0;"><img class="chat-image" src="${escapeHtml(msg.imageData)}" alt="Chat image" loading="lazy" /></div>` : '';
     const replyQuote = msg.replyTo ? `
       <div class="chat-reply-quote">
@@ -734,7 +743,7 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
     const timestamp = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
     const messageText = msg.deleted ? 'This message was unsent.' : msg.text || '';
     const highlightedText = msg.deleted ? messageText : highlightSearchTerms(messageText, searchQuery);
-    const renderedText = msg.deleted ? messageText : formatMessageWithMentions(highlightedText);
+    const renderedText = msg.deleted ? messageText : formatMessageWithLinks(formatMessageWithMentions(highlightedText));
     const imageMarkup = !msg.deleted && msg.imageData ? `<div style="margin: 0.35rem 0;"><img class="chat-image" src="${escapeHtml(msg.imageData)}" alt="Chat image" loading="lazy" /></div>` : '';
     const replyQuote = msg.replyTo ? `
       <div class="chat-reply-quote">

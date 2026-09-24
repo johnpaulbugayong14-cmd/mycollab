@@ -3908,9 +3908,11 @@ function insertMentionAtCursor(input, dropdown, name) {
 async function findPendingSurvey(email) {
     const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail) return null;
+    const organizationId = activeMemberOrganization?.id;
+    if (!organizationId) return null;
 
     try {
-      const snapshot = await getDocs(collection(db, 'surveys'));
+      const snapshot = await getDocs(query(collection(db, 'surveys'), where('organizationId', '==', organizationId)));
       const surveys = snapshot.docs
         .map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
         .filter(survey => {
@@ -3937,7 +3939,8 @@ async function findPendingSurvey(email) {
 
 function watchRequiredSurveys(email) {
   if (surveyGateUnsubscribe) surveyGateUnsubscribe();
-  surveyGateUnsubscribe = onSnapshot(activeMemberOrganization?.id ? query(collection(db, 'surveys'), where('organizationId', '==', activeMemberOrganization.id)) : collection(db, 'surveys'), () => {
+  if (!activeMemberOrganization?.id) return;
+  surveyGateUnsubscribe = onSnapshot(query(collection(db, 'surveys'), where('organizationId', '==', activeMemberOrganization.id)), () => {
     void findPendingSurvey(email).then((pendingSurvey) => {
       if (!pendingSurvey || window.location.pathname.endsWith('survey.html')) return;
       window.location.replace(`survey.html?surveyId=${encodeURIComponent(pendingSurvey.id)}`);
@@ -4640,6 +4643,12 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     if (welcomeEl) welcomeEl.style.display = "none";
   } else {
     await loadMemberGradientTheme(userEmail);
+    const hasOrganization = await initializeMemberOrganization();
+    if (!hasOrganization) {
+      console.warn('No organization is assigned to this member; survey synchronization stopped.');
+      setMemberGlobalLoading(false);
+      return;
+    }
     watchRequiredSurveys(userEmail);
     const pendingSurvey = await findPendingSurvey(userEmail);
     if (pendingSurvey) {
@@ -4673,12 +4682,6 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     await displayMemberProfilePicture(userEmail);
     const hasProfilePicture = await requireMemberProfilePicture(userEmail);
     if (!hasProfilePicture) return;
-    const hasOrganization = await initializeMemberOrganization();
-    if (!hasOrganization) {
-      console.warn('No organization is assigned to this member; dashboard synchronization stopped.');
-      setMemberGlobalLoading(false);
-      return;
-    }
     setMemberGlobalLoading(false);
     loadResources();
     loadProgressReport();

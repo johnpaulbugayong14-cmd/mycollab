@@ -1,6 +1,7 @@
 import { collection, doc, getDoc, getDocs, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db } from "./firebase.js";
 import { requireAuth, getStoredUserEmail } from "./auth.js";
+import { getActiveOrganizationId } from "./organizations.js";
 
 let currentSurvey = null;
 let currentEmail = null;
@@ -65,8 +66,16 @@ function renderSurvey(survey) {
   title.textContent = survey.title || 'Survey';
   description.textContent = survey.description || '';
   const questionMarkup = (Array.isArray(survey.questions) ? survey.questions : []).map((question, index) => {
-    const questionText = escapeHtml(question);
-    if (survey.mode === 'likert') {
+    const questionTextValue = typeof question === 'string' ? question : question?.text || '';
+    const questionFormat = typeof question === 'string' ? (survey.mode || 'text') : (question?.format || survey.mode || 'text');
+    const questionOptions = Array.isArray(question?.options) ? question.options.filter(Boolean) : [];
+    const includeSuggestion = question?.includeSuggestion === true;
+    const questionText = escapeHtml(questionTextValue);
+    const suggestionField = includeSuggestion ? `
+      <label for="suggestion-${index}" style="display:block; margin-top:0.75rem;">Optional suggestion</label>
+      <textarea id="suggestion-${index}" name="suggestion-${index}" rows="3" class="survey-suggestion-box" placeholder="Share a suggestion for this question"></textarea>
+    ` : '';
+    if (questionFormat === 'likert') {
       return `
         <fieldset class="survey-question">
           <div class="survey-question-prompt">${index + 1}. ${questionText}</div>
@@ -78,7 +87,23 @@ function renderSurvey(survey) {
               </label>
             `).join('')}
           </div>
-          <div style="display:flex; justify-content:space-between; color:#94a3b8; font-size:0.75rem; margin-top:0.35rem;"><span>Strongly disagree</span><span>Strongly agree</span></div>
+          <div style="display:flex; justify-content:space-between; color:#94a3b8; font-size:0.75rem; margin-top:0.35rem;"><span>Strongly disagree</span><span>Strongly agree</span></div>${suggestionField}
+        </fieldset>
+      `;
+    }
+
+    if (questionFormat === 'multiple-choice') {
+      return `
+        <fieldset class="survey-question">
+          <div class="survey-question-prompt">${index + 1}. ${questionText}</div>
+          <div class="multiple-choice-options">
+            ${questionOptions.map(option => `
+              <label>
+                <input type="radio" name="answer-${index}" value="${escapeHtml(option)}" required>
+                <span>${escapeHtml(option)}</span>
+              </label>
+            `).join('')}
+          </div>${suggestionField}
         </fieldset>
       `;
     }
@@ -87,6 +112,7 @@ function renderSurvey(survey) {
       <div class="survey-question">
         <label for="answer-${index}">${index + 1}. ${questionText}</label>
         <textarea id="answer-${index}" name="answer-${index}" rows="4" required placeholder="Enter your answer"></textarea>
+        ${suggestionField}
       </div>
     `;
   }).join('');
@@ -111,7 +137,14 @@ async function submitSurvey(event) {
   const form = event.currentTarget;
   const answers = (Array.isArray(currentSurvey.questions) ? currentSurvey.questions : []).map((question, index) => {
     const value = form.elements[`answer-${index}`]?.value;
-    return { question, answer: currentSurvey.mode === 'likert' ? Number(value) : String(value || '').trim() };
+    const questionText = typeof question === 'string' ? question : question?.text || '';
+    const questionFormat = typeof question === 'string' ? (currentSurvey.mode || 'text') : (question?.format || currentSurvey.mode || 'text');
+    return {
+      question: questionText,
+      format: questionFormat,
+      answer: questionFormat === 'likert' ? Number(value) : String(value || '').trim(),
+      suggestion: String(form.elements[`suggestion-${index}`]?.value || '').trim()
+    };
   });
   const suggestion = currentSurvey.includeSuggestion === true
     ? String(form.elements.surveySuggestion?.value || '').trim()
@@ -159,7 +192,10 @@ async function init() {
   }
 
   currentSurvey = { id: surveySnap.id, ...surveySnap.data() };
-  if (currentSurvey.active === false || !matchesTarget(currentSurvey, currentEmail)) {
+  const activeOrganizationId = getActiveOrganizationId();
+  if (currentSurvey.active === false
+    || currentSurvey.organizationId !== activeOrganizationId
+    || !matchesTarget(currentSurvey, currentEmail)) {
     showMessage('You are not assigned to this survey.', true);
     return;
   }

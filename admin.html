@@ -21,12 +21,63 @@
       gap: 0.9rem;
     }
     .survey-management-item {
-      padding: 1.1rem 1.2rem;
+      overflow: hidden;
       border: 1px solid #334155;
       border-left: 4px solid #3b82f6;
       border-radius: 0.7rem;
       background: rgba(15, 23, 42, 0.72);
       box-shadow: 0 8px 24px rgba(2, 6, 23, 0.18);
+    }
+    .survey-folder-summary {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1.1rem 1.2rem;
+      cursor: pointer;
+      list-style: none;
+    }
+    .survey-folder-summary::-webkit-details-marker { display: none; }
+    .survey-folder-summary::before {
+      content: '\f07b';
+      flex: 0 0 auto;
+      margin-top: 0.15rem;
+      color: #facc15;
+      font-family: 'Font Awesome 6 Free';
+      font-weight: 900;
+    }
+    .survey-folder-content {
+      padding: 0 1.2rem 1.1rem;
+      border-top: 1px solid rgba(71, 85, 105, 0.55);
+    }
+    .survey-response-folder {
+      margin-top: 0.65rem;
+      border: 1px solid rgba(71, 85, 105, 0.65);
+      border-radius: 0.5rem;
+      background: rgba(2, 6, 23, 0.42);
+      overflow: hidden;
+    }
+    .survey-response-folder summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.75rem 0.85rem;
+      cursor: pointer;
+      color: #e2e8f0;
+      list-style: none;
+    }
+    .survey-response-folder summary::-webkit-details-marker { display: none; }
+    .survey-response-folder summary::before {
+      content: '\f07c';
+      margin-right: 0.5rem;
+      color: #93c5fd;
+      font-family: 'Font Awesome 6 Free';
+      font-weight: 900;
+    }
+    .survey-response-content {
+      padding: 0.75rem 0.85rem;
+      border-top: 1px solid rgba(71, 85, 105, 0.55);
     }
     .survey-management-header {
       display: flex;
@@ -282,19 +333,13 @@
                 <textarea id="surveyDescription" rows="3" placeholder="Tell members what this survey is about" style="white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; line-height:1.6; resize:vertical;"></textarea>
             </div>
             <div class="form-group">
-              <label for="surveyMode">Answer format</label>
+              <label for="surveyMode">Default answer format</label>
               <select id="surveyMode" required onchange="updateSurveyFormatPreview()">
                 <option value="text">Text box per question</option>
                 <option value="likert">Likert scale (1 to 5)</option>
+                <option value="multiple-choice">Multiple choice</option>
               </select>
               <div id="surveyFormatPreview" style="margin-top: 0.75rem; padding: 0.85rem 1rem; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 0.5rem; background: rgba(59, 130, 246, 0.08); color: #cbd5e1;"></div>
-            </div>
-            <div class="form-group">
-              <label style="display:flex; align-items:center; gap:0.5rem;">
-                <input id="surveyIncludeSuggestion" type="checkbox" onchange="updateSurveyFormatPreview()" style="width:auto; margin:0;">
-                Include optional suggestion box
-              </label>
-              <p style="font-size:0.85rem; color:#94a3b8; margin-top:0.35rem;">Members may share an additional recommendation before submitting.</p>
             </div>
             <div class="form-group">
               <label>Questions</label>

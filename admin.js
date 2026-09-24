@@ -1179,6 +1179,15 @@ window.updateSurveyFormatPreview = function () {
     return;
   }
 
+  if (mode === 'multiple-choice') {
+    preview.innerHTML = `
+      <strong style="display:block; margin-bottom:0.5rem; color:#f8fafc;">Member response preview</strong>
+      <label style="display:block; margin:0.4rem 0; color:#e2e8f0;"><input type="radio" disabled> Option 1</label>
+      <label style="display:block; margin:0.4rem 0; color:#e2e8f0;"><input type="radio" disabled> Option 2</label>${suggestionPreview}
+    `;
+    return;
+  }
+
   preview.innerHTML = `
     <strong style="display:block; margin-bottom:0.5rem; color:#f8fafc;">Member response preview</strong>
     <textarea rows="3" disabled placeholder="Member types an answer here" style="width:100%; box-sizing:border-box; background:#0f172a; color:#cbd5e1; border:1px solid #64748b; border-radius:0.375rem; padding:0.65rem;"></textarea>${suggestionPreview}
@@ -1192,26 +1201,73 @@ window.addSurveyQuestion = function () {
   const row = document.createElement('div');
   row.className = 'survey-question-row';
   row.style.cssText = 'display:grid; grid-template-columns:2rem minmax(0, 1fr) auto; gap:0.5rem; align-items:start;';
+  const defaultFormat = document.getElementById('surveyMode')?.value || 'text';
   row.innerHTML = `
     <span style="color:#94a3b8; min-width:1.5rem; padding-top:0.7rem;">${surveyQuestionIndex}.</span>
-    <textarea class="survey-question-input" rows="3" placeholder="Enter a survey question" required style="width:100%; min-width:0; min-height:4.5rem; padding:0.75rem 1rem; line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; resize:vertical;"></textarea>
+    <div style="min-width:0; display:grid; gap:0.5rem;">
+      <textarea class="survey-question-input" rows="3" placeholder="Enter a survey question" required style="width:100%; min-width:0; min-height:4.5rem; padding:0.75rem 1rem; line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; resize:vertical;"></textarea>
+      <select class="survey-question-format" onchange="updateSurveyQuestionFormat(this)" style="width:100%; margin:0;">
+        <option value="text" ${defaultFormat === 'text' ? 'selected' : ''}>Text box</option>
+        <option value="likert" ${defaultFormat === 'likert' ? 'selected' : ''}>Likert scale (1 to 5)</option>
+        <option value="multiple-choice" ${defaultFormat === 'multiple-choice' ? 'selected' : ''}>Multiple choice</option>
+      </select>
+      <label style="display:flex; align-items:center; gap:0.5rem; color:#cbd5e1; font-size:0.85rem;">
+        <input class="survey-question-suggestion" type="checkbox" style="width:auto; margin:0;">
+        Include optional suggestion box for this question
+      </label>
+      <div class="survey-question-options" style="display:${defaultFormat === 'multiple-choice' ? 'grid' : 'none'}; gap:0.4rem;">
+        <input class="survey-choice-input" type="text" placeholder="Choice 1" style="width:100%; margin:0;">
+        <input class="survey-choice-input" type="text" placeholder="Choice 2" style="width:100%; margin:0;">
+        <button type="button" onclick="addSurveyChoice(this)" style="width:fit-content; background:#475569; color:white; border:none; padding:0.45rem 0.7rem; border-radius:0.375rem; cursor:pointer;"><i class="fas fa-plus"></i> Add choice</button>
+      </div>
+    </div>
     <button type="button" aria-label="Remove question" onclick="this.closest('.survey-question-row').remove()" style="width:auto; min-width:2.5rem; flex:0 0 auto; background:#ef4444; color:white; border:none; padding:0.55rem 0.7rem; border-radius:0.375rem; cursor:pointer;"><i class="fas fa-trash"></i></button>
   `;
   container.appendChild(row);
+};
+
+window.updateSurveyQuestionFormat = function (select) {
+  const options = select.closest('.survey-question-row')?.querySelector('.survey-question-options');
+  if (options) options.style.display = select.value === 'multiple-choice' ? 'grid' : 'none';
+};
+
+window.addSurveyChoice = function (button) {
+  const options = button.closest('.survey-question-options');
+  if (!options) return;
+  const choiceCount = options.querySelectorAll('.survey-choice-input').length + 1;
+  const input = document.createElement('input');
+  input.className = 'survey-choice-input';
+  input.type = 'text';
+  input.placeholder = `Choice ${choiceCount}`;
+  input.style.cssText = 'width:100%; margin:0;';
+  options.insertBefore(input, button);
 };
 
 window.createSurvey = async function () {
   const title = document.getElementById('surveyTitle')?.value.trim();
   const description = document.getElementById('surveyDescription')?.value.trim() || '';
   const mode = document.getElementById('surveyMode')?.value;
-  const includeSuggestion = document.getElementById('surveyIncludeSuggestion')?.checked === true;
   const targetEmails = [...document.querySelectorAll('.survey-assign-checkbox:checked')].map(input => input.value);
-  const questions = [...document.querySelectorAll('.survey-question-input')]
-    .map(input => input.value.trim())
-    .filter(Boolean);
+  const questions = [...document.querySelectorAll('.survey-question-row')]
+    .map(row => {
+      const text = row.querySelector('.survey-question-input')?.value.trim() || '';
+      const format = row.querySelector('.survey-question-format')?.value || mode || 'text';
+      const options = [...row.querySelectorAll('.survey-choice-input')]
+        .map(input => input.value.trim())
+        .filter(Boolean);
+      const includeSuggestion = row.querySelector('.survey-question-suggestion')?.checked === true;
+      return { text, format, options, includeSuggestion };
+    })
+    .filter(question => question.text);
+
+  const invalidMultipleChoice = questions.some(question => question.format === 'multiple-choice' && question.options.length < 2);
 
   if (!title || questions.length === 0 || targetEmails.length === 0) {
     alert('Add a title, at least one question, and at least one target member.');
+    return;
+  }
+  if (invalidMultipleChoice) {
+    alert('Each multiple-choice question needs at least two choices, one per line.');
     return;
   }
 
@@ -1221,7 +1277,7 @@ window.createSurvey = async function () {
       title,
       description,
       mode: mode === 'likert' ? 'likert' : 'text',
-      includeSuggestion,
+      includeSuggestion: false,
       questions,
       targetEmails,
       targetNames,
@@ -1236,7 +1292,6 @@ window.createSurvey = async function () {
 
     document.getElementById('surveyTitle').value = '';
     document.getElementById('surveyDescription').value = '';
-    document.getElementById('surveyIncludeSuggestion').checked = false;
     document.querySelectorAll('.survey-assign-checkbox').forEach(input => input.checked = false);
     document.getElementById('surveyQuestions').innerHTML = '';
     surveyQuestionIndex = 0;
@@ -1268,19 +1323,22 @@ window.viewSurveyResponses = async function (surveyId) {
 
     const responses = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
     container.innerHTML = responses.map((response) => `
-      <div style="margin-top:0.75rem; padding:0.85rem; border:1px solid #374151; border-radius:0.5rem; background:#0f172a;">
-        <div style="display:flex; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; margin-bottom:0.5rem;">
-          <strong style="color:#f8fafc;">${escapeHtml(getUserName(response.memberEmail || response.id))}</strong>
+      <details class="survey-response-folder">
+        <summary>
+          <strong>${escapeHtml(getUserName(response.memberEmail || response.id))}</strong>
           <span style="color:#94a3b8; font-size:0.8rem;">${escapeHtml(formatSurveyDate(response.submittedAt))}</span>
-        </div>
+        </summary>
+        <div class="survey-response-content">
         ${(Array.isArray(response.answers) ? response.answers : []).map((answer, index) => `
           <div style="margin-top:0.5rem; color:#cbd5e1;">
             <div style="font-weight:600; color:#e2e8f0;">${index + 1}. ${escapeHtml(answer.question)}</div>
             <div style="margin-top:0.2rem; white-space:pre-wrap;">${escapeHtml(answer.answer)}</div>
+            ${answer.suggestion ? `<div style="margin-top:0.35rem; color:#fbbf24; white-space:pre-wrap;"><strong>Suggestion:</strong> ${escapeHtml(answer.suggestion)}</div>` : ''}
           </div>
         `).join('')}
         ${response.suggestion ? `<div style="display:block; margin-top:0.75rem; padding-top:0.65rem; border-top:1px solid #374151; color:#cbd5e1;"><strong style="display:block; color:#fbbf24;">Suggestion:</strong><div style="display:block; margin-top:0.35rem; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; line-height:1.6;">${escapeHtml(response.suggestion)}</div></div>` : ''}
-      </div>
+        </div>
+      </details>
     `).join('');
   } catch (error) {
     console.error('Unable to load survey responses:', error);
@@ -1328,23 +1386,34 @@ async function loadSurveyManagement() {
     }
 
     container.innerHTML = surveys.map((survey) => `
-      <article class="survey-management-item">
-        <div class="survey-management-header">
+      <details class="survey-management-item survey-folder" data-survey-id="${survey.id}">
+        <summary class="survey-folder-summary">
+          <div style="min-width:0; flex:1;">
+            <div class="survey-management-header">
           <div>
             <h3 class="survey-management-title">${escapeHtml(survey.title || 'Untitled survey')}</h3>
             <p class="survey-management-meta">${survey.mode === 'likert' ? 'Likert scale' : 'Text response'} · ${Array.isArray(survey.questions) ? survey.questions.length : 0} questions${survey.includeSuggestion === true ? ' · Optional suggestions' : ''}</p>
             <p class="survey-management-target"><strong>Target:</strong> ${escapeHtml((survey.targetNames || survey.targetEmails || []).join(', '))}</p>
           </div>
           <span style="padding:0.3rem 0.55rem; border-radius:999px; background:${survey.active === false ? 'rgba(148,163,184,0.16)' : 'rgba(16,185,129,0.14)'}; color:${survey.active === false ? '#cbd5e1' : '#6ee7b7'}; font-size:0.72rem; font-weight:700;">${survey.active === false ? 'Closed' : 'Active'}</span>
-        </div>
-        <p class="survey-management-meta">Created ${escapeHtml(formatSurveyDate(survey.createdAt))}</p>
+            </div>
+            <p class="survey-management-meta">Created ${escapeHtml(formatSurveyDate(survey.createdAt))}</p>
+          </div>
+        </summary>
+        <div class="survey-folder-content">
         <div class="survey-management-actions">
           <button type="button" onclick="viewSurveyResponses('${survey.id}')" style="background:#2563eb;"><i class="fas fa-comments"></i> View Feedback</button>
           <button type="button" onclick="deleteSurvey('${survey.id}', '${escapeHtml(survey.title || 'Untitled survey').replace(/'/g, '&#039;')}')" style="background:#b91c1c;"><i class="fas fa-trash"></i> Delete Survey</button>
         </div>
         <div id="survey-responses-${survey.id}" class="survey-feedback-list"></div>
-      </article>
+        </div>
+      </details>
     `).join('');
+    container.querySelectorAll('.survey-folder').forEach((folder) => {
+      folder.addEventListener('toggle', () => {
+        if (folder.open) window.viewSurveyResponses(folder.dataset.surveyId);
+      });
+    });
   }, (error) => {
     console.error('Survey management listener error:', error);
     container.innerHTML = '<p style="color:#fca5a5; text-align:center;">Unable to load surveys.</p>';
