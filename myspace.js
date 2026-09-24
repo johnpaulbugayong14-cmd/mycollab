@@ -40,7 +40,7 @@ function renderTasks() {
     return { ...task, deadline, category };
   }).sort((a, b) => ({ overdue: 0, today: 1, upcoming: 2 }[a.category] - ({ overdue: 0, today: 1, upcoming: 2 }[b.category]) || (a.deadline?.getTime() || Infinity) - (b.deadline?.getTime() || Infinity))).slice(0, 6);
   if (!tasks.length) { setContent('spaceTasks', emptyState('fa-check-circle', 'You are all caught up', 'No active tasks are assigned to you.')); return; }
-  setContent('spaceTasks', tasks.map((task) => `<button class="space-task-card" type="button" data-task-link="member.html#my-tasks"><span class="space-card-title"><i class="fas fa-clipboard-check"></i>${escapeHtml(task.title || task.name || 'Untitled task')}</span><span class="space-status ${task.category}">${task.category === 'overdue' ? 'Overdue' : task.category === 'today' ? 'Due today' : 'Upcoming'}${task.deadline ? ` · ${formatDate(task.deadline)}` : ''}</span><span class="space-card-meta"><i class="fas fa-building"></i>${escapeHtml(orgName(task.organizationId))}</span>${task.priority ? `<span class="space-card-meta"><i class="fas fa-flag"></i>${escapeHtml(task.priority)} priority</span>` : ''}</button>`).join('') + '<a class="space-link" href="member.html#my-tasks">View all tasks <i class="fas fa-arrow-right"></i></a>');
+  setContent('spaceTasks', tasks.map((task) => `<button class="space-task-card" type="button" data-organization-id="${escapeHtml(task.organizationId || '')}" data-task-link="member.html#my-tasks"><span class="space-card-title"><i class="fas fa-clipboard-check"></i>${escapeHtml(task.title || task.name || 'Untitled task')}</span><span class="space-status ${task.category}">${task.category === 'overdue' ? 'Overdue' : task.category === 'today' ? 'Due today' : 'Upcoming'}${task.deadline ? ` · ${formatDate(task.deadline)}` : ''}</span><span class="space-card-meta"><i class="fas fa-building"></i>${escapeHtml(orgName(task.organizationId))}</span>${task.priority ? `<span class="space-card-meta"><i class="fas fa-flag"></i>${escapeHtml(task.priority)} priority</span>` : ''}</button>`).join('') + '<a class="space-link" href="member.html#my-tasks">View all tasks <i class="fas fa-arrow-right"></i></a>');
   setText('taskSummary', `${tasks.length} active task${tasks.length === 1 ? '' : 's'}`);
 }
 
@@ -79,37 +79,50 @@ function renderActivity() { const items = [...state.docs.activity].sort((a, b) =
 
 function renderAll() { renderTasks(); renderSchedule(); renderProjects(); renderMessages(); renderProductivity(); renderFiles(); renderActivity(); }
 
-async function loadData() {
+let loadingOrganizationKey = '';
+let loadedOrganizationKey = '';
+
+async function loadData(force = false) {
   const ids = state.organizations.map((organization) => organization.id);
+  const organizationKey = ids.slice().sort().join('|');
+  if (!force && (loadingOrganizationKey === organizationKey || loadedOrganizationKey === organizationKey)) return;
+  loadingOrganizationKey = organizationKey;
   if (!ids.length) {
     state.docs = { tasks: [], events: [], meetings: [], resources: [], announcements: [], messages: [], activity: [] };
     renderAll();
+    loadedOrganizationKey = organizationKey;
+    loadingOrganizationKey = '';
     setSpaceGlobalLoading(false);
     return;
   }
-  const readCollection = async (name) => { const results = await Promise.all(ids.map(async (organizationId) => { const snapshot = await getDocs(query(collection(db, name), where('organizationId', '==', organizationId))); return snapshot.docs.map((item) => ({ id: item.id, ...item.data() })); })); return results.flat(); };
-  const [tasks, events, meetings, resources, notifications] = await Promise.all([readCollection('tasks'), readCollection('events'), readCollection('meetings'), readCollection('resources'), readCollection('inAppNotifications')]);
-  state.docs = { tasks, events, meetings, resources, announcements: [], messages: [], activity: notifications.filter((item) => !item.targetType || item.targetType === 'everyone' || (Array.isArray(item.assignedTo) && item.assignedTo.map(normalize).includes(normalize(state.email)))) };
-  renderAll();
+  try {
+    const readCollection = async (name) => { const results = await Promise.all(ids.map(async (organizationId) => { const snapshot = await getDocs(query(collection(db, name), where('organizationId', '==', organizationId))); return snapshot.docs.map((item) => ({ id: item.id, ...item.data() })); })); return results.flat(); };
+    const [tasks, events, meetings, resources, notifications] = await Promise.all([readCollection('tasks'), readCollection('events'), readCollection('meetings'), readCollection('resources'), readCollection('inAppNotifications')]);
+    state.docs = { tasks, events, meetings, resources, announcements: [], messages: [], activity: notifications.filter((item) => !item.targetType || item.targetType === 'everyone' || (Array.isArray(item.assignedTo) && item.assignedTo.map(normalize).includes(normalize(state.email)))) };
+    renderAll();
 
-  const messagesByOrganization = await Promise.all(ids.map(async (organizationId) => {
-    const rooms = await getDocs(query(collection(db, 'liveChats'), where('organizationId', '==', organizationId)));
-    return Promise.all(rooms.docs.map(async (room) => {
-      const roomMessages = await getDocs(query(collection(db, 'liveChats', room.id, 'messages'), orderBy('createdAt', 'desc'), limit(5)));
-      return roomMessages.docs.map((message) => ({ id: message.id, roomId: room.id, roomName: room.data()?.name || room.data()?.title || 'Live chat', ...message.data() }));
+    const messagesByOrganization = await Promise.all(ids.map(async (organizationId) => {
+      const rooms = await getDocs(query(collection(db, 'liveChats'), where('organizationId', '==', organizationId)));
+      return Promise.all(rooms.docs.map(async (room) => {
+        const roomMessages = await getDocs(query(collection(db, 'liveChats', room.id, 'messages'), orderBy('createdAt', 'desc'), limit(5)));
+        return roomMessages.docs.map((message) => ({ id: message.id, roomId: room.id, roomName: room.data()?.name || room.data()?.title || 'Live chat', ...message.data() }));
+      }));
     }));
-  }));
-  const messages = messagesByOrganization.flat(2);
-  state.docs.messages = messages;
-  renderMessages();
-  setSpaceGlobalLoading(false);
+    const messages = messagesByOrganization.flat(2);
+    state.docs.messages = messages;
+    renderMessages();
+    loadedOrganizationKey = organizationKey;
+    setSpaceGlobalLoading(false);
+  } finally {
+    if (loadingOrganizationKey === organizationKey) loadingOrganizationKey = '';
+  }
 }
 
 let liveRefreshTimer;
 function scheduleLiveRefresh() {
   clearTimeout(liveRefreshTimer);
   liveRefreshTimer = setTimeout(() => {
-    void loadData().catch((error) => setText('spaceError', error.message));
+    void loadData(true).catch((error) => setText('spaceError', error.message));
   }, 150);
 }
 
@@ -156,7 +169,7 @@ function subscribeLive() {
           if (name === 'liveChats') {
             clearTimeout(liveRefreshTimer);
             liveRefreshTimer = setTimeout(() => {
-              void loadData().then(() => subscribeLive()).catch((error) => setText('spaceError', error.message));
+              void loadData(true).then(() => subscribeLive()).catch((error) => setText('spaceError', error.message));
             }, 150);
             return;
           }

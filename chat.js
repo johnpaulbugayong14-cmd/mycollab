@@ -1129,8 +1129,7 @@ function compressImage(dataUrl, maxSizeKB = 500) {
   });
 }
 
-function handleChatImageInputChange(event) {
-  const file = event.target.files?.[0];
+async function processChatImageFile(file, fallbackName = 'pasted-image.png') {
   if (!file) {
     selectedChatImageData = null;
     selectedChatImageName = null;
@@ -1158,7 +1157,7 @@ function handleChatImageInputChange(event) {
     try {
       const compressedData = await compressImage(reader.result, 500);
       selectedChatImageData = compressedData;
-      selectedChatImageName = file.name;
+      selectedChatImageName = file.name || fallbackName;
       updateChatImagePreview();
       clearError();
     } catch (error) {
@@ -1170,6 +1169,22 @@ function handleChatImageInputChange(event) {
     showError('Failed to read the image file.');
   };
   reader.readAsDataURL(file);
+}
+
+function handleChatImageInputChange(event) {
+  void processChatImageFile(event.target.files?.[0]);
+}
+
+function handleChatImagePaste(event) {
+  const items = [...(event.clipboardData?.items || [])];
+  const imageItem = items.find((item) => item.kind === 'file' && item.type.startsWith('image/'));
+  if (!imageItem) return;
+
+  const file = imageItem.getAsFile();
+  if (!file) return;
+
+  event.preventDefault();
+  void processChatImageFile(file);
 }
 
 async function subscribeChatMessages(chatId) {
@@ -1369,6 +1384,7 @@ async function init() {
   setupBackButton(from);
   document.getElementById('attachImageButton')?.addEventListener('click', triggerChatImageInput);
   document.getElementById('chatImageInput')?.addEventListener('change', handleChatImageInputChange);
+  document.getElementById('chatMessageInput')?.addEventListener('paste', handleChatImagePaste);
   document.getElementById('chatMessageForm')?.addEventListener('submit', sendChatMessage);
   document.getElementById('cancelReplyButton')?.addEventListener('click', cancelReply);
   setupMentionAutocomplete('chatMessageInput', 'chatMentionDropdown');

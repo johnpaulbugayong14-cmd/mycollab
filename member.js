@@ -1458,7 +1458,12 @@ function renderMemberTasks(snapshot) {
         : status === 'needs action' || status === 'needs_action'
           ? 'status-needs-action'
           : 'status-pending';
-    const displayStatus = status === 'pending validation' ? 'pending' : status;
+    const displayStatus = status;
+    const taskLink = task.linkURL
+      ? status === 'pending validation'
+        ? '<span class="task-link-disabled" aria-disabled="true">Open task link</span>'
+        : `<a href="${escapeHtml(task.linkURL)}" target="_blank" rel="noopener">Open task link</a>`
+      : '';
     return `
       <div class="task-item">
         <div class="task-header">
@@ -1468,7 +1473,7 @@ function renderMemberTasks(snapshot) {
         <p class="task-description">${escapeHtml(task.description || '')}</p>
         <div class="task-meta"><i class="fas fa-calendar-alt" aria-hidden="true"></i> ${escapeHtml(deadline)}</div>
         <div class="task-actions">
-          ${task.linkURL ? `<a href="${escapeHtml(task.linkURL)}" target="_blank" rel="noopener">Open task link</a>` : ''}
+          ${taskLink}
           <button type="button" class="${status === 'pending validation' ? 'task-submitted' : ''}" ${status === 'pending validation' ? 'disabled' : `onclick="markDone('${escapeHtml(task.id)}')"`}>${status === 'pending validation' ? 'Already Submitted' : 'Submit task'}</button>
         </div>
         ${renderTaskFeedback(task)}
