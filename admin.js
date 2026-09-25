@@ -1352,31 +1352,57 @@ window.viewSurveyResponses = async function (surveyId) {
   container.innerHTML = '<p style="color:#94a3b8;">Loading responses...</p>';
 
   try {
-    const snapshot = await getDocs(collection(db, 'surveys', surveyId, 'responses'));
+    const [surveySnapshot, snapshot] = await Promise.all([
+      getDoc(doc(db, 'surveys', surveyId)),
+      getDocs(collection(db, 'surveys', surveyId, 'responses'))
+    ]);
+    const survey = surveySnapshot.exists() ? surveySnapshot.data() : {};
+    const questions = Array.isArray(survey.questions) ? survey.questions : [];
     if (snapshot.empty) {
       container.innerHTML = '<p style="color:#94a3b8;">No member responses yet.</p>';
       return;
     }
 
     const responses = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-    container.innerHTML = responses.map((response) => `
+    container.innerHTML = responses.map((response) => {
+      const answers = Array.isArray(response.answers) ? response.answers : [];
+      const answerMarkup = questions.length > 0
+        ? questions.map((question, index) => {
+          const questionText = typeof question === 'string' ? question : question?.text || '';
+          const format = typeof question === 'string' ? (survey.mode || 'text') : (question?.format || survey.mode || 'text');
+          const options = Array.isArray(question?.options) ? question.options.filter(Boolean) : [];
+          const answer = answers[index] || answers.find(item => item?.question === questionText) || {};
+          const formatLabel = format === 'likert' ? 'Likert scale (1 to 5)' : format === 'multiple-choice' ? 'Multiple choice' : 'Text response';
+          return `
+            <div style="margin-top:0.65rem; padding:0.75rem 0.8rem; border-radius:0.45rem; background:rgba(15,23,42,0.55); border:1px solid rgba(71,85,105,0.55);">
+              <div style="font-weight:600; color:#f8fafc;">${index + 1}. ${escapeHtml(questionText)}</div>
+              <div style="margin-top:0.2rem; color:#94a3b8; font-size:0.78rem;">${formatLabel}${options.length ? ` · Choices: ${escapeHtml(options.join(', '))}` : ''}</div>
+              <div style="margin-top:0.55rem; color:#cbd5e1; white-space:pre-wrap;"><strong style="color:#86efac;">Respondent answer:</strong> ${escapeHtml(answer.answer ?? 'No answer recorded')}</div>
+              ${answer.suggestion ? `<div style="margin-top:0.35rem; color:#fbbf24; white-space:pre-wrap;"><strong>Suggestion:</strong> ${escapeHtml(answer.suggestion)}</div>` : ''}
+            </div>
+          `;
+        }).join('')
+        : answers.map((answer, index) => `
+          <div style="margin-top:0.65rem; color:#cbd5e1;">
+            <div style="font-weight:600; color:#e2e8f0;">${index + 1}. ${escapeHtml(answer.question || 'Question')}</div>
+            <div style="margin-top:0.2rem; white-space:pre-wrap;"><strong style="color:#86efac;">Respondent answer:</strong> ${escapeHtml(answer.answer ?? 'No answer recorded')}</div>
+          </div>
+        `).join('');
+      return `
       <details class="survey-response-folder">
         <summary>
           <strong>${escapeHtml(getUserName(response.memberEmail || response.id))}</strong>
           <span style="color:#94a3b8; font-size:0.8rem;">${escapeHtml(formatSurveyDate(response.submittedAt))}</span>
         </summary>
         <div class="survey-response-content">
-        ${(Array.isArray(response.answers) ? response.answers : []).map((answer, index) => `
-          <div style="margin-top:0.5rem; color:#cbd5e1;">
-            <div style="font-weight:600; color:#e2e8f0;">${index + 1}. ${escapeHtml(answer.question)}</div>
-            <div style="margin-top:0.2rem; white-space:pre-wrap;">${escapeHtml(answer.answer)}</div>
-            ${answer.suggestion ? `<div style="margin-top:0.35rem; color:#fbbf24; white-space:pre-wrap;"><strong>Suggestion:</strong> ${escapeHtml(answer.suggestion)}</div>` : ''}
-          </div>
-        `).join('')}
+        ${survey.title ? `<div style="margin-bottom:0.75rem; color:#93c5fd; font-weight:700;">${escapeHtml(survey.title)}</div>` : ''}
+        ${survey.description ? `<div style="margin-bottom:0.75rem; color:#cbd5e1; white-space:pre-wrap;">${escapeHtml(survey.description)}</div>` : ''}
+        ${answerMarkup || '<p style="color:#94a3b8;">No answers recorded.</p>'}
         ${response.suggestion ? `<div style="display:block; margin-top:0.75rem; padding-top:0.65rem; border-top:1px solid #374151; color:#cbd5e1;"><strong style="display:block; color:#fbbf24;">Suggestion:</strong><div style="display:block; margin-top:0.35rem; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; line-height:1.6;">${escapeHtml(response.suggestion)}</div></div>` : ''}
         </div>
       </details>
-    `).join('');
+      `;
+    }).join('');
   } catch (error) {
     console.error('Unable to load survey responses:', error);
     container.innerHTML = '<p style="color:#fca5a5;">Unable to load survey responses.</p>';
