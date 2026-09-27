@@ -1,4 +1,4 @@
-import { collection, onSnapshot, doc, updateDoc, addDoc, getDoc, setDoc, deleteField, arrayUnion, getDocs, getDocsFromServer, query, orderBy, where, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, onSnapshot, doc, updateDoc, addDoc, getDoc, setDoc, deleteDoc, deleteField, arrayUnion, getDocs, getDocsFromServer, query, orderBy, where, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { db, auth } from "./firebase.js";
 import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStoredUserEmail, signOutUser, getPasswordChangeRequired, getAccountPasswordHint, updateAccountPassword } from "./auth.js";
@@ -1464,6 +1464,11 @@ function renderMemberTasks(snapshot) {
         ? '<span class="task-link-disabled" aria-disabled="true">Open task link</span>'
         : `<a href="${escapeHtml(task.linkURL)}" target="_blank" rel="noopener">Open task link</a>`
       : '';
+    const taskSubmissionAction = status === 'pending validation'
+      ? '<button type="button" class="task-submitted" disabled>Already Submitted</button>'
+      : task.writingTask
+        ? `<button type="button" onclick="openTaskWriter('${escapeHtml(task.id)}')">Do now</button>`
+        : `<button type="button" onclick="markDone('${escapeHtml(task.id)}')">Submit task</button>`;
     return `
       <div class="task-item">
         <div class="task-header">
@@ -1474,7 +1479,7 @@ function renderMemberTasks(snapshot) {
         <div class="task-meta"><i class="fas fa-calendar-alt" aria-hidden="true"></i> ${escapeHtml(deadline)}</div>
         <div class="task-actions">
           ${taskLink}
-          <button type="button" class="${status === 'pending validation' ? 'task-submitted' : ''}" ${status === 'pending validation' ? 'disabled' : `onclick="markDone('${escapeHtml(task.id)}')"`}>${status === 'pending validation' ? 'Already Submitted' : 'Submit task'}</button>
+          ${taskSubmissionAction}
         </div>
         ${renderTaskFeedback(task)}
       </div>`;
@@ -1499,6 +1504,908 @@ function renderMemberTasks(snapshot) {
   }
   if (deadlineWarnings.length) showTaskDeadlineModal(deadlineWarnings);
 }
+
+window.openTaskWriter = async function(taskId) {
+  const taskSnapshot = await getDoc(doc(db, 'tasks', taskId));
+  if (!taskSnapshot.exists()) {
+    alert('This task is no longer available.');
+    return;
+  }
+  const task = taskSnapshot.data();
+  const assignees = Array.isArray(task.assignedTo) ? task.assignedTo : [task.assignedTo];
+  if (!assignees.some((assignee) => normalizeEmail(assignee) === normalizeEmail(userEmail))
+    || (activeMemberOrganization?.id && task.organizationId !== activeMemberOrganization.id)) {
+    alert('You are not assigned to this task.');
+    return;
+  }
+  if (!task.writingTask || String(task.status || '').toLowerCase() === 'pending validation') return;
+
+  const submittedFiles = [];
+  const submittedFileIds = new Set((Array.isArray(task.submissionFiles) ? task.submissionFiles : [])
+    .map((file) => String(file.fileId)));
+  if (submittedFileIds.size) {
+    try {
+      await Promise.all(Array.from(submittedFileIds, async (fileId) => {
+        const fileIndex = Number(fileId);
+        if (!Number.isInteger(fileIndex) || fileIndex < 0) return;
+        const fileSnapshot = await getDoc(doc(db, 'tasks', taskId, 'submissionFiles', fileId));
+        if (fileSnapshot.exists()) submittedFiles[fileIndex] = fileSnapshot.data();
+      }));
+    } catch (error) {
+      console.error('Failed to load task submission files:', error);
+      alert('Could not load the saved pictures for this task. Please try again.');
+      return;
+    }
+  }
+
+  const draftContext = {
+    taskId,
+    organizationId: String(task.organizationId || activeMemberOrganization?.id || ''),
+    memberId: normalizeEmail(userEmail)
+  };
+  let cloudDraft = null;
+  if (draftContext.organizationId && draftContext.memberId) {
+    try {
+      cloudDraft = await loadTaskWriterCloudDraft(draftContext);
+    } catch (error) {
+      console.warn('Could not load the cloud task draft; using this device\'s copy:', error);
+    }
+  }
+
+  let dialog = document.getElementById('taskWriterDialog');
+  if (!dialog) {
+    dialog = document.createElement('dialog');
+    dialog.id = 'taskWriterDialog';
+    dialog.className = 'task-writer-dialog';
+    dialog.innerHTML = `<section class="task-writer-app" aria-label="Task response editor">
+      <header class="task-writer-header">
+        <div class="task-writer-brand"><span class="task-writer-doc-icon"><i class="fas fa-file-lines"></i></span><div class="task-writer-heading"><div id="taskWriterTitle" class="task-writer-title"></div><div class="task-writer-subtitle">Task response</div></div></div>
+        <div class="task-writer-header-actions"><span class="task-writer-save-state" id="taskWriterSaveState">Draft</span><button type="button" class="task-writer-close" onclick="document.getElementById('taskWriterDialog').close()" aria-label="Close" title="Close"><i class="fas fa-xmark"></i></button><button type="button" id="taskWriterTurnIn" class="task-writer-turn-in">Turn in</button></div>
+      </header>
+      <nav class="task-writer-tabs" aria-label="Document ribbon"><button type="button" class="active" data-ribbon-tab="home" onclick="showTaskWriterTab('home')">Home</button><button type="button" data-ribbon-tab="insert" onclick="showTaskWriterTab('insert')">Insert</button><button type="button" data-ribbon-tab="view" onclick="showTaskWriterTab('view')">View</button><button type="button" data-ribbon-tab="help" onclick="showTaskWriterTab('help')">Help</button></nav>
+      <div class="task-writer-ribbon">
+        <div class="task-writer-panel active" data-ribbon-panel="home">
+          <div class="task-writer-group"><div class="task-writer-controls"><button type="button" title="Undo" aria-label="Undo" onclick="formatTaskWriter('undo')"><i class="fas fa-rotate-left"></i></button><button type="button" title="Redo" aria-label="Redo" onclick="formatTaskWriter('redo')"><i class="fas fa-rotate-right"></i></button><span class="task-writer-divider"></span><select aria-label="Font" onchange="formatTaskWriter('fontName', this.value)"><option value="Arial">Arial</option><option value="Georgia">Georgia</option><option value="Verdana">Verdana</option><option value="'Times New Roman'">Times New Roman</option></select><select aria-label="Font size" onchange="formatTaskWriter('fontSize', this.value)"><option value="2">10</option><option value="3" selected>12</option><option value="4">14</option><option value="5">18</option><option value="6">24</option><option value="7">36</option></select><button type="button" title="Increase font size" onclick="formatTaskWriter('increaseFontSize')">A<sup>+</sup></button><button type="button" title="Decrease font size" onclick="formatTaskWriter('decreaseFontSize')">A<sup>-</sup></button></div><span>Font</span></div>
+          <div class="task-writer-group"><div class="task-writer-controls"><button type="button" title="Bold" onclick="formatTaskWriter('bold')"><strong>B</strong></button><button type="button" title="Italic" onclick="formatTaskWriter('italic')"><i>I</i></button><button type="button" title="Underline" onclick="formatTaskWriter('underline')"><u>U</u></button><button type="button" title="Strikethrough" onclick="formatTaskWriter('strikeThrough')"><s>S</s></button><label class="task-writer-color" title="Font color"><i class="fas fa-font"></i><input type="color" value="#202124" aria-label="Font color" onchange="formatTaskWriter('foreColor', this.value)"></label><label class="task-writer-color" title="Highlight"><i class="fas fa-highlighter"></i><input type="color" value="#fff176" aria-label="Text highlight" onchange="formatTaskWriter('hiliteColor', this.value)"></label></div><span>Font</span></div>
+          <div class="task-writer-group"><div class="task-writer-controls"><button type="button" title="Bulleted list" onclick="formatTaskWriter('insertUnorderedList')"><i class="fas fa-list-ul"></i></button><button type="button" title="Numbered list" onclick="formatTaskWriter('insertOrderedList')"><i class="fas fa-list-ol"></i></button><button type="button" title="Decrease indent" onclick="formatTaskWriter('outdent')"><i class="fas fa-outdent"></i></button><button type="button" title="Increase indent" onclick="formatTaskWriter('indent')"><i class="fas fa-indent"></i></button><button type="button" title="Align left" onclick="formatTaskWriter('justifyLeft')"><i class="fas fa-align-left"></i></button><button type="button" title="Center" onclick="formatTaskWriter('justifyCenter')"><i class="fas fa-align-center"></i></button><button type="button" title="Align right" onclick="formatTaskWriter('justifyRight')"><i class="fas fa-align-right"></i></button><button type="button" title="Clear formatting" onclick="formatTaskWriter('removeFormat')"><i class="fas fa-eraser"></i></button></div><span>Paragraph</span></div>
+        </div>
+          <div class="task-writer-panel" data-ribbon-panel="insert"><div class="task-writer-group"><div class="task-writer-controls"><button type="button" onclick="saveTaskWriterSelection(); document.getElementById('taskWriterImageInput').click()"><i class="fas fa-image"></i><span>Image</span></button><button type="button" onclick="insertTaskWriterPageBreak()"><i class="fas fa-file-circle-plus"></i><span>Page break</span></button><input id="taskWriterImageInput" type="file" accept="*/*" multiple hidden onchange="insertTaskWriterImages(this.files); this.value='';"></div><span>Insert</span></div></div>
+          <div class="task-writer-panel" data-ribbon-panel="view"><div class="task-writer-group"><div class="task-writer-controls"><label>Zoom <select aria-label="Zoom" onchange="document.getElementById('taskWriterPage').style.zoom=this.value"><option value="0.8">80%</option><option value="0.9">90%</option><option value="1" selected>100%</option><option value="1.1">110%</option><option value="1.25">125%</option></select></label><label class="task-writer-auto-pages"><input id="taskWriterAutoPages" type="checkbox" checked onchange="setTaskWriterAutoPages(this.checked)"> Add pages on overflow</label></div><span>View</span></div></div>
+        <div class="task-writer-panel" data-ribbon-panel="help"><div class="task-writer-group"><div class="task-writer-controls"><span class="task-writer-ribbon-note">Ctrl+B bold · Ctrl+I italic · Ctrl+U underline · Ctrl+Z undo</span></div><span>Shortcuts</span></div></div>
+      </div>
+      <div id="taskWriterImageToolbar" class="task-writer-image-toolbar" role="toolbar" aria-label="Picture layout" hidden>
+        <strong>Picture layout</strong>
+        <label>Wrap <select id="taskWriterImageWrapMode" aria-label="Text wrapping" onchange="setTaskWriterImageWrap(this.value)"><option value="inline">In line</option><option value="square">Square</option><option value="behind">Behind text</option><option value="front">In front of text</option></select></label>
+        <label>Size <input id="taskWriterImageSize" type="range" min="16" max="100" value="100" aria-label="Image width" oninput="resizeTaskWriterImage(this.value)"><output id="taskWriterImageSizeOutput">100%</output></label>
+        <div class="task-writer-image-position" aria-label="Move image">
+          <button type="button" title="Move up" aria-label="Move up" onmousedown="event.preventDefault()" onclick="moveTaskWriterImage(0, -3)"><i class="fas fa-arrow-up"></i></button>
+          <button type="button" title="Move left" aria-label="Move left" onmousedown="event.preventDefault()" onclick="moveTaskWriterImage(-3, 0)"><i class="fas fa-arrow-left"></i></button>
+          <button type="button" title="Move right" aria-label="Move right" onmousedown="event.preventDefault()" onclick="moveTaskWriterImage(3, 0)"><i class="fas fa-arrow-right"></i></button>
+          <button type="button" title="Move down" aria-label="Move down" onmousedown="event.preventDefault()" onclick="moveTaskWriterImage(0, 3)"><i class="fas fa-arrow-down"></i></button>
+        </div>
+      </div>
+        <main class="task-writer-workspace"><article id="taskWriterPage" class="task-writer-page"><div id="taskWriterEditor" contenteditable="true" role="textbox" aria-label="Write your task response" aria-multiline="true" spellcheck="true" data-placeholder="Start writing..."></div><button id="taskWriterImageResizeHandle" class="task-writer-image-resize-handle" type="button" aria-label="Resize selected image" title="Drag to resize" hidden><i class="fas fa-up-right-and-down-left-from-center" aria-hidden="true"></i></button></article></main>
+      <footer class="task-writer-footer"><span id="taskWriterWordCount">0 words</span><span>Draft syncs across devices when online</span></footer>
+    </section>`;
+    dialog.addEventListener('mousedown', (event) => {
+      if (event.target.closest('.task-writer-ribbon button, .task-writer-ribbon select, .task-writer-ribbon label')) {
+        window.saveTaskWriterSelection();
+        if (event.target.closest('.task-writer-ribbon button')) event.preventDefault();
+      }
+    });
+    document.body.appendChild(dialog);
+  }
+
+  document.getElementById('taskWriterTitle').textContent = task.title || 'Task response';
+  const editor = document.getElementById('taskWriterEditor');
+  const turnInButton = document.getElementById('taskWriterTurnIn');
+  turnInButton.dataset.taskId = taskId;
+  turnInButton.dataset.organizationId = draftContext.organizationId;
+  turnInButton.dataset.memberId = draftContext.memberId;
+  const draftKey = taskWriterLocalDraftKey(draftContext);
+  let storedDraft = localStorage.getItem(draftKey);
+  const legacyDraftKey = `taskWriterDraft:${taskId}`;
+  const assignedOnlyToCurrentMember = assignees.length === 1
+    && normalizeEmail(assignees[0]) === draftContext.memberId;
+  if (!storedDraft && draftContext.organizationId && draftContext.memberId && assignedOnlyToCurrentMember) {
+    storedDraft = localStorage.getItem(legacyDraftKey);
+    if (storedDraft) {
+      localStorage.setItem(draftKey, storedDraft);
+      localStorage.removeItem(legacyDraftKey);
+    }
+  }
+  let savedDraft = null;
+  try {
+    const parsedDraft = JSON.parse(storedDraft || 'null');
+    savedDraft = parsedDraft && Array.isArray(parsedDraft.files)
+      ? parsedDraft
+      : (storedDraft ? { html: storedDraft, files: [] } : null);
+  } catch {
+    savedDraft = storedDraft ? { html: storedDraft, files: [] } : null;
+  }
+  const localDraftUpdatedAt = Number(savedDraft?.updatedAt) || 0;
+  const activeDraft = cloudDraft && cloudDraft.updatedAtMillis >= localDraftUpdatedAt ? cloudDraft : savedDraft;
+  taskWriterFilesEdited = Boolean(activeDraft?.filesEdited);
+  taskWriterSelectedImage = null;
+  taskWriterAutoPages = localStorage.getItem(taskWriterAutoPagesKey(draftContext)) !== 'false';
+  const storedHtml = task.submissionHtml || `<p>${escapeHtml(task.submissionText || '').replace(/\r?\n/g, '<br>')}</p>`;
+  const restoreSubmittedFiles = activeDraft && !taskWriterFilesEdited
+    && !(activeDraft.files || []).some(Boolean) && submittedFiles.some(Boolean);
+  taskWriterFiles = restoreSubmittedFiles || !activeDraft ? submittedFiles : activeDraft.files;
+  editor.innerHTML = sanitizeTaskWriterHtml(restoreSubmittedFiles ? storedHtml : (activeDraft?.html || storedHtml), taskWriterFiles);
+  document.getElementById('taskWriterImageToolbar').hidden = true;
+  document.getElementById('taskWriterAutoPages').checked = taskWriterAutoPages;
+  document.getElementById('taskWriterSaveState').textContent = activeDraft ? 'Draft saved' : 'Draft';
+  updateTaskWriterWordCount();
+  editor.oninput = () => {
+    updateTaskWriterPageFlow();
+    localStorage.setItem(draftKey, JSON.stringify({
+      html: taskWriterHtmlForStorage(editor.innerHTML, taskWriterFiles),
+      files: taskWriterFiles,
+      filesEdited: taskWriterFilesEdited,
+      updatedAt: Date.now()
+    }));
+    if (draftContext.organizationId && draftContext.memberId) {
+      document.getElementById('taskWriterSaveState').textContent = 'Syncing...';
+      scheduleTaskWriterCloudDraftSave(draftContext);
+    } else {
+      document.getElementById('taskWriterSaveState').textContent = 'Saved locally';
+    }
+    updateTaskWriterWordCount();
+  };
+  updateTaskWriterPageFlow();
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+  editor.onmouseup = window.saveTaskWriterSelection;
+  editor.onkeyup = window.saveTaskWriterSelection;
+  editor.onclick = (event) => {
+    const image = event.target.closest('img');
+    const selectableImage = image && editor.contains(image)
+      ? image
+      : findTaskWriterImageAtPoint(editor, event.clientX, event.clientY);
+    if (selectableImage) window.selectTaskWriterImage(selectableImage);
+    else window.clearTaskWriterImageSelection();
+  };
+  editor.onkeydown = (event) => {
+    if (!taskWriterSelectedImage || !editor.contains(taskWriterSelectedImage)
+      || !['Backspace', 'Delete'].includes(event.key)) return;
+    event.preventDefault();
+    const fileIndex = Number(taskWriterSelectedImage.dataset.taskFileIndex);
+    if (Number.isInteger(fileIndex) && taskWriterFiles[fileIndex]) {
+      window.removeTaskWriterFile(fileIndex);
+    } else {
+      taskWriterSelectedImage.remove();
+      window.clearTaskWriterImageSelection();
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  };
+  editor.onpointerdown = (event) => {
+    const targetImage = event.target.closest('img');
+    const image = targetImage && editor.contains(targetImage)
+      ? targetImage
+      : findTaskWriterImageAtPoint(editor, event.clientX, event.clientY);
+    if (!image) return;
+    window.selectTaskWriterImage(image);
+    event.preventDefault();
+    const imageBounds = image.getBoundingClientRect();
+    const editorBounds = editor.getBoundingClientRect();
+    const wrapMode = image.dataset.taskWrap || 'inline';
+    taskWriterImageDrag = {
+      image,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      imageX: ['behind', 'front'].includes(wrapMode)
+        ? Number(image.dataset.taskX) || 10
+        : Math.max(0, Math.min(90, ((imageBounds.left - editorBounds.left) / Math.max(1, editor.clientWidth)) * 100)),
+      imageY: ['behind', 'front'].includes(wrapMode)
+        ? Number(image.dataset.taskY) || 10
+        : Math.max(0, Math.min(90, ((imageBounds.top - editorBounds.top) / Math.max(1, editor.clientHeight)) * 100)),
+      started: false
+    };
+    editor.setPointerCapture(event.pointerId);
+  };
+  editor.onpointermove = (event) => {
+    if (!taskWriterImageDrag || event.pointerId !== taskWriterImageDrag.pointerId) return;
+    const drag = taskWriterImageDrag;
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+    if (!drag.started) {
+      if (Math.hypot(deltaX, deltaY) < 4) return;
+      drag.started = true;
+      drag.image.classList.add('task-writer-image-dragging');
+      if (!['behind', 'front'].includes(drag.image.dataset.taskWrap)) {
+        drag.image.dataset.taskX = String(drag.imageX);
+        drag.image.dataset.taskY = String(drag.imageY);
+        window.setTaskWriterImageWrap('front');
+      }
+    }
+    const x = Math.max(0, Math.min(90, drag.imageX + ((event.clientX - drag.startX) / Math.max(1, editor.clientWidth)) * 100));
+    const y = Math.max(0, Math.min(90, drag.imageY + ((event.clientY - drag.startY) / Math.max(1, editor.clientHeight)) * 100));
+    drag.image.dataset.taskX = String(x);
+    drag.image.dataset.taskY = String(y);
+    drag.image.style.left = `${x}%`;
+    drag.image.style.top = `${y}%`;
+    positionTaskWriterImageResizeHandle();
+  };
+  editor.onpointerup = (event) => {
+    if (!taskWriterImageDrag || event.pointerId !== taskWriterImageDrag.pointerId) return;
+    const drag = taskWriterImageDrag;
+    taskWriterImageDrag = null;
+    if (editor.hasPointerCapture(event.pointerId)) editor.releasePointerCapture(event.pointerId);
+    drag.image.classList.remove('task-writer-image-dragging');
+    if (drag.started) editor.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  editor.onpointercancel = editor.onpointerup;
+  const resizeHandle = document.getElementById('taskWriterImageResizeHandle');
+  resizeHandle.onpointerdown = (event) => {
+    if (!taskWriterSelectedImage) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const measuredWidth = Math.round((taskWriterSelectedImage.getBoundingClientRect().width / Math.max(1, editor.clientWidth)) * 100);
+    taskWriterImageResize = {
+      image: taskWriterSelectedImage,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: Math.max(16, Math.min(100, Number(taskWriterSelectedImage.dataset.taskWidth) || measuredWidth || 100))
+    };
+    resizeHandle.setPointerCapture(event.pointerId);
+  };
+  resizeHandle.onpointermove = (event) => {
+    if (!taskWriterImageResize || event.pointerId !== taskWriterImageResize.pointerId) return;
+    const drag = taskWriterImageResize;
+    const changePercent = ((event.clientX - drag.startX) / Math.max(1, editor.clientWidth)) * 100;
+    const width = Math.round(Math.max(16, Math.min(100, drag.startWidth + changePercent)));
+    drag.image.dataset.taskWidth = String(width);
+    drag.image.style.width = `${width}%`;
+    document.getElementById('taskWriterImageSize').value = String(width);
+    document.getElementById('taskWriterImageSizeOutput').value = `${width}%`;
+    positionTaskWriterImageResizeHandle();
+  };
+  resizeHandle.onpointerup = (event) => {
+    if (!taskWriterImageResize || event.pointerId !== taskWriterImageResize.pointerId) return;
+    taskWriterImageResize = null;
+    if (resizeHandle.hasPointerCapture(event.pointerId)) resizeHandle.releasePointerCapture(event.pointerId);
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  resizeHandle.onpointercancel = resizeHandle.onpointerup;
+  dialog.querySelector('.task-writer-workspace').onscroll = positionTaskWriterImageResizeHandle;
+  editor.onpaste = (event) => {
+    const imageFiles = Array.from(event.clipboardData?.items || [])
+      .filter((item) => item.kind === 'file' && /^image\/(png|jpeg)$/.test(item.type))
+      .map((item) => item.getAsFile())
+      .filter(Boolean);
+    if (imageFiles.length) {
+      event.preventDefault();
+      void window.insertTaskWriterImages(imageFiles);
+      return;
+    }
+    const pastedText = event.clipboardData?.getData('text/plain')?.trim() || '';
+    if (!pastedText || /\s/.test(pastedText)) return;
+    let pastedUrl;
+    try {
+      pastedUrl = new URL(pastedText);
+    } catch {
+      return;
+    }
+    if (!['http:', 'https:'].includes(pastedUrl.protocol)) return;
+    event.preventDefault();
+    editor.focus();
+    document.execCommand('insertHTML', false,
+      `<a href="${escapeHtml(pastedUrl.href)}" rel="noopener noreferrer">${escapeHtml(pastedText)}</a>`);
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    window.saveTaskWriterSelection();
+  };
+  document.getElementById('taskWriterTurnIn').onclick = () => window.turnInTaskWriting(taskId);
+  dialog.showModal();
+};
+
+let taskWriterSavedRange = null;
+let taskWriterFiles = [];
+let taskWriterFilesEdited = false;
+let taskWriterSelectedImage = null;
+let taskWriterImageDrag = null;
+let taskWriterImageResize = null;
+let taskWriterAutoPages = true;
+let taskWriterDraftSaveTimer = null;
+let taskWriterDraftSaveQueue = Promise.resolve();
+
+function taskWriterDraftId(context) {
+  return `${context.organizationId}__${context.memberId}`;
+}
+
+function taskWriterLocalDraftKey(context) {
+  return `taskWriterDraft:${encodeURIComponent(context.organizationId)}:${encodeURIComponent(context.memberId)}:${encodeURIComponent(context.taskId)}`;
+}
+
+function taskWriterAutoPagesKey(context) {
+  return `taskWriterAutoPages:${encodeURIComponent(context.organizationId)}:${encodeURIComponent(context.memberId)}:${encodeURIComponent(context.taskId)}`;
+}
+
+function taskWriterCloudDraftRef(context) {
+  return doc(db, 'tasks', context.taskId, 'drafts', taskWriterDraftId(context));
+}
+
+function taskWriterCloudDraftFileRef(context, fileId) {
+  return doc(db, 'tasks', context.taskId, 'drafts', taskWriterDraftId(context), 'files', String(fileId));
+}
+
+async function loadTaskWriterCloudDraft(context) {
+  const draftSnapshot = await getDoc(taskWriterCloudDraftRef(context));
+  if (!draftSnapshot.exists()) return null;
+  const draft = draftSnapshot.data();
+  if (draft.organizationId !== context.organizationId || normalizeEmail(draft.memberId) !== context.memberId) return null;
+
+  const files = [];
+  const fileMetadata = Array.isArray(draft.files) ? draft.files : [];
+  await Promise.all(fileMetadata.map(async (metadata) => {
+    const fileId = String(metadata.fileId);
+    const fileIndex = Number(fileId);
+    if (!Number.isInteger(fileIndex) || fileIndex < 0) throw new Error('Invalid cloud draft file reference.');
+    const fileSnapshot = await getDoc(taskWriterCloudDraftFileRef(context, fileId));
+    if (!fileSnapshot.exists()) throw new Error('A cloud draft attachment is missing.');
+    const file = fileSnapshot.data();
+    if (file.organizationId !== context.organizationId || normalizeEmail(file.memberId) !== context.memberId) {
+      throw new Error('A cloud draft attachment does not match this member and organization.');
+    }
+    files[fileIndex] = file;
+  }));
+
+  return {
+    ...draft,
+    files,
+    updatedAtMillis: draft.updatedAt?.toMillis?.() || Number(draft.updatedAt) || 0
+  };
+}
+
+function scheduleTaskWriterCloudDraftSave(context) {
+  if (!context.organizationId || !context.memberId) return;
+  clearTimeout(taskWriterDraftSaveTimer);
+  taskWriterDraftSaveTimer = setTimeout(() => {
+    taskWriterDraftSaveQueue = taskWriterDraftSaveQueue.then(() => saveTaskWriterCloudDraft(context));
+  }, 900);
+}
+
+async function saveTaskWriterCloudDraft(context) {
+  const editor = document.getElementById('taskWriterEditor');
+  const saveState = document.getElementById('taskWriterSaveState');
+  if (!editor || document.getElementById('taskWriterTurnIn')?.dataset.taskId !== context.taskId) return;
+
+  try {
+    const draftRef = taskWriterCloudDraftRef(context);
+    const previousDraftSnapshot = await getDoc(draftRef);
+    const previousFileIds = previousDraftSnapshot.exists() && Array.isArray(previousDraftSnapshot.data().files)
+      ? previousDraftSnapshot.data().files.map((file) => String(file.fileId))
+      : [];
+    const currentFiles = Array.from(taskWriterFiles.entries())
+      .filter(([, file]) => Boolean(file));
+    const currentFileIds = new Set(currentFiles.map(([fileIndex]) => String(fileIndex)));
+
+    await Promise.all(currentFiles.map(([fileIndex, file]) => setDoc(
+      taskWriterCloudDraftFileRef(context, fileIndex),
+      { ...file, organizationId: context.organizationId, memberId: context.memberId }
+    )));
+    await setDoc(draftRef, {
+      organizationId: context.organizationId,
+      memberId: context.memberId,
+      html: taskWriterHtmlForStorage(editor.innerHTML, taskWriterFiles),
+      text: editor.innerText.trim(),
+      files: currentFiles.map(([fileIndex, file]) => ({
+        fileId: String(fileIndex),
+        originalFileName: file.originalFileName,
+        fileExtension: file.fileExtension,
+        mimeType: file.mimeType,
+        originalFileSize: file.originalFileSize
+      })),
+      filesEdited: taskWriterFilesEdited,
+      updatedAt: serverTimestamp()
+    });
+    await Promise.all(previousFileIds
+      .filter((fileId) => !currentFileIds.has(fileId))
+      .map((fileId) => deleteDoc(taskWriterCloudDraftFileRef(context, fileId))));
+
+    if (saveState && document.getElementById('taskWriterTurnIn')?.dataset.taskId === context.taskId) {
+      saveState.textContent = 'Draft synced';
+    }
+  } catch (error) {
+    console.warn('Could not sync the task draft to Firestore:', error);
+    if (saveState && document.getElementById('taskWriterTurnIn')?.dataset.taskId === context.taskId) {
+      saveState.textContent = 'Saved locally';
+    }
+  }
+}
+
+async function clearTaskWriterCloudDraft(context) {
+  const draftRef = taskWriterCloudDraftRef(context);
+  const draftSnapshot = await getDoc(draftRef);
+  if (!draftSnapshot.exists()) return;
+  const files = Array.isArray(draftSnapshot.data().files) ? draftSnapshot.data().files : [];
+  await Promise.all(files.map((file) => deleteDoc(taskWriterCloudDraftFileRef(context, file.fileId))));
+  await deleteDoc(draftRef);
+}
+
+function findTaskWriterImageAtPoint(editor, clientX, clientY) {
+  return Array.from(editor.querySelectorAll('img')).reverse().find((image) => {
+    const bounds = image.getBoundingClientRect();
+    return clientX >= bounds.left && clientX <= bounds.right
+      && clientY >= bounds.top && clientY <= bounds.bottom;
+  }) || null;
+}
+
+window.showTaskWriterTab = function(tabName) {
+  document.querySelectorAll('[data-ribbon-tab]').forEach((tab) => tab.classList.toggle('active', tab.dataset.ribbonTab === tabName));
+  document.querySelectorAll('[data-ribbon-panel]').forEach((panel) => panel.classList.toggle('active', panel.dataset.ribbonPanel === tabName));
+};
+
+window.saveTaskWriterSelection = function() {
+  const editor = document.getElementById('taskWriterEditor');
+  const selection = window.getSelection();
+  if (editor && selection?.rangeCount && editor.contains(selection.anchorNode)) {
+    taskWriterSavedRange = selection.getRangeAt(0).cloneRange();
+  }
+};
+
+function sanitizeTaskWriterHtml(html, files = taskWriterFiles) {
+  const parsed = new DOMParser().parseFromString(String(html || ''), 'text/html');
+  const allowedTags = new Set(['P', 'DIV', 'BR', 'HR', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'A', 'IMG', 'SPAN', 'FONT']);
+  const copyNode = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent || '');
+    const fragment = document.createDocumentFragment();
+    if (node.nodeType !== Node.ELEMENT_NODE) return fragment;
+    if (!allowedTags.has(node.tagName)) {
+      Array.from(node.childNodes).forEach((child) => fragment.append(copyNode(child)));
+      return fragment;
+    }
+    if (node.tagName === 'DIV' && ['manual', 'auto'].includes(node.dataset.taskPageBreak)) {
+      const pageBreak = document.createElement('div');
+      pageBreak.dataset.taskPageBreak = node.dataset.taskPageBreak;
+      pageBreak.contentEditable = 'false';
+      return pageBreak;
+    }
+    const safe = document.createElement(node.tagName.toLowerCase());
+    if (node.tagName === 'IMG') {
+      const source = node.getAttribute('src') || '';
+      const fileMarker = source.match(/^task-file:(\d+)$/);
+      const dataIndex = Number(node.getAttribute('data-task-file-index') || fileMarker?.[1]);
+      const file = Number.isInteger(dataIndex) ? files[dataIndex] : null;
+      const dataUriMatch = source.match(/^data:image\/(png|jpeg|gif|webp);base64,([a-z\d+/=]+)$/i);
+      const dataUri = fileMarker && file && ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.mimeType)
+        ? `data:${file.mimeType};base64,${file.base64Data}`
+        : (dataUriMatch ? source : null);
+      if (!dataUri && !isTaskWriterImageUrl(source)) return fragment;
+      safe.src = dataUri || source;
+      if (dataUri && Number.isInteger(dataIndex) && files[dataIndex]) safe.dataset.taskFileIndex = String(dataIndex);
+      safe.alt = String(node.getAttribute('alt') || '').slice(0, 200);
+      safe.style.maxWidth = '100%';
+      safe.style.height = 'auto';
+      const wrapMode = ['inline', 'square', 'behind', 'front'].includes(node.dataset.taskWrap) ? node.dataset.taskWrap : 'inline';
+      const requestedWidth = Number(node.dataset.taskWidth || parseFloat(node.style.width));
+      safe.dataset.taskWrap = wrapMode;
+      if (Number.isFinite(requestedWidth) && requestedWidth >= 16 && requestedWidth <= 100) {
+        safe.dataset.taskWidth = String(requestedWidth);
+        safe.style.width = `${requestedWidth}%`;
+      }
+      if (wrapMode === 'square') {
+        safe.style.float = 'left';
+        safe.style.margin = '0.25rem 0.8rem 0.5rem 0';
+      } else if (wrapMode === 'behind' || wrapMode === 'front') {
+        safe.style.position = 'absolute';
+        safe.style.left = `${Math.max(0, Math.min(90, Number(node.dataset.taskX) || 10))}%`;
+        safe.style.top = `${Math.max(0, Math.min(90, Number(node.dataset.taskY) || 10))}%`;
+        safe.style.zIndex = wrapMode === 'behind' ? '0' : '2';
+        safe.dataset.taskX = String(Math.max(0, Math.min(90, Number(node.dataset.taskX) || 10)));
+        safe.dataset.taskY = String(Math.max(0, Math.min(90, Number(node.dataset.taskY) || 10)));
+      }
+      return safe;
+    }
+    if (node.tagName === 'P' && Array.from(node.children).some((child) => (
+      child.tagName === 'IMG' && ['behind', 'front'].includes(child.dataset.taskWrap)
+    ))) {
+      safe.dataset.taskImageOverlay = 'true';
+    }
+    if (node.tagName === 'A') {
+      const href = node.getAttribute('href') || '';
+      if (/^(https:\/\/|mailto:)/i.test(href)) {
+        safe.href = href;
+        safe.rel = 'noopener noreferrer';
+      }
+    }
+    const color = node.style?.color || node.getAttribute('color');
+    if (color && CSS.supports('color', color)) safe.style.color = color;
+    const backgroundColor = node.style?.backgroundColor;
+    if (backgroundColor && CSS.supports('background-color', backgroundColor)) safe.style.backgroundColor = backgroundColor;
+    if (node.tagName === 'FONT') {
+      const fontSize = Number(node.getAttribute('size'));
+      if (fontSize >= 1 && fontSize <= 7) safe.style.fontSize = `${[0, 10, 13, 16, 18, 24, 32, 48][fontSize]}px`;
+      const fontFamily = node.getAttribute('face') || '';
+      if (/^(Arial|Georgia|Verdana|Times New Roman)$/i.test(fontFamily)) safe.style.fontFamily = fontFamily;
+    }
+    if (node.tagName === 'SPAN') {
+      const fontSize = node.style.fontSize;
+      if (/^(\d{1,2})(px|pt)$/.test(fontSize)) safe.style.fontSize = fontSize;
+      const fontFamily = node.style.fontFamily.replaceAll('"', '');
+      if (/^(Arial|Georgia|Verdana|Times New Roman)$/i.test(fontFamily)) safe.style.fontFamily = fontFamily;
+    }
+    if (['P', 'DIV', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'LI'].includes(node.tagName)
+      && ['left', 'center', 'right', 'justify'].includes(node.style.textAlign)) {
+      safe.style.textAlign = node.style.textAlign;
+    }
+    Array.from(node.childNodes).forEach((child) => safe.append(copyNode(child)));
+    return safe;
+  };
+  const output = document.createElement('div');
+  Array.from(parsed.body.childNodes).forEach((node) => output.append(copyNode(node)));
+  return output.innerHTML;
+}
+
+window.selectTaskWriterImage = function(image) {
+  if (taskWriterSelectedImage && taskWriterSelectedImage !== image) {
+    taskWriterSelectedImage.classList.remove('task-writer-image-selected');
+  }
+  taskWriterSelectedImage = image;
+  image.classList.add('task-writer-image-selected');
+  const toolbar = document.getElementById('taskWriterImageToolbar');
+  if (!toolbar) return;
+  const editor = document.getElementById('taskWriterEditor');
+  const measuredWidth = editor?.clientWidth ? Math.round((image.getBoundingClientRect().width / editor.clientWidth) * 100) : 100;
+  const imageWidth = Math.max(16, Math.min(100, Number(image.dataset.taskWidth) || measuredWidth || 100));
+  document.getElementById('taskWriterImageWrapMode').value = image.dataset.taskWrap || 'inline';
+  document.getElementById('taskWriterImageSize').value = String(imageWidth);
+  document.getElementById('taskWriterImageSizeOutput').value = `${imageWidth}%`;
+  toolbar.hidden = false;
+  const resizeHandle = document.getElementById('taskWriterImageResizeHandle');
+  resizeHandle.hidden = false;
+  positionTaskWriterImageResizeHandle();
+};
+
+window.clearTaskWriterImageSelection = function() {
+  taskWriterSelectedImage?.classList.remove('task-writer-image-selected');
+  taskWriterSelectedImage = null;
+  const toolbar = document.getElementById('taskWriterImageToolbar');
+  if (toolbar) toolbar.hidden = true;
+  const resizeHandle = document.getElementById('taskWriterImageResizeHandle');
+  if (resizeHandle) resizeHandle.hidden = true;
+};
+
+function positionTaskWriterImageResizeHandle() {
+  const image = taskWriterSelectedImage;
+  const handle = document.getElementById('taskWriterImageResizeHandle');
+  const page = document.getElementById('taskWriterPage');
+  if (!image || !handle || !page || handle.hidden) return;
+  const imageBounds = image.getBoundingClientRect();
+  const pageBounds = page.getBoundingClientRect();
+  const zoom = Number.parseFloat(getComputedStyle(page).zoom) || 1;
+  handle.style.left = `${(imageBounds.right - pageBounds.left) / zoom - 10}px`;
+  handle.style.top = `${(imageBounds.bottom - pageBounds.top) / zoom - 10}px`;
+}
+
+window.setTaskWriterImageWrap = function(wrapMode) {
+  const image = taskWriterSelectedImage;
+  if (!image || !['inline', 'square', 'behind', 'front'].includes(wrapMode)) return;
+  image.dataset.taskWrap = wrapMode;
+  image.style.float = wrapMode === 'square' ? 'left' : 'none';
+  image.style.margin = wrapMode === 'square' ? '0.25rem 0.8rem 0.5rem 0' : '0.25rem 0';
+  image.style.position = wrapMode === 'behind' || wrapMode === 'front' ? 'absolute' : 'static';
+  image.style.zIndex = wrapMode === 'behind' ? '0' : (wrapMode === 'front' ? '2' : '');
+  if (wrapMode === 'behind' || wrapMode === 'front') {
+    image.dataset.taskX = image.dataset.taskX || '10';
+    image.dataset.taskY = image.dataset.taskY || '10';
+    image.style.left = `${image.dataset.taskX}%`;
+    image.style.top = `${image.dataset.taskY}%`;
+  } else {
+    image.style.left = '';
+    image.style.top = '';
+  }
+  const parent = image.parentElement;
+  if (parent?.tagName === 'P') {
+    if (wrapMode === 'behind' || wrapMode === 'front') parent.dataset.taskImageOverlay = 'true';
+    else delete parent.dataset.taskImageOverlay;
+  }
+  positionTaskWriterImageResizeHandle();
+  document.getElementById('taskWriterEditor')?.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+window.resizeTaskWriterImage = function(width) {
+  if (!taskWriterSelectedImage) return;
+  const imageWidth = Math.max(16, Math.min(100, Number(width) || 100));
+  taskWriterSelectedImage.dataset.taskWidth = String(imageWidth);
+  taskWriterSelectedImage.style.width = `${imageWidth}%`;
+  document.getElementById('taskWriterImageSizeOutput').value = `${imageWidth}%`;
+  positionTaskWriterImageResizeHandle();
+  document.getElementById('taskWriterEditor')?.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+window.moveTaskWriterImage = function(deltaX, deltaY) {
+  if (!taskWriterSelectedImage) return;
+  const currentMode = taskWriterSelectedImage.dataset.taskWrap || 'inline';
+  if (currentMode !== 'behind' && currentMode !== 'front') window.setTaskWriterImageWrap('front');
+  const image = taskWriterSelectedImage;
+  const x = Math.max(0, Math.min(90, (Number(image.dataset.taskX) || 10) + deltaX));
+  const y = Math.max(0, Math.min(90, (Number(image.dataset.taskY) || 10) + deltaY));
+  image.dataset.taskX = String(x);
+  image.dataset.taskY = String(y);
+  image.style.left = `${x}%`;
+  image.style.top = `${y}%`;
+  positionTaskWriterImageResizeHandle();
+  document.getElementById('taskWriterEditor')?.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+function taskWriterHtmlForStorage(html, files) {
+  const cleanedHtml = sanitizeTaskWriterHtml(html, files);
+  const parsed = new DOMParser().parseFromString(cleanedHtml, 'text/html');
+  Array.from(parsed.images).forEach((image) => {
+    const fileIndex = Number(image.dataset.taskFileIndex);
+    if (Number.isInteger(fileIndex) && files[fileIndex]) image.setAttribute('src', `task-file:${fileIndex}`);
+  });
+  return parsed.body.innerHTML;
+}
+
+function updateTaskWriterPageFlow() {
+  const editor = document.getElementById('taskWriterEditor');
+  if (!editor) return;
+  editor.querySelectorAll('[data-task-page-break="auto"]').forEach((pageBreak) => pageBreak.remove());
+  if (!taskWriterAutoPages) return;
+
+  let usedPageHeight = 0;
+  const pageContentHeight = 900;
+  for (const block of Array.from(editor.children)) {
+    if (block.dataset.taskPageBreak) {
+      if (block.dataset.taskPageBreak === 'manual') usedPageHeight = 0;
+      continue;
+    }
+    const style = getComputedStyle(block);
+    const blockHeight = block.getBoundingClientRect().height
+      + (parseFloat(style.marginTop) || 0)
+      + (parseFloat(style.marginBottom) || 0);
+    if (usedPageHeight > 0 && usedPageHeight + blockHeight > pageContentHeight) {
+      const pageBreak = document.createElement('div');
+      pageBreak.dataset.taskPageBreak = 'auto';
+      pageBreak.contentEditable = 'false';
+      editor.insertBefore(pageBreak, block);
+      usedPageHeight = 0;
+    }
+    usedPageHeight += blockHeight;
+  }
+}
+
+window.setTaskWriterAutoPages = function(enabled) {
+  taskWriterAutoPages = Boolean(enabled);
+  const turnInButton = document.getElementById('taskWriterTurnIn');
+  const draftContext = {
+    taskId: turnInButton?.dataset.taskId || '',
+    organizationId: turnInButton?.dataset.organizationId || '',
+    memberId: turnInButton?.dataset.memberId || ''
+  };
+  if (draftContext.taskId && draftContext.organizationId && draftContext.memberId) {
+    localStorage.setItem(taskWriterAutoPagesKey(draftContext), String(taskWriterAutoPages));
+  }
+  updateTaskWriterPageFlow();
+  document.getElementById('taskWriterEditor')?.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+window.insertTaskWriterPageBreak = function() {
+  const editor = document.getElementById('taskWriterEditor');
+  if (!editor) return;
+  editor.focus();
+  const selection = window.getSelection();
+  if (taskWriterSavedRange && editor.contains(taskWriterSavedRange.commonAncestorContainer)) {
+    selection.removeAllRanges();
+    selection.addRange(taskWriterSavedRange);
+  }
+  document.execCommand('insertHTML', false, '<div data-task-page-break="manual" contenteditable="false"></div><p><br></p>');
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+function isTaskWriterImageUrl(value) {
+  try {
+    const imageUrl = new URL(value);
+    return imageUrl.protocol === 'https:'
+      && ['firebasestorage.googleapis.com', 'storage.googleapis.com'].includes(imageUrl.hostname);
+  } catch {
+    return false;
+  }
+}
+
+window.formatTaskWriter = function(command, value) {
+  const editor = document.getElementById('taskWriterEditor');
+  if (!editor) return;
+  editor.focus();
+  const selection = window.getSelection();
+  if (taskWriterSavedRange && editor.contains(taskWriterSavedRange.commonAncestorContainer)) {
+    selection.removeAllRanges();
+    selection.addRange(taskWriterSavedRange);
+  }
+  if (command === 'createLink') {
+    const url = prompt('Enter a link URL');
+    if (!url || !/^https:\/\//i.test(url)) return;
+    document.execCommand(command, false, url);
+  } else {
+    document.execCommand(command, false, value || null);
+  }
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+window.insertTaskWriterRule = function() {
+  const editor = document.getElementById('taskWriterEditor');
+  editor?.focus();
+  document.execCommand('insertHorizontalRule');
+  editor?.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+function updateTaskWriterWordCount() {
+  const editor = document.getElementById('taskWriterEditor');
+  const counter = document.getElementById('taskWriterWordCount');
+  if (!editor || !counter) return;
+  const wordCount = (editor.innerText.trim().match(/\S+/g) || []).length;
+  counter.textContent = `${wordCount} ${wordCount === 1 ? 'word' : 'words'}`;
+}
+
+window.insertTaskWriterImages = async function(files) {
+  const editor = document.getElementById('taskWriterEditor');
+  if (!editor) {
+    return;
+  }
+  for (const file of Array.from(files || [])) {
+    const currentTotalSize = taskWriterFiles.reduce((total, attachment) => total + attachment.originalFileSize, 0);
+    if (taskWriterFiles.length >= 10) {
+      alert('A task response can include up to 10 files.');
+      continue;
+    }
+    if (file.size > 600 * 1024 || currentTotalSize + file.size > 2.4 * 1024 * 1024) {
+      alert('Each file must be 600 KB or smaller, with a total attachment limit of 2.4 MB.');
+      continue;
+    }
+    try {
+      const base64Data = await readTaskFileAsBase64(file);
+      const extensionIndex = file.name.lastIndexOf('.');
+      const fileRecord = {
+        originalFileName: file.name,
+        fileExtension: extensionIndex > 0 ? file.name.slice(extensionIndex + 1) : '',
+        mimeType: file.type,
+        originalFileSize: file.size,
+        base64Data
+      };
+      taskWriterFilesEdited = true;
+      const fileIndex = taskWriterFiles.push(fileRecord) - 1;
+      const previewableImage = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type);
+      if (previewableImage) {
+        editor.focus();
+        const selection = window.getSelection();
+        if (taskWriterSavedRange && editor.contains(taskWriterSavedRange.commonAncestorContainer)) {
+          selection.removeAllRanges();
+          selection.addRange(taskWriterSavedRange);
+        }
+        document.execCommand('insertHTML', false, `<p><img src="data:${file.type};base64,${base64Data}" data-task-file-index="${fileIndex}" alt="${escapeHtml(file.name)}" style="max-width:100%;height:auto;"></p><p><br></p>`);
+        window.saveTaskWriterSelection();
+      }
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (error) {
+      console.error('Could not read task attachment:', error);
+      alert(`Could not read ${file.name}. Choose the file again and retry.`);
+    }
+  }
+};
+
+function readTaskFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error('FileReader failed.'));
+    reader.onload = () => {
+      try {
+        const bytes = new Uint8Array(reader.result);
+        let binary = '';
+        for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+          binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+        }
+        resolve(btoa(binary));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+window.removeTaskWriterFile = function(fileIndex) {
+  if (taskWriterSelectedImage?.dataset.taskFileIndex === String(fileIndex)) window.clearTaskWriterImageSelection();
+  taskWriterFilesEdited = true;
+  taskWriterFiles.splice(fileIndex, 1);
+  document.querySelectorAll('#taskWriterEditor img[data-task-file-index]').forEach((image) => {
+    const index = Number(image.dataset.taskFileIndex);
+    if (index === fileIndex) image.remove();
+    else if (index > fileIndex) image.dataset.taskFileIndex = String(index - 1);
+  });
+  document.getElementById('taskWriterEditor')?.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+window.turnInTaskWriting = async function(taskId) {
+  const editor = document.getElementById('taskWriterEditor');
+  const submissionHtml = taskWriterHtmlForStorage(editor?.innerHTML || '', taskWriterFiles);
+  const responseText = editor?.innerText.trim() || '';
+  if (!responseText && !taskWriterFiles.length) {
+    alert('Write your response before turning in the task.');
+    return;
+  }
+  if (!userEmail) {
+    alert('Please wait for the page to load completely.');
+    return;
+  }
+
+  const turnInButton = document.getElementById('taskWriterTurnIn');
+  turnInButton.disabled = true;
+  try {
+    clearTimeout(taskWriterDraftSaveTimer);
+    taskWriterDraftSaveTimer = null;
+    await taskWriterDraftSaveQueue;
+    const taskRef = doc(db, 'tasks', taskId);
+    const taskSnapshot = await getDoc(taskRef);
+    if (!taskSnapshot.exists() || !taskSnapshot.data().writingTask) {
+      alert('This writing task is no longer available.');
+      return;
+    }
+    const task = taskSnapshot.data();
+    const assignees = Array.isArray(task.assignedTo) ? task.assignedTo : [task.assignedTo];
+    if (!assignees.some((assignee) => normalizeEmail(assignee) === normalizeEmail(userEmail))
+      || (activeMemberOrganization?.id && task.organizationId !== activeMemberOrganization.id)) {
+      alert('You are not assigned to this task.');
+      return;
+    }
+    if (String(task.status || '').toLowerCase() === 'pending validation') {
+      document.getElementById('taskWriterDialog').close();
+      return;
+    }
+    for (let fileIndex = 0; fileIndex < taskWriterFiles.length; fileIndex += 1) {
+      const file = taskWriterFiles[fileIndex];
+      await setDoc(doc(db, 'tasks', taskId, 'submissionFiles', String(fileIndex)), {
+        ...file,
+        organizationId: task.organizationId
+      });
+    }
+    await updateDoc(taskRef, {
+      submissionText: responseText,
+      submissionHtml,
+      submissionFiles: taskWriterFiles.map((file, fileIndex) => ({
+        fileId: String(fileIndex),
+        originalFileName: file.originalFileName,
+        fileExtension: file.fileExtension,
+        mimeType: file.mimeType,
+        originalFileSize: file.originalFileSize
+      })),
+      submittedBy: userEmail,
+      submittedByName: getUserName(userEmail) || userEmail,
+      submittedAt: serverTimestamp(),
+      status: 'pending validation'
+    });
+    try {
+      await clearTaskWriterCloudDraft({
+        taskId,
+        organizationId: task.organizationId,
+        memberId: normalizeEmail(userEmail)
+      });
+    } catch (error) {
+      console.warn('Could not remove the submitted task draft from Firestore:', error);
+    }
+    localStorage.removeItem(taskWriterLocalDraftKey({
+      taskId,
+      organizationId: task.organizationId || activeMemberOrganization?.id || '',
+      memberId: normalizeEmail(userEmail)
+    }));
+    taskWriterFiles = [];
+    taskWriterFilesEdited = false;
+    document.getElementById('taskWriterDialog').close();
+    alert('Your response has been turned in.');
+  } catch (error) {
+    console.error('Error turning in writing task:', error);
+    if (error?.code === 'permission-denied') {
+      alert('Firestore blocked this submission. Deploy the updated www/firestore.rules, then try again.');
+    } else if (error?.code === 'resource-exhausted') {
+      alert('This response is too large for Firestore. Remove some attachments and try again.');
+    } else {
+      alert('Failed to turn in your response. Please try again.');
+    }
+  } finally {
+    turnInButton.disabled = false;
+  }
+};
 
 // FCM Backend URL configuration
 function getMemberBackendUrl() {

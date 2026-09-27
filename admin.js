@@ -2571,6 +2571,7 @@ window.createTask = async function () {
   const description = document.getElementById("description").value.trim();
   const assignedTo = document.getElementById("assignedTo").value;
   const link = document.getElementById("linkInput").value.trim();
+  const writingTask = document.getElementById("writingTask").checked;
 
   if (!title || !deadline || !assignedTo) {
     alert("Please fill all required fields.");
@@ -2593,6 +2594,7 @@ window.createTask = async function () {
         assignedTo: recipient.uid,
         assignedToName: recipient.name,
         linkURL: link || null,
+        writingTask,
         status: "pending",
         emailNotificationSent: false,
         organizationId: getActiveOrganizationId(),
@@ -2617,6 +2619,7 @@ window.createTask = async function () {
     document.getElementById("description").value = "";
     document.getElementById("assignedTo").value = "";
     document.getElementById("linkInput").value = "";
+    document.getElementById("writingTask").checked = false;
 
     const recipientLabel = assignedTo === "everyone" ? `${recipients.length} members` : recipients[0].name;
     alert(`Task created successfully for ${recipientLabel}!`);
@@ -2803,6 +2806,7 @@ onSnapshot(getActiveOrganizationId() ? query(collection(db, "tasks"), where("org
         const deleteButton = showDelete ? `<button onclick="removeTaskFeedback('${docSnap.id}', ${idx})" style=\"background:#ef4444; color:white; border:none; padding:0.25rem 0.5rem; border-radius:6px; margin-left:0.5rem;\">Delete</button>` : '';
         return `<div style="padding:0.5rem; border:1px solid #334155; border-radius:6px; margin-bottom:0.5rem; background:#041024;"><div style=\"display:flex; align-items:center; justify-content:space-between; gap:0.5rem;\"><div style=\\"font-weight:600; color:#f3f4f6;\\">${authorName} <span style=\\"font-weight:400; color:#94a3b8; font-size:0.85rem; margin-left:0.5rem;\\">${time}</span></div><div>${deleteButton}</div></div><div style=\"color:#cbd5e1; margin-top:0.25rem; white-space: pre-wrap; word-break: break-word;\">${f.message}</div></div>`;
       }).join('') : '<p style="color:#94a3b8;">No feedback yet.</p>';
+      const hasTaskSubmission = Boolean(t.submissionText || t.submissionHtml || t.submissionFiles?.length);
 
       html += `
         <div class="card" style="${t.status === 'pending validation' ? 'border: 2px solid #f59e0b; background: rgba(245, 158, 11, 0.1);' : ''}">
@@ -2811,6 +2815,7 @@ onSnapshot(getActiveOrganizationId() ? query(collection(db, "tasks"), where("org
           <p>Deadline: ${t.deadline}</p>
           ${t.description ? `<p><strong>Description:</strong> <span style="white-space: pre-wrap; word-break: break-word;">${t.description}</span></p>` : ""}  
           ${t.linkURL ? `<a href="${t.linkURL}" target="_blank">🔗 Open Link</a>` : ""}
+          ${hasTaskSubmission ? `<div class="task-submission-summary"><strong>Member response${t.submittedBy ? ` from ${escapeHtml(getUserName(t.submittedBy) || t.submittedBy)}` : ''}</strong><button type="button" onclick="viewTaskSubmission('${docSnap.id}')"><i class="fas fa-eye" aria-hidden="true"></i> View attachment</button></div>` : ''}
           <p>Status: <span style="${t.status === 'pending validation' ? 'color: #f59e0b; font-weight: bold;' : ''}">${t.status}</span></p>
           ${t.status === 'pending validation' ? '<p style="color: #f59e0b; font-weight: bold;">⚠️ Member has submitted this task for validation!</p>' : ''}
           <button onclick="markDone('${docSnap.id}')">Mark Done</button>
@@ -2831,6 +2836,325 @@ onSnapshot(getActiveOrganizationId() ? query(collection(db, "tasks"), where("org
     container.innerHTML = html;
   }
 });
+
+function createTaskSubmissionPreviewNode(node, filesById) {
+  if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent || '');
+  const fragment = document.createDocumentFragment();
+  if (node.nodeType !== Node.ELEMENT_NODE) return fragment;
+  if (['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'FORM'].includes(node.tagName)) return fragment;
+
+  const allowedTags = new Set(['P', 'DIV', 'BR', 'HR', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'A', 'IMG', 'SPAN', 'FONT']);
+  if (!allowedTags.has(node.tagName)) {
+    Array.from(node.childNodes).forEach((child) => fragment.append(createTaskSubmissionPreviewNode(child, filesById)));
+    return fragment;
+  }
+
+  const safe = document.createElement(node.tagName.toLowerCase());
+  if (node.tagName === 'IMG') {
+    const source = node.getAttribute('src') || '';
+    const fileMatch = source.match(/^task-file:(\d+)$/);
+    if (fileMatch) {
+      const file = filesById.get(fileMatch[1]);
+      if (!file || !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.mimeType)) return fragment;
+      safe.src = `data:${file.mimeType};base64,${file.base64Data}`;
+    } else {
+      try {
+        const imageUrl = new URL(source);
+        if (imageUrl.protocol !== 'https:' || !['firebasestorage.googleapis.com', 'storage.googleapis.com'].includes(imageUrl.hostname)) return fragment;
+        safe.src = imageUrl.href;
+      } catch {
+        return fragment;
+      }
+    }
+    safe.alt = String(node.getAttribute('alt') || '').slice(0, 200);
+    safe.style.maxWidth = '100%';
+    safe.style.height = 'auto';
+    const width = Number(node.dataset.taskWidth);
+    if (Number.isFinite(width) && width >= 16 && width <= 100) safe.style.width = `${width}%`;
+    return safe;
+  }
+
+  if (node.tagName === 'A') {
+    const href = node.getAttribute('href') || '';
+    try {
+      const url = new URL(href);
+      if (['https:', 'http:', 'mailto:'].includes(url.protocol)) {
+        safe.href = url.href;
+        safe.target = '_blank';
+        safe.rel = 'noopener noreferrer';
+      }
+    } catch {
+      return fragment;
+    }
+  }
+
+  const textColor = node.style?.color || node.getAttribute('color');
+  if (textColor && CSS.supports('color', textColor)) safe.style.color = textColor;
+  if (node.style?.backgroundColor && CSS.supports('background-color', node.style.backgroundColor)) {
+    safe.style.backgroundColor = node.style.backgroundColor;
+  }
+  if (['P', 'DIV', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'LI'].includes(node.tagName)
+    && ['left', 'center', 'right', 'justify'].includes(node.style?.textAlign)) {
+    safe.style.textAlign = node.style.textAlign;
+  }
+  if (node.tagName === 'SPAN' && /^(\d{1,2})(px|pt)$/.test(node.style.fontSize)) {
+    safe.style.fontSize = node.style.fontSize;
+  }
+  Array.from(node.childNodes).forEach((child) => safe.append(createTaskSubmissionPreviewNode(child, filesById)));
+  return safe;
+}
+
+window.viewTaskSubmission = async function(taskId) {
+  try {
+    const taskSnapshot = await getDoc(doc(db, 'tasks', taskId));
+    if (!taskSnapshot.exists()) {
+      alert('This task submission is no longer available.');
+      return;
+    }
+    const task = taskSnapshot.data();
+    const fileSnapshot = await getDocs(query(
+      collection(db, 'tasks', taskId, 'submissionFiles'),
+      where('organizationId', '==', task.organizationId)
+    ));
+    const filesById = new Map(fileSnapshot.docs.map((fileDoc) => [fileDoc.id, fileDoc.data()]));
+    const dialog = document.getElementById('taskSubmissionViewer') || document.createElement('dialog');
+    if (!dialog.id) {
+      dialog.id = 'taskSubmissionViewer';
+      dialog.className = 'task-submission-dialog';
+      dialog.innerHTML = `<section class="task-submission-viewer" aria-label="Submitted task document">
+        <header class="task-submission-viewer-header"><div><h2 id="taskSubmissionViewerTitle"></h2><p id="taskSubmissionViewerAuthor"></p></div><button type="button" class="task-submission-viewer-close" aria-label="Close document" title="Close" onclick="document.getElementById('taskSubmissionViewer').close()"><i class="fas fa-xmark"></i></button></header>
+        <main class="task-submission-viewer-workspace"><article id="taskSubmissionViewerPage" class="task-submission-viewer-page"></article><section id="taskSubmissionOriginalFiles" class="task-submission-original-files" hidden><h3>Original attachments</h3><div id="taskSubmissionOriginalFileButtons"></div></section></main>
+        <footer class="task-submission-viewer-footer"><button type="button" id="taskSubmissionDownloadDocx"><i class="fas fa-download" aria-hidden="true"></i> Download Word document</button></footer>
+      </section>`;
+      document.body.append(dialog);
+    }
+
+    document.getElementById('taskSubmissionViewerTitle').textContent = task.title || 'Task response';
+    document.getElementById('taskSubmissionViewerAuthor').textContent = `Submitted by ${task.submittedByName || task.assignedToName || 'Member'}`;
+    const html = task.submissionHtml || `<p>${escapeHtml(task.submissionText || '').replace(/\r?\n/g, '<br>')}</p>`;
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    const previewPage = document.getElementById('taskSubmissionViewerPage');
+    previewPage.replaceChildren();
+    Array.from(parsed.body.childNodes).forEach((node) => previewPage.append(createTaskSubmissionPreviewNode(node, filesById)));
+
+    const filesSection = document.getElementById('taskSubmissionOriginalFiles');
+    const fileButtons = document.getElementById('taskSubmissionOriginalFileButtons');
+    fileButtons.replaceChildren();
+    filesSection.hidden = fileSnapshot.empty;
+    fileSnapshot.docs.forEach((fileDoc) => {
+      const file = fileDoc.data();
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.innerHTML = '<i class="fas fa-download" aria-hidden="true"></i> ';
+      button.append(document.createTextNode(file.originalFileName || 'Download attachment'));
+      button.onclick = () => window.downloadTaskSubmissionFile(taskId, fileDoc.id);
+      fileButtons.append(button);
+    });
+    document.getElementById('taskSubmissionDownloadDocx').onclick = () => window.downloadTaskSubmission(taskId);
+    if (!dialog.open) dialog.showModal();
+  } catch (error) {
+    console.error('Failed to open task submission:', error);
+    alert('Could not open this task submission. Please try again.');
+  }
+};
+
+window.downloadTaskSubmission = async function(taskId) {
+  try {
+    const taskSnapshot = await getDoc(doc(db, 'tasks', taskId));
+    if (!taskSnapshot.exists()) {
+      alert('No writing response is available for this task.');
+      return;
+    }
+
+    const task = taskSnapshot.data();
+    if (!(task.submissionText || task.submissionHtml || task.submissionFiles?.length)) {
+      alert('No writing response is available for this task.');
+      return;
+    }
+    const fileSnapshot = await getDocs(query(
+      collection(db, 'tasks', taskId, 'submissionFiles'),
+      where('organizationId', '==', task.organizationId)
+    ));
+    const submissionFilesById = new Map(fileSnapshot.docs.map((fileDoc) => [fileDoc.id, fileDoc.data()]));
+    const { Document, Packer, Paragraph, TextRun, ImageRun, HeadingLevel } = await import('https://cdn.jsdelivr.net/npm/docx@9.5.1/+esm');
+    const submissionHtml = task.submissionHtml || `<p>${escapeHtml(task.submissionText || '').replace(/\r?\n/g, '<br>')}</p>`;
+    const responseDom = new DOMParser().parseFromString(submissionHtml, 'text/html');
+    const isAllowedImageUrl = (value) => {
+      try {
+        const imageUrl = new URL(value);
+        return imageUrl.protocol === 'https:'
+          && ['firebasestorage.googleapis.com', 'storage.googleapis.com'].includes(imageUrl.hostname);
+      } catch {
+        return false;
+      }
+    };
+    const getRunStyles = (element, inherited = {}) => {
+      const styles = { ...inherited };
+      if (['B', 'STRONG'].includes(element.tagName)) styles.bold = true;
+      if (['I', 'EM'].includes(element.tagName)) styles.italics = true;
+      if (element.tagName === 'U') styles.underline = {};
+      if (element.tagName === 'S') styles.strike = true;
+      const color = element.style?.color || element.getAttribute?.('color') || '';
+      const hexColor = color.match(/^#([\da-f]{6})$/i);
+      const rgbColor = color.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+      if (hexColor) styles.color = hexColor[1];
+      else if (rgbColor) styles.color = rgbColor.slice(1).map((part) => Number(part).toString(16).padStart(2, '0')).join('');
+      return styles;
+    };
+    const createRuns = async (node, inheritedStyles = {}) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return node.textContent ? [new TextRun({ text: node.textContent, ...inheritedStyles })] : [];
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return [];
+      if (node.tagName === 'IMG') {
+        const imageUrl = node.getAttribute('src') || '';
+        const fileMatch = imageUrl.match(/^task-file:(\d+)$/);
+        if (fileMatch) {
+          const attachment = submissionFilesById.get(fileMatch[1]);
+          if (!attachment) return [];
+          if (!['image/png', 'image/jpeg'].includes(attachment.mimeType)) {
+            return [new TextRun({ text: `[Attached file: ${attachment.originalFileName}]` })];
+          }
+          const imageBytes = decodeBase64FileData(attachment.base64Data);
+          const imageType = getDocxImageType(attachment.mimeType, imageBytes);
+          const imageBlob = new Blob([imageBytes], { type: attachment.mimeType });
+          const imageBitmap = await createImageBitmap(imageBlob);
+          const requestedWidth = Math.max(16, Math.min(100, Number(node.dataset.taskWidth) || 100));
+          const imageScale = Math.min(1, (600 * requestedWidth / 100) / imageBitmap.width, 780 / imageBitmap.height);
+          const imageRun = new ImageRun({
+            type: imageType,
+            data: imageBytes,
+            transformation: { width: Math.round(imageBitmap.width * imageScale), height: Math.round(imageBitmap.height * imageScale) }
+          });
+          imageBitmap.close();
+          return [imageRun];
+        }
+        if (!isAllowedImageUrl(imageUrl)) return [];
+        const imageResponse = await fetch(imageUrl);
+        if (!imageResponse.ok) throw new Error('Could not retrieve a submitted image.');
+        const imageBlob = await imageResponse.blob();
+        const imageBytes = new Uint8Array(await imageBlob.arrayBuffer());
+        const imageType = getDocxImageType(imageBlob.type, imageBytes);
+        const imageBitmap = await createImageBitmap(imageBlob);
+        const requestedWidth = Math.max(16, Math.min(100, Number(node.dataset.taskWidth) || 100));
+        const scale = Math.min(1, (600 * requestedWidth / 100) / imageBitmap.width, 780 / imageBitmap.height);
+        const imageRun = new ImageRun({
+          type: imageType,
+          data: imageBytes,
+          transformation: { width: Math.round(imageBitmap.width * scale), height: Math.round(imageBitmap.height * scale) }
+        });
+        imageBitmap.close();
+        return [imageRun];
+      }
+      const styles = getRunStyles(node, inheritedStyles);
+      const runs = [];
+      if (node.tagName === 'BR') return [new TextRun({ text: '\n', ...styles })];
+      for (const child of Array.from(node.childNodes)) runs.push(...await createRuns(child, styles));
+      return runs;
+    };
+    const responseBlocks = [];
+    const collectBlocks = (node) => {
+      if (node.nodeType === Node.ELEMENT_NODE && node.dataset.taskPageBreak) {
+        responseBlocks.push({ node, pageBreak: true });
+      } else if (node.nodeType === Node.ELEMENT_NODE && ['UL', 'OL'].includes(node.tagName)) {
+        Array.from(node.children).filter((child) => child.tagName === 'LI').forEach((item, index) => {
+          responseBlocks.push({ node: item, list: node.tagName, index });
+        });
+      } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'DIV'
+        && Array.from(node.children).some((child) => ['P', 'DIV', 'H1', 'H2', 'H3', 'UL', 'OL'].includes(child.tagName))) {
+        Array.from(node.childNodes).forEach(collectBlocks);
+      } else {
+        responseBlocks.push({ node });
+      }
+    };
+    Array.from(responseDom.body.childNodes).forEach(collectBlocks);
+    const paragraphs = [];
+    for (const block of responseBlocks) {
+      if (block.pageBreak) {
+        paragraphs.push(new Paragraph({ children: [new TextRun(' ')], pageBreakBefore: true }));
+        continue;
+      }
+      const runs = await createRuns(block.node);
+      const children = runs.length ? runs : [new TextRun(' ')];
+      if (block.list === 'OL') children.unshift(new TextRun(`${block.index + 1}. `));
+      const options = { children };
+      if (block.list === 'UL') options.bullet = { indent: 360 };
+      const element = block.node.nodeType === Node.ELEMENT_NODE ? block.node : null;
+      if (element?.style?.textAlign === 'center') options.alignment = 'center';
+      else if (element?.style?.textAlign === 'right') options.alignment = 'right';
+      else if (element?.style?.textAlign === 'justify') options.alignment = 'both';
+      if (element?.tagName === 'H1') options.heading = HeadingLevel.HEADING_1;
+      if (element?.tagName === 'H2') options.heading = HeadingLevel.HEADING_2;
+      if (element?.tagName === 'H3') options.heading = HeadingLevel.HEADING_3;
+      paragraphs.push(new Paragraph(options));
+    }
+    const documentFile = new Document({
+      sections: [{
+        children: [
+          new Paragraph({ text: task.title || 'Task Response', heading: HeadingLevel.HEADING_1 }),
+          new Paragraph({ text: `Submitted by: ${task.submittedByName || task.assignedToName || 'Member'}` }),
+          ...paragraphs
+        ]
+      }]
+    });
+    const fileBlob = await Packer.toBlob(documentFile);
+    const downloadUrl = URL.createObjectURL(fileBlob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `${String(task.title || 'task-response').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'task-response'}.docx`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  } catch (error) {
+    console.error('Failed to download task response:', error);
+    alert('Could not create the Word document. Please try again while connected to the internet.');
+  }
+};
+
+function decodeBase64FileData(base64Data) {
+  const binary = atob(String(base64Data || ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function getDocxImageType(mimeType, imageBytes) {
+  const bytes = imageBytes instanceof Uint8Array ? imageBytes : new Uint8Array(imageBytes);
+  const normalizedMimeType = String(mimeType || '').split(';')[0].trim().toLowerCase();
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'png';
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpg';
+  if (normalizedMimeType === 'image/png') return 'png';
+  if (normalizedMimeType === 'image/jpeg' || normalizedMimeType === 'image/jpg') return 'jpg';
+  throw new Error('The Word document contains an unsupported image format.');
+}
+
+window.downloadTaskSubmissionFile = async function(taskId, fileId) {
+  try {
+    const fileSnapshot = await getDoc(doc(db, 'tasks', taskId, 'submissionFiles', String(fileId)));
+    if (!fileSnapshot.exists()) {
+      alert('This attachment is no longer available.');
+      return;
+    }
+    const fileData = fileSnapshot.data();
+    const restoredFile = new File(
+      [decodeBase64FileData(fileData.base64Data)],
+      fileData.originalFileName,
+      { type: fileData.mimeType || '' }
+    );
+    if (restoredFile.size !== fileData.originalFileSize) {
+      alert('The attachment failed its file-size integrity check and was not downloaded.');
+      return;
+    }
+    const downloadUrl = URL.createObjectURL(restoredFile);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = fileData.originalFileName;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  } catch (error) {
+    console.error('Failed to reconstruct task attachment:', error);
+    alert('Could not reconstruct this attachment. Please try again.');
+  }
+};
 
 // Add feedback to a task (admin)
 window.addTaskFeedback = async function(taskId) {
