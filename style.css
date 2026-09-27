@@ -1330,13 +1330,13 @@ button:active {
 }
 
 .task-writer-dialog {
-  width: min(1500px, calc(100% - 1.5rem));
-  max-width: 1500px;
-  height: min(94vh, 1000px);
-  max-height: 94vh;
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
   padding: 0;
-  border: 1px solid #bfc4ca;
-  border-radius: 6px;
+  border: 0;
+  border-radius: 0;
   box-shadow: 0 18px 70px rgba(15, 23, 42, 0.35);
   overflow: hidden;
 }
@@ -1346,13 +1346,13 @@ button:active {
 }
 
 .task-submission-dialog {
-  width: min(1040px, calc(100% - 1.5rem));
-  max-width: 1040px;
-  height: min(92vh, 1000px);
-  max-height: 92vh;
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
   padding: 0;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border: 0;
+  border-radius: 0;
   box-shadow: 0 18px 70px rgba(15, 23, 42, 0.4);
   overflow: hidden;
 }

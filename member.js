@@ -1719,8 +1719,9 @@ window.openTaskWriter = async function(taskId) {
         window.setTaskWriterImageWrap('front');
       }
     }
-    const x = Math.max(0, Math.min(90, drag.imageX + ((event.clientX - drag.startX) / Math.max(1, editor.clientWidth)) * 100));
-    const y = Math.max(0, Math.min(90, drag.imageY + ((event.clientY - drag.startY) / Math.max(1, editor.clientHeight)) * 100));
+    const bounds = taskWriterImagePositionBounds(drag.image, editor);
+    const x = Math.max(0, Math.min(bounds.maxX, drag.imageX + ((event.clientX - drag.startX) / Math.max(1, editor.clientWidth)) * 100));
+    const y = Math.max(0, Math.min(bounds.maxY, drag.imageY + ((event.clientY - drag.startY) / Math.max(1, editor.clientHeight)) * 100));
     drag.image.dataset.taskX = String(x);
     drag.image.dataset.taskY = String(y);
     drag.image.style.left = `${x}%`;
@@ -1994,11 +1995,11 @@ function sanitizeTaskWriterHtml(html, files = taskWriterFiles) {
         safe.style.margin = '0.25rem 0.8rem 0.5rem 0';
       } else if (wrapMode === 'behind' || wrapMode === 'front') {
         safe.style.position = 'absolute';
-        safe.style.left = `${Math.max(0, Math.min(90, Number(node.dataset.taskX) || 10))}%`;
-        safe.style.top = `${Math.max(0, Math.min(90, Number(node.dataset.taskY) || 10))}%`;
+        safe.style.left = `${Math.max(0, Math.min(100, Number(node.dataset.taskX) || 10))}%`;
+        safe.style.top = `${Math.max(0, Math.min(100, Number(node.dataset.taskY) || 10))}%`;
         safe.style.zIndex = wrapMode === 'behind' ? '0' : '2';
-        safe.dataset.taskX = String(Math.max(0, Math.min(90, Number(node.dataset.taskX) || 10)));
-        safe.dataset.taskY = String(Math.max(0, Math.min(90, Number(node.dataset.taskY) || 10)));
+        safe.dataset.taskX = String(Math.max(0, Math.min(100, Number(node.dataset.taskX) || 10)));
+        safe.dataset.taskY = String(Math.max(0, Math.min(100, Number(node.dataset.taskY) || 10)));
       }
       return safe;
     }
@@ -2083,6 +2084,15 @@ function positionTaskWriterImageResizeHandle() {
   handle.style.top = `${(imageBounds.bottom - pageBounds.top) / zoom - 10}px`;
 }
 
+function taskWriterImagePositionBounds(image, editor) {
+  const editorBounds = editor.getBoundingClientRect();
+  const imageBounds = image.getBoundingClientRect();
+  return {
+    maxX: Math.max(0, 100 - (imageBounds.width / Math.max(1, editorBounds.width)) * 100),
+    maxY: Math.max(0, 100 - (imageBounds.height / Math.max(1, editorBounds.height)) * 100)
+  };
+}
+
 window.setTaskWriterImageWrap = function(wrapMode) {
   const image = taskWriterSelectedImage;
   if (!image || !['inline', 'square', 'behind', 'front'].includes(wrapMode)) return;
@@ -2094,6 +2104,11 @@ window.setTaskWriterImageWrap = function(wrapMode) {
   if (wrapMode === 'behind' || wrapMode === 'front') {
     image.dataset.taskX = image.dataset.taskX || '10';
     image.dataset.taskY = image.dataset.taskY || '10';
+    image.style.left = `${image.dataset.taskX}%`;
+    image.style.top = `${image.dataset.taskY}%`;
+    const bounds = taskWriterImagePositionBounds(image, document.getElementById('taskWriterEditor'));
+    image.dataset.taskX = String(Math.max(0, Math.min(bounds.maxX, Number(image.dataset.taskX) || 0)));
+    image.dataset.taskY = String(Math.max(0, Math.min(bounds.maxY, Number(image.dataset.taskY) || 0)));
     image.style.left = `${image.dataset.taskX}%`;
     image.style.top = `${image.dataset.taskY}%`;
   } else {
@@ -2114,6 +2129,12 @@ window.resizeTaskWriterImage = function(width) {
   const imageWidth = Math.max(16, Math.min(100, Number(width) || 100));
   taskWriterSelectedImage.dataset.taskWidth = String(imageWidth);
   taskWriterSelectedImage.style.width = `${imageWidth}%`;
+  const editor = document.getElementById('taskWriterEditor');
+  const bounds = taskWriterImagePositionBounds(taskWriterSelectedImage, editor);
+  taskWriterSelectedImage.dataset.taskX = String(Math.max(0, Math.min(bounds.maxX, Number(taskWriterSelectedImage.dataset.taskX) || 0)));
+  taskWriterSelectedImage.dataset.taskY = String(Math.max(0, Math.min(bounds.maxY, Number(taskWriterSelectedImage.dataset.taskY) || 0)));
+  taskWriterSelectedImage.style.left = `${taskWriterSelectedImage.dataset.taskX}%`;
+  taskWriterSelectedImage.style.top = `${taskWriterSelectedImage.dataset.taskY}%`;
   document.getElementById('taskWriterImageSizeOutput').value = `${imageWidth}%`;
   positionTaskWriterImageResizeHandle();
   document.getElementById('taskWriterEditor')?.dispatchEvent(new Event('input', { bubbles: true }));
@@ -2124,8 +2145,10 @@ window.moveTaskWriterImage = function(deltaX, deltaY) {
   const currentMode = taskWriterSelectedImage.dataset.taskWrap || 'inline';
   if (currentMode !== 'behind' && currentMode !== 'front') window.setTaskWriterImageWrap('front');
   const image = taskWriterSelectedImage;
-  const x = Math.max(0, Math.min(90, (Number(image.dataset.taskX) || 10) + deltaX));
-  const y = Math.max(0, Math.min(90, (Number(image.dataset.taskY) || 10) + deltaY));
+  const editor = document.getElementById('taskWriterEditor');
+  const bounds = taskWriterImagePositionBounds(image, editor);
+  const x = Math.max(0, Math.min(bounds.maxX, (Number(image.dataset.taskX) || 10) + deltaX));
+  const y = Math.max(0, Math.min(bounds.maxY, (Number(image.dataset.taskY) || 10) + deltaY));
   image.dataset.taskX = String(x);
   image.dataset.taskY = String(y);
   image.style.left = `${x}%`;
