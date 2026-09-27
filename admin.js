@@ -1016,6 +1016,7 @@ window.saveProgressReport = async function() {
 function loadMembers() {
   const select = document.getElementById("assignedTo");
   if (!select) return;
+  const selectedValue = select.value;
   select.innerHTML = "";
 
   members.forEach(m => {
@@ -1023,6 +1024,8 @@ function loadMembers() {
   });
   if (select.options.length === 0) {
     select.innerHTML = '<option value="">No members available</option>';
+  } else if (Array.from(select.options).some(option => option.value === selectedValue)) {
+    select.value = selectedValue;
   }
 }
 
