@@ -1770,12 +1770,17 @@ window.openTaskWriter = async function(taskId) {
   resizeHandle.onpointercancel = resizeHandle.onpointerup;
   dialog.querySelector('.task-writer-workspace').onscroll = positionTaskWriterImageResizeHandle;
   editor.onpaste = (event) => {
-    const imageFiles = Array.from(event.clipboardData?.items || [])
-      .filter((item) => item.kind === 'file' && /^image\/(png|jpeg)$/.test(item.type))
+    const clipboardData = event.clipboardData;
+    const itemFiles = Array.from(clipboardData?.items || [])
+      .filter((item) => item.kind === 'file' && item.type.toLowerCase().startsWith('image/'))
       .map((item) => item.getAsFile())
       .filter(Boolean);
+    const imageFiles = itemFiles.length
+      ? itemFiles
+      : Array.from(clipboardData?.files || []).filter((file) => isTaskWriterImageMimeType(file.type));
     if (imageFiles.length) {
       event.preventDefault();
+      window.saveTaskWriterSelection();
       void window.insertTaskWriterImages(imageFiles);
       return;
     }
@@ -1967,8 +1972,8 @@ function sanitizeTaskWriterHtml(html, files = taskWriterFiles) {
       const fileMarker = source.match(/^task-file:(\d+)$/);
       const dataIndex = Number(node.getAttribute('data-task-file-index') || fileMarker?.[1]);
       const file = Number.isInteger(dataIndex) ? files[dataIndex] : null;
-      const dataUriMatch = source.match(/^data:image\/(png|jpeg|gif|webp);base64,([a-z\d+/=]+)$/i);
-      const dataUri = fileMarker && file && ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.mimeType)
+      const dataUriMatch = source.match(/^data:image\/[a-z\d.+-]+;base64,([a-z\d+/=]+)$/i);
+      const dataUri = fileMarker && file && isTaskWriterImageMimeType(file.mimeType)
         ? `data:${file.mimeType};base64,${file.base64Data}`
         : (dataUriMatch ? source : null);
       if (!dataUri && !isTaskWriterImageUrl(source)) return fragment;
@@ -2239,34 +2244,93 @@ function updateTaskWriterWordCount() {
   counter.textContent = `${wordCount} ${wordCount === 1 ? 'word' : 'words'}`;
 }
 
+function isTaskWriterImageMimeType(mimeType) {
+  return typeof mimeType === 'string' && mimeType.toLowerCase().startsWith('image/');
+}
+
+async function compressTaskWriterImage(file, maxSize) {
+  let bitmap;
+  let objectUrl;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    try {
+      await new Promise((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error('Image format is not supported by this browser.'));
+        image.src = objectUrl;
+      });
+    } catch (error) {
+      URL.revokeObjectURL(objectUrl);
+      throw error;
+    }
+    bitmap = { width: image.naturalWidth, height: image.naturalHeight, drawSource: image };
+  }
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) {
+    bitmap.close?.();
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    throw new Error('Canvas is unavailable.');
+  }
+
+  let scale = Math.min(1, 2400 / Math.max(bitmap.width, bitmap.height));
+  let blob = null;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap.drawSource || bitmap, 0, 0, canvas.width, canvas.height);
+    const quality = Math.max(0.35, 0.86 - attempt * 0.07);
+    blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+    if (blob && blob.size <= maxSize) break;
+    scale *= 0.82;
+  }
+  bitmap.close?.();
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  if (!blob || blob.size > maxSize) throw new Error('Image could not be compressed to the attachment limit.');
+  return blob;
+}
+
 window.insertTaskWriterImages = async function(files) {
   const editor = document.getElementById('taskWriterEditor');
   if (!editor) {
     return;
   }
+  const maxFileSize = 600 * 1024;
+  const maxTotalSize = 2.4 * 1024 * 1024;
   for (const file of Array.from(files || [])) {
-    const currentTotalSize = taskWriterFiles.reduce((total, attachment) => total + attachment.originalFileSize, 0);
     if (taskWriterFiles.length >= 10) {
       alert('A task response can include up to 10 files.');
       continue;
     }
-    if (file.size > 600 * 1024 || currentTotalSize + file.size > 2.4 * 1024 * 1024) {
-      alert('Each file must be 600 KB or smaller, with a total attachment limit of 2.4 MB.');
-      continue;
-    }
     try {
-      const base64Data = await readTaskFileAsBase64(file);
-      const extensionIndex = file.name.lastIndexOf('.');
+      const isImage = isTaskWriterImageMimeType(file.type);
+      const storedFile = file.size > maxFileSize && isImage
+        ? await compressTaskWriterImage(file, maxFileSize)
+        : file;
+      const currentTotalSize = taskWriterFiles.reduce((total, attachment) => total + attachment.originalFileSize, 0);
+      if (storedFile.size > maxFileSize || currentTotalSize + storedFile.size > maxTotalSize) {
+        alert('Each file must be 600 KB or smaller, with a total attachment limit of 2.4 MB.');
+        continue;
+      }
+      const base64Data = await readTaskFileAsBase64(storedFile);
+      const compressed = storedFile !== file;
+      const fileName = compressed ? `${file.name.replace(/\.[^.]*$/, '') || 'image'}.jpg` : file.name;
+      const extensionIndex = fileName.lastIndexOf('.');
       const fileRecord = {
-        originalFileName: file.name,
-        fileExtension: extensionIndex > 0 ? file.name.slice(extensionIndex + 1) : '',
-        mimeType: file.type,
-        originalFileSize: file.size,
+        originalFileName: fileName,
+        fileExtension: extensionIndex > 0 ? fileName.slice(extensionIndex + 1) : '',
+        mimeType: compressed ? 'image/jpeg' : file.type,
+        originalFileSize: storedFile.size,
         base64Data
       };
       taskWriterFilesEdited = true;
       const fileIndex = taskWriterFiles.push(fileRecord) - 1;
-      const previewableImage = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type);
+      const previewableImage = isTaskWriterImageMimeType(fileRecord.mimeType);
       if (previewableImage) {
         editor.focus();
         const selection = window.getSelection();
@@ -2274,13 +2338,13 @@ window.insertTaskWriterImages = async function(files) {
           selection.removeAllRanges();
           selection.addRange(taskWriterSavedRange);
         }
-        document.execCommand('insertHTML', false, `<p><img src="data:${file.type};base64,${base64Data}" data-task-file-index="${fileIndex}" alt="${escapeHtml(file.name)}" style="max-width:100%;height:auto;"></p><p><br></p>`);
+        document.execCommand('insertHTML', false, `<p><img src="data:${fileRecord.mimeType};base64,${base64Data}" data-task-file-index="${fileIndex}" alt="${escapeHtml(fileRecord.originalFileName)}" style="max-width:100%;height:auto;"></p><p><br></p>`);
         window.saveTaskWriterSelection();
       }
       editor.dispatchEvent(new Event('input', { bubbles: true }));
     } catch (error) {
       console.error('Could not read task attachment:', error);
-      alert(`Could not read ${file.name}. Choose the file again and retry.`);
+      alert(`Could not add ${file.name}. It may be an unsupported image format or could not be compressed.`);
     }
   }
 };

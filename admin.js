@@ -2858,7 +2858,7 @@ function createTaskSubmissionPreviewNode(node, filesById) {
     const fileMatch = source.match(/^task-file:(\d+)$/);
     if (fileMatch) {
       const file = filesById.get(fileMatch[1]);
-      if (!file || !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.mimeType)) return fragment;
+      if (!file || typeof file.mimeType !== 'string' || !file.mimeType.toLowerCase().startsWith('image/')) return fragment;
       safe.src = `data:${file.mimeType};base64,${file.base64Data}`;
     } else {
       try {
