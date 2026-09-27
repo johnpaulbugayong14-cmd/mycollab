@@ -1,0 +1,242 @@
+{
+  "name": "mytaskForMyCollab",
+  "short_name": "MyTask",
+  "description": "Task management system for My Collab",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "scope": "./",
+  "permissions": [
+    "notifications",
+    "background-sync"
+  ],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%233b82f6'/><text x='256' y='280' font-family='Arial, sans-serif' font-size='200' font-weight='bold' text-anchor='middle' fill='white'>✓</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%233b82f6'/><text x='256' y='280' font-family='Arial, sans-serif' font-size='200' font-weight='bold' text-anchor='middle' fill='white'>✓</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "version": "2.0.60",
+  "files": [
+    {
+      "path": "admin.html",
+      "size": 61208,
+      "sha256": "8ff504b23653b0987987491876922a862d311f09fcc525561e08cbb5f4be9401"
+    },
+    {
+      "path": "admin.js",
+      "size": 213052,
+      "sha256": "a3afe2cbdfd59276327b0983bc264db019290b3f4ce545a59865f62885d7407a"
+    },
+    {
+      "path": "auth.js",
+      "size": 34260,
+      "sha256": "291d026b5ec6407af7e5a2a1b9d2980be3565ae339e8eca74d55031b68adbd8c"
+    },
+    {
+      "path": "chat.html",
+      "size": 32022,
+      "sha256": "e378538e5e37d4aaffb1ca8d293d20e05a2a0180a86f81cf0a8daeb65d43b901"
+    },
+    {
+      "path": "chat.js",
+      "size": 58856,
+      "sha256": "0d529820a9aab0e1bff07f904d8d57acde132e44f44cde3650be8f7674d6fba2"
+    },
+    {
+      "path": "email-config-new.js",
+      "size": 2174,
+      "sha256": "b4c96bc391fad2082ded4f266279589a759d1ef999cfd81dfe20ce05bd1b44b7"
+    },
+    {
+      "path": "email-config.js",
+      "size": 1462,
+      "sha256": "b3c273135e6a01fd5f28e36846177cc280299d6e1870fddb0b7dc7a289bad1c0"
+    },
+    {
+      "path": "events.css",
+      "size": 4227,
+      "sha256": "1d50ae7ee25e634935afa8329ca31ee7c8465a52b059d943e90aa847bfdb6e6d"
+    },
+    {
+      "path": "events.js",
+      "size": 13307,
+      "sha256": "e62d0fe5b7e61cffb78e800a876eb7fa1d61414542864c1798df97717b8cc113"
+    },
+    {
+      "path": "firebase.js",
+      "size": 1491,
+      "sha256": "6c257ac2ee74351f80877889097fcd23510f891a688808b2b506ef6e6140283a"
+    },
+    {
+      "path": "firebase.json",
+      "size": 113,
+      "sha256": "bb8957f0e454e94f3626d08e887b9145382f47d0690689b70ddc9897b0930cab"
+    },
+    {
+      "path": "firestore.rules",
+      "size": 12786,
+      "sha256": "7dd191cb379ba9210b96cf3e08d3a01a34e9ed6024eaed8d9656e43ab620fa52"
+    },
+    {
+      "path": "github-email-trigger.js",
+      "size": 2725,
+      "sha256": "4077f815ad4abac8781297bb101e7dc37da9e83344216f84233e677dcab6cbf8"
+    },
+    {
+      "path": "github-token.js",
+      "size": 303,
+      "sha256": "fd6c11208bbd6d206bcb8877ded8299e8cc85f58b0eaa41d9bdf319c67a37128"
+    },
+    {
+      "path": "index.html",
+      "size": 6883,
+      "sha256": "ccc30351064351c60c3287dbf17b55aaf49ac4210c1cf24c7f18e67cdae53d9b"
+    },
+    {
+      "path": "link-handler.js",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "login.html",
+      "size": 6969,
+      "sha256": "3a5a7a73b8dfc616e1e85973f4d8419494464ef7521fd3f8b4c88d03ce76de5c"
+    },
+    {
+      "path": "member.html",
+      "size": 76873,
+      "sha256": "351ed7d8c1d823b395950af66ab705e03018456c4a499e673cdd71468405353c"
+    },
+    {
+      "path": "member.js",
+      "size": 259051,
+      "sha256": "c85a6b13cf5412e201103504bad8c5a2aac989c41d8bf8bda5c9c4ab30206977"
+    },
+    {
+      "path": "myspace.html",
+      "size": 11364,
+      "sha256": "e89c7cc630ad0e5e79ad32f29961e39057a23537a05468788b1a0b5c0e97a1d0"
+    },
+    {
+      "path": "myspace.js",
+      "size": 17746,
+      "sha256": "8bba7a37af26c71b143dfb26f75204cef2e29b8f001d7197c621317517940436"
+    },
+    {
+      "path": "native-notifications.js",
+      "size": 7281,
+      "sha256": "c78ff31477f6c33afba9e9eb82dc69f0160d330c73f2a4d4ad27354ce95181ef"
+    },
+    {
+      "path": "notifications.js",
+      "size": 6438,
+      "sha256": "cfc0d36df4faaf9ec1e1a5f92f2ddacac941520a91a0c4e4f208c92b1f018021"
+    },
+    {
+      "path": "organization-management.html",
+      "size": 15021,
+      "sha256": "188ee4d7732b75af511ffb030adb3631ab03c71c24606bbb8220db3536d1b3c8"
+    },
+    {
+      "path": "organization-selection.html",
+      "size": 14649,
+      "sha256": "6d2bd76a6e1e0ac80c6883a4534cc957aae3c9a9d402ca27b493961658f8af54"
+    },
+    {
+      "path": "organizations.js",
+      "size": 6170,
+      "sha256": "eacda129dd06e53b1ce797f2a4464b0c4292aa1ea5c4dd64db328e18917f8f78"
+    },
+    {
+      "path": "package-lock.json",
+      "size": 122369,
+      "sha256": "abffafe3d43ce4c38f196ef4e479c839034504ca4812b87e1c3063ed7aff094a"
+    },
+    {
+      "path": "package.json",
+      "size": 135,
+      "sha256": "fb0fbc521fa98b82f62ea36b438787a8f8a8d786b79118a2cb821da3f8269046"
+    },
+    {
+      "path": "previous_admin.html",
+      "size": 76222,
+      "sha256": "a96af3f6f6c767ea89c9ec24fb20baae9d3f6612689fa14e6af10fa35ddfaa4d"
+    },
+    {
+      "path": "send-notification.js",
+      "size": 1601,
+      "sha256": "2d4c70590e8281fe7736931040d7ab54181c10c8cc6f3d19ed9149ca49a16625"
+    },
+    {
+      "path": "server.js",
+      "size": 6022,
+      "sha256": "eea2ac7fbb9e8c66890f91281e877030731cae83fa776a6ac846616f1013b593"
+    },
+    {
+      "path": "service-worker.js",
+      "size": 7831,
+      "sha256": "bb2fd29ea86b9ac5c3dd0f369f4611cc93226963f694272d6fc0f5cceaaf9b99"
+    },
+    {
+      "path": "storage.rules",
+      "size": 186,
+      "sha256": "dba9a0bc69779ee4779822b1e04a4ffc9b2435e127ef14325f06bd3f8ce65090"
+    },
+    {
+      "path": "style.css",
+      "size": 53556,
+      "sha256": "706d6cb008080de9334579ba870b267580dc632287c3b3ee3da6e1429d80b25d"
+    },
+    {
+      "path": "survey.html",
+      "size": 4737,
+      "sha256": "d9f5332d5f93ff8dceab20e458ca3df135aadcc77f6ae69e782f58fc3796f1b3"
+    },
+    {
+      "path": "survey.js",
+      "size": 9159,
+      "sha256": "f1327af9fb80d838c7bbfb9d71ead0f411bfaebfc792a948af650f47afbdaf77"
+    },
+    {
+      "path": "trigger-email.js",
+      "size": 3015,
+      "sha256": "e25b7e96bb2131b7ead5be011d0092b993cebc470735faa6ea3d9d5df8d7f4b7"
+    },
+    {
+      "path": "update-config.js",
+      "size": 377,
+      "sha256": "7fb74bbc31413f3ac7c5dded3763416b1b83f8324b44781a3b16beb71558c986"
+    },
+    {
+      "path": "update-manager.js",
+      "size": 12511,
+      "sha256": "418fb7702cd59ce8e230d28ac770a59f3633e4b614bf591dc840140f8d657faf"
+    },
+    {
+      "path": "vercel.json",
+      "size": 277,
+      "sha256": "6db4342674873da9fe5a66dd023482f3bfc6a9b6fe481ae964a8f8aa82e05034"
+    },
+    {
+      "path": "version.json",
+      "size": 9139,
+      "sha256": "2ef096b499d90c15c74795ee086a03dcb3a861894175fedff4d86db0f49408f2"
+    },
+    {
+      "path": "watchtogether.js",
+      "size": 10948,
+      "sha256": "88f140127b1ad54fbf97d1ef0121aee9b5b8f803337790c91254d0f64d2566ad"
+    }
+  ]
+}
