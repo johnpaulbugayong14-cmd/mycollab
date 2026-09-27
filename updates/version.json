@@ -1,8 +1,8 @@
 {
-  "version": "2.0.54",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.54/",
+  "version": "2.0.59",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.59/",
   "required": true,
   "releaseNotes": [
-    "Monthly cumulative update"
+    "Major update"
   ]
 }
