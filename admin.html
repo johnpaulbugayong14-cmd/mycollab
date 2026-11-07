@@ -215,6 +215,19 @@
       display: flex !important;
     }
   </style>
+  <link rel="stylesheet" href="ui-refresh.css?v=34">
+  <style>
+    html body:not(:has(.chat-page)):not(:has(.organization-page)) {
+      background: #fff !important;
+      background-image: none !important;
+    }
+
+    html body:not(:has(.chat-page)):not(:has(.organization-page))::before,
+    html body:not(:has(.chat-page)):not(:has(.organization-page))::after {
+      display: none !important;
+      animation: none !important;
+    }
+  </style>
   <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
 </head>
 <body class="admin-loading">
@@ -783,8 +796,17 @@ function toggleSidebar() {
   const sidebar = document.querySelector('.sidebar');
   const overlay = document.querySelector('.sidebar-overlay');
   const appContainer = document.querySelector('.app-container');
+  if (window.innerWidth >= 900) {
+    const isCollapsed = sidebar.classList.toggle('collapsed');
+    sidebar.classList.remove('open');
+    appContainer.classList.toggle('has-collapsed-sidebar', isCollapsed);
+    appContainer.classList.remove('has-open-sidebar');
+    overlay.classList.remove('show');
+    return;
+  }
   const isOpen = sidebar.classList.toggle('open');
   sidebar.classList.remove('collapsed');
+  appContainer.classList.remove('has-collapsed-sidebar');
   appContainer.classList.toggle('has-open-sidebar', isOpen);
   overlay.classList.toggle('show', isOpen && window.innerWidth <= 1024);
 }
@@ -812,10 +834,10 @@ function closeMobileSidebar() {
   await requireAuth(['admin']);
 </script>
 <script type="module" src="events.js?v=1"></script>
-<script type="module" src="admin.js?v=18"></script>
+<script type="module" src="admin.js?v=19"></script>
 <script>
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=39", { updateViaCache: "none" });
+  navigator.serviceWorker.register("service-worker.js?v=40", { updateViaCache: "none" });
 }
 </script>
 <script>
