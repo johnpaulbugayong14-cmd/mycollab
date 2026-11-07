@@ -38,6 +38,7 @@ let activityNotificationTransitioning = false;
 let activityNotificationsInitialized = false;
 let activityNotificationSeenIds = new Set();
 let activityNotificationLiveUnsubscribes = [];
+let activityMeetingStartTimers = new Map();
 let activityNotificationMembershipUnsubscribe = null;
 let activityNotificationMembershipActive = false;
 let accessStatusUnsubscribe = null;
@@ -4231,6 +4232,46 @@ function queueActivityNotification(notification, organizationId) {
 function stopActivityNotificationListeners() {
   activityNotificationLiveUnsubscribes.forEach((unsubscribe) => unsubscribe());
   activityNotificationLiveUnsubscribes = [];
+  activityMeetingStartTimers.forEach((timer) => clearTimeout(timer));
+  activityMeetingStartTimers.clear();
+}
+
+function scheduleActivityMeetingStartNotification(meeting, organizationId) {
+  const existingTimer = activityMeetingStartTimers.get(meeting.id);
+  if (existingTimer) clearTimeout(existingTimer);
+  activityMeetingStartTimers.delete(meeting.id);
+
+  const meetingDateTime = getActivityNotificationMeetingDate(meeting);
+  if (
+    !meetingDateTime
+    || meetingDateTime.getTime() <= Date.now()
+    || !isActivityNotificationMeetingActive(meeting, Date.now())
+  ) return;
+
+  const timer = window.setTimeout(() => {
+    activityMeetingStartTimers.delete(meeting.id);
+    if (!activityNotificationMembershipActive || activeMemberOrganization?.id !== organizationId) return;
+    if (!isActivityNotificationMeetingActive(meeting, Date.now())) return;
+
+    const currentMeetingDateTime = getActivityNotificationMeetingDate(meeting);
+    if (!currentMeetingDateTime) return;
+    if (currentMeetingDateTime.getTime() > Date.now()) {
+      scheduleActivityMeetingStartNotification(meeting, organizationId);
+      return;
+    }
+    if (Date.now() - currentMeetingDateTime.getTime() > 2 * 60 * 60 * 1000) return;
+
+    queueActivityNotification({
+      id: `meeting-start:${meeting.id}`,
+      category: 'Meeting starting',
+      title: meeting.title || meeting.name || 'Video conference',
+      body: 'Your scheduled meeting is starting now.',
+      timestamp: currentMeetingDateTime.getTime(),
+      icon: 'fa-video'
+    }, organizationId);
+  }, Math.min(meetingDateTime.getTime() - Date.now(), 2147483647));
+
+  activityMeetingStartTimers.set(meeting.id, timer);
 }
 
 function watchActivityNotificationOrganizationMembership(organizationId) {
@@ -4471,6 +4512,46 @@ function subscribeToActivityNotifications(organizationId, cursor) {
     });
   }, (error) => {
     console.error('Live chat room activity notification listener error:', error);
+  }));
+
+  const meetingsQuery = query(collection(db, 'meetings'), where('organizationId', '==', organizationId));
+  let initialMeetingsSnapshot = true;
+  activityNotificationLiveUnsubscribes.push(onSnapshot(meetingsQuery, (snapshot) => {
+    if (!activityNotificationMembershipActive || activeMemberOrganization?.id !== organizationId) return;
+    snapshot.docChanges().forEach((change) => {
+      const meetingId = change.doc.id;
+      const timer = activityMeetingStartTimers.get(meetingId);
+      if (timer) {
+        clearTimeout(timer);
+        activityMeetingStartTimers.delete(meetingId);
+      }
+      if (change.type === 'removed') return;
+
+      const meeting = { id: meetingId, ...change.doc.data() };
+      if (!isActivityNotificationMeetingActive(meeting, Date.now())) return;
+      const meetingDateTime = getActivityNotificationMeetingDate(meeting);
+      if (!meetingDateTime) return;
+
+      if (!initialMeetingsSnapshot && meetingDateTime.getTime() <= Date.now()) {
+        const createdAt = getActivityNotificationTimestamp(meeting.createdAt);
+        if (createdAt !== null && createdAt > cursor && Date.now() - meetingDateTime.getTime() <= 2 * 60 * 60 * 1000) {
+          queueActivityNotification({
+            id: `meeting:${meetingId}`,
+            category: 'Ongoing meeting',
+            title: meeting.title || meeting.name || 'Video conference',
+            body: 'This meeting is in progress.',
+            timestamp: createdAt,
+            icon: 'fa-video'
+          }, organizationId);
+        }
+        return;
+      }
+
+      scheduleActivityMeetingStartNotification(meeting, organizationId);
+    });
+    initialMeetingsSnapshot = false;
+  }, (error) => {
+    console.error('Live meeting activity notification listener error:', error);
   }));
 }
 

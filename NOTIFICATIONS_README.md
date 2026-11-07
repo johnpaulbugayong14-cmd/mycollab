@@ -24,7 +24,7 @@ Live listeners also show new activity while the workspace remains open; members 
 
 Activity queries are scoped to the selected organization, and the member's account is verified against that organization's owner, admin, and member lists before notifications load. Membership is watched while the workspace is open; if the account is removed or the organization is archived, activity listeners stop and queued cards are cleared.
 
-The per-organization activity cursor is stored on the member's `userRoles` document. On first use, it starts at the current time, so older activity is not replayed; after that, it advances when the activity queue is finished. Active and upcoming meetings assigned to the member (or everyone) are shown on each login until they are completed, cancelled, or more than two hours past their scheduled start.
+The per-organization activity cursor is stored on the member's `userRoles` document. On first use, it starts at the current time, so older activity is not replayed; after that, it advances when the activity queue is finished. Active and upcoming meetings assigned to the member (or everyone) are shown on each login until they are completed, cancelled, or more than two hours past their scheduled start. While the member stays online, a live meeting listener schedules a sliding card for the meeting's start time; new meetings already in progress are shown immediately.
 
 ## Setup Instructions
 

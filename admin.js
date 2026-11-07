@@ -1767,27 +1767,27 @@ function renderMemberManagementPanel() {
       const offlineMessage = isActive ? `Last activity ${getTimeAgo(member.lastActive)}` : `Last seen active ${member.lastActive ? getTimeAgo(member.lastActive) : 'unknown'}`;
 
       return `
-      <div style="border: 1px solid #374151; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem; background: #111827;">
+      <div class="member-management-card" style="border: 1px solid #374151; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem; background: #111827;">
         <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
           <div style="display: flex; align-items: center; gap: 0.75rem;">
-            ${renderUserAvatarMarkup(member.uid, 42, member.profilePicture)}
+            ${renderUserAvatarMarkup(member.uid, 68, member.profilePicture)}
             <div>
               <h3 style="margin: 0 0 0.5rem 0; color: #f8fafc;">${member.name}</h3>
               <p style="margin: 0 0.5rem 0 0; color: #94a3b8; font-size: 0.9rem;">${member.uid}</p>
               <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
-                <span style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; background: ${badgeColor}; color: white; font-size: 0.8rem;">${role.toUpperCase()}</span>
-                <span style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; background: ${accessBadgeColor}; color: white; font-size: 0.8rem;">${accessBadgeText}</span>
+                <span class="member-management-badge member-role-badge member-role-${role}" style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; background: ${badgeColor}; color: white; font-size: 0.8rem;">${role.toUpperCase()}</span>
+                <span class="member-management-badge member-access-badge member-access-${accessAllowed ? 'active' : 'restricted'}" style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; background: ${accessBadgeColor}; color: white; font-size: 0.8rem;">${accessBadgeText}</span>
               </div>
             </div>
           </div>
-          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <div class="member-management-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button onclick="${actionFn}('${member.uid}')" style="background: ${role === 'limited-admin' || role === 'admin' ? '#ef4444' : '#10b981'}; color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer;">${actionLabel}</button>
             <button onclick="${accessButtonFn}" ${accessButtonDisabled} style="background: ${accessAllowed ? '#f59e0b' : '#3b82f6'}; color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer; opacity: ${member.uid === adminEmail ? 0.7 : 1};">${accessButtonLabel}</button>
             <button onclick="deleteMemberAccountFromAdmin('${member.uid}')" ${member.uid === adminEmail ? 'disabled' : ''} style="background: #dc2626; color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer; opacity: ${member.uid === adminEmail ? 0.7 : 1};">Delete Account</button>
           </div>
         </div>
         <div style="margin-top: 1rem; display: grid; gap: 0.4rem;">
-          <span style="display: inline-flex; align-items: center; padding: 0.35rem 0.75rem; border-radius: 999px; background: ${statusBadgeColor}; color: white; font-size: 0.8rem; width: fit-content;">${statusText}</span>
+          <span class="member-management-badge member-status-badge member-status-${isActive ? 'active' : 'offline'}" style="display: inline-flex; align-items: center; padding: 0.35rem 0.75rem; border-radius: 999px; background: ${statusBadgeColor}; color: white; font-size: 0.8rem; width: fit-content;">${statusText}</span>
           <p style="margin: 0; color: #cbd5e1; font-size: 0.9rem;">${offlineMessage}</p>
           <p style="margin: 0; color: #94a3b8; font-size: 0.8rem;">Last seen active: ${lastSeenActiveDisplay}</p>
         </div>
@@ -3259,7 +3259,8 @@ function updateChart(memberProgress) {
   }
 
   const memberNames = Object.keys(memberProgress).filter(name => name && name !== "").sort((a, b) => {
-    return getAnalyticsMemberDisplayName(a).localeCompare(getAnalyticsMemberDisplayName(b));
+    const getDisplayName = name => getAnalyticsMemberDisplayName(name);
+    return getDisplayName(a).localeCompare(getDisplayName(b));
   });
   if (memberNames.length === 0) {
     container.innerHTML = `<p style="color: #94a3b8; text-align: center; padding: 2rem;">No task data available. Create a task to see analytics.</p>`;
@@ -3334,6 +3335,7 @@ function updateChart(memberProgress) {
     }
 
     card.appendChild(content);
+
     container.appendChild(card);
   });
 }

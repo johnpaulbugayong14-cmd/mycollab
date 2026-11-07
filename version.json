@@ -1,8 +1,9 @@
 {
-  "version": "2.0.70",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.70/",
+  "version": "2.0.76",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.76/",
   "required": true,
   "releaseNotes": [
+    "Show sliding activity notifications when scheduled meetings start while members are online, and immediately for newly created meetings already in progress.",
     "Removed duplicate Pinned, Search, and Media section buttons from the Live Chat details panel.",
     "Redesigned Live Chat with a collapsible Messenger-style details panel.",
     "Improved contrast in the survey management cards and member response folders.",
