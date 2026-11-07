@@ -1,7 +1,7 @@
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'task-manager-v39';
+const CACHE_NAME = 'task-manager-v45';
 const UPDATE_META_CACHE = 'mycollab-update-meta-v1';
 const IS_GITHUB_PAGES = self.location.hostname.endsWith('.github.io');
 const IS_LOCAL_PREVIEW = ['localhost', '127.0.0.1', '::1'].includes(self.location.hostname);

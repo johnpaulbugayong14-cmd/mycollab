@@ -14,7 +14,6 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <link rel="stylesheet" href="style.css?v=13">
-  <link rel="stylesheet" href="ui-refresh.css?v=33">
   <link rel="stylesheet" href="events.css?v=3">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -732,6 +731,7 @@
       -webkit-text-fill-color: #f87171 !important;
     }
   </style>
+  <link rel="stylesheet" href="ui-refresh.css?v=36">
 </head>
 <body>
   <div id="memberGlobalLoading" class="member-global-loading" role="status" aria-live="polite">
@@ -1090,8 +1090,17 @@ function toggleSidebar() {
   const sidebar = document.querySelector('.sidebar');
   const overlay = document.querySelector('.sidebar-overlay');
   const appContainer = document.querySelector('.app-container');
+  if (window.innerWidth >= 900) {
+    const isCollapsed = sidebar.classList.toggle('collapsed');
+    sidebar.classList.remove('open');
+    appContainer.classList.toggle('has-collapsed-sidebar', isCollapsed);
+    appContainer.classList.remove('has-open-sidebar');
+    overlay.classList.remove('show');
+    return;
+  }
   const isOpen = sidebar.classList.toggle('open');
   sidebar.classList.remove('collapsed');
+  appContainer.classList.remove('has-collapsed-sidebar');
   appContainer.classList.toggle('has-open-sidebar', isOpen);
   overlay.classList.toggle('show', isOpen && window.innerWidth <= 1024);
 }
@@ -1196,10 +1205,10 @@ function renderMemberNavigation(isRestricted) {
   applyLimitedAdminNavigationVisibility();
 </script>
 <script type="module" src="events.js?v=1"></script>
-<script type="module" src="member.js?v=41"></script>
+<script type="module" src="member.js?v=46"></script>
 <script>
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=39", { updateViaCache: "none" });
+  navigator.serviceWorker.register("service-worker.js?v=45", { updateViaCache: "none" });
 }
 </script>
 

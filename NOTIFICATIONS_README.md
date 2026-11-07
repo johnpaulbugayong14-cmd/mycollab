@@ -17,6 +17,15 @@ The My Thesis Hub now includes a comprehensive notification system that alerts u
 - ✅ Service worker push handling
 - ⚠️ **Server-side push delivery** (requires additional setup)
 
+## Member Activity Cards
+After a member opens their organization workspace, a right-side card queue catches up on assigned tasks, targeted announcements, new polls, ticket responses/status updates, and messages in their organization chat rooms. The member's own messages and deleted messages are excluded. Cards slide in from the right, advance every five seconds, and can be dismissed or skipped.
+
+Live listeners also show new activity while the workspace remains open; members do not need to log out and back in to receive those activity cards.
+
+Activity queries are scoped to the selected organization, and the member's account is verified against that organization's owner, admin, and member lists before notifications load. Membership is watched while the workspace is open; if the account is removed or the organization is archived, activity listeners stop and queued cards are cleared.
+
+The per-organization activity cursor is stored on the member's `userRoles` document. On first use, it starts at the current time, so older activity is not replayed; after that, it advances when the activity queue is finished. Active and upcoming meetings assigned to the member (or everyone) are shown on each login until they are completed, cancelled, or more than two hours past their scheduled start.
+
 ## Setup Instructions
 
 ### 1. Configure VAPID Keys (Required for Push Notifications)

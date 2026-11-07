@@ -4,7 +4,7 @@ import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/f
 import { getStoredUserEmail, signOutUser, getPasswordChangeRequired, getAccountPasswordHint, updateAccountPassword } from "./auth.js";
 import { initializeNotifications, sendNotificationToUsers, showLocalNotification } from "./notifications.js";
 import { initializeNativePushNotifications } from "./native-notifications.js?v=9";
-import { getActiveOrganizationId, getOrganizationsForEmail, setActiveOrganizationId } from "./organizations.js";
+import { getActiveOrganizationId, getOrganizationsForEmail, organizationIncludesEmail, setActiveOrganizationId } from "./organizations.js";
 import { getPhilippineHolidays } from "./events.js";
 
 window.signOutUser = signOutUser;
@@ -30,6 +30,16 @@ let shownInAppNotificationIds = new Set();
 let dismissedInAppNotificationIds = new Set(getDismissedInAppNotifications());
 let inAppNotificationQueue = [];
 let inAppNotificationDisplaying = false;
+let activityNotificationQueue = [];
+let activityNotificationCursorToSave = null;
+let activityNotificationCursorTimestamp = 0;
+let activityNotificationAdvanceTimer = null;
+let activityNotificationTransitioning = false;
+let activityNotificationsInitialized = false;
+let activityNotificationSeenIds = new Set();
+let activityNotificationLiveUnsubscribes = [];
+let activityNotificationMembershipUnsubscribe = null;
+let activityNotificationMembershipActive = false;
 let accessStatusUnsubscribe = null;
 let ticketHistoryUnsubscribe = null;
 let ticketSyncState = 'inactive'; // 'inactive', 'starting', 'active', 'error'
@@ -4037,6 +4047,612 @@ async function loadInAppNotifications() {
   });
 }
 
+function getActivityNotificationTimestamp(value) {
+  const parsedDate = parseDateValue(value);
+  return parsedDate && Number.isFinite(parsedDate.getTime()) ? parsedDate.getTime() : null;
+}
+
+function isActivityNotificationForMember(assignedTo, email) {
+  const assignees = Array.isArray(assignedTo) ? assignedTo : (assignedTo ? [assignedTo] : []);
+  return assignees.some((assignee) => {
+    const normalized = normalizeEmail(assignee);
+    return normalized === normalizeEmail(email) || normalized === 'everyone' || normalized === 'all';
+  });
+}
+
+function getActivityNotificationMeetingDate(meeting) {
+  const dateAndTime = meeting.date && meeting.time ? `${meeting.date}T${meeting.time}` : null;
+  return parseDateValue(dateAndTime)
+    || parseDateValue(meeting.startAt)
+    || parseDateValue(meeting.startTime)
+    || parseDateValue(meeting.date);
+}
+
+function isActivityNotificationMeetingActive(meeting, now) {
+  const status = String(meeting.status || 'active').trim().toLowerCase();
+  if (['completed', 'complete', 'cancelled', 'canceled', 'finished', 'ended'].includes(status)) return false;
+  const assignees = Array.isArray(meeting.assignedTo)
+    ? meeting.assignedTo
+    : (meeting.assignedTo ? [meeting.assignedTo] : []);
+  if (assignees.length && !isActivityNotificationForMember(assignees, userEmail)) return false;
+
+  const meetingDateTime = getActivityNotificationMeetingDate(meeting);
+  if (!meetingDateTime) return false;
+  return meetingDateTime.getTime() > now || now - meetingDateTime.getTime() <= 2 * 60 * 60 * 1000;
+}
+
+function ensureActivityNotificationContainer() {
+  let container = document.getElementById('activityNotificationStack');
+  if (!container) {
+    container = document.createElement('section');
+    container.id = 'activityNotificationStack';
+    container.className = 'activity-notification-stack';
+    container.setAttribute('aria-label', 'New activity notifications');
+    container.setAttribute('aria-live', 'polite');
+    document.body.appendChild(container);
+  }
+  return container;
+}
+
+function saveActivityNotificationCursor(organizationId, timestamp) {
+  return setDoc(doc(db, 'userRoles', normalizeEmail(userEmail)), {
+    activityNotificationCursors: { [organizationId]: timestamp }
+  }, { merge: true });
+}
+
+function finishActivityNotifications() {
+  const container = ensureActivityNotificationContainer();
+  container.replaceChildren();
+  container.classList.remove('is-visible');
+  activityNotificationTransitioning = false;
+
+  const cursorToSave = activityNotificationCursorToSave;
+  activityNotificationCursorToSave = null;
+  if (cursorToSave) {
+    saveActivityNotificationCursor(cursorToSave.organizationId, cursorToSave.timestamp).catch((error) => {
+      console.error('Unable to save activity notification cursor:', error);
+    });
+  }
+}
+
+function clearActivityNotificationQueue() {
+  if (activityNotificationAdvanceTimer) {
+    clearTimeout(activityNotificationAdvanceTimer);
+    activityNotificationAdvanceTimer = null;
+  }
+  activityNotificationQueue = [];
+  activityNotificationSeenIds.clear();
+  activityNotificationTransitioning = false;
+  const container = document.getElementById('activityNotificationStack');
+  container?.replaceChildren();
+  container?.classList.remove('is-visible');
+}
+
+function advanceActivityNotification() {
+  if (activityNotificationTransitioning || activityNotificationQueue.length === 0) return;
+  activityNotificationTransitioning = true;
+  if (activityNotificationAdvanceTimer) {
+    clearTimeout(activityNotificationAdvanceTimer);
+    activityNotificationAdvanceTimer = null;
+  }
+
+  const container = ensureActivityNotificationContainer();
+  const card = container.querySelector('.activity-notification-card');
+  card?.classList.add('is-leaving');
+  window.setTimeout(() => {
+    activityNotificationQueue.shift();
+    activityNotificationTransitioning = false;
+    renderActivityNotification();
+  }, 260);
+}
+
+function renderActivityNotification() {
+  const container = ensureActivityNotificationContainer();
+  container.replaceChildren();
+  const notification = activityNotificationQueue[0];
+  if (!notification) {
+    finishActivityNotifications();
+    return;
+  }
+
+  container.classList.add('is-visible');
+  const card = document.createElement('article');
+  card.className = 'activity-notification-card';
+
+  const header = document.createElement('div');
+  header.className = 'activity-notification-header';
+  const icon = document.createElement('span');
+  icon.className = 'activity-notification-icon';
+  const iconElement = document.createElement('i');
+  iconElement.className = `fas ${notification.icon}`;
+  iconElement.setAttribute('aria-hidden', 'true');
+  icon.appendChild(iconElement);
+
+  const category = document.createElement('span');
+  category.className = 'activity-notification-category';
+  category.textContent = notification.category;
+
+  header.append(icon, category);
+
+  const title = document.createElement('h2');
+  title.className = 'activity-notification-title';
+  title.textContent = notification.title;
+  const body = document.createElement('p');
+  body.className = 'activity-notification-body';
+  body.textContent = notification.body;
+
+  const footer = document.createElement('div');
+  footer.className = 'activity-notification-footer';
+  const count = document.createElement('span');
+  count.textContent = `${activityNotificationQueue.length} ${activityNotificationQueue.length === 1 ? 'notification' : 'notifications'} remaining`;
+  const nextButton = document.createElement('button');
+  nextButton.type = 'button';
+  nextButton.className = 'activity-notification-next';
+  nextButton.textContent = activityNotificationQueue.length > 1 ? 'Next' : 'Dismiss';
+  nextButton.addEventListener('click', advanceActivityNotification);
+  footer.append(count, nextButton);
+
+  const progress = document.createElement('span');
+  progress.className = 'activity-notification-progress';
+  progress.setAttribute('aria-hidden', 'true');
+  card.append(header, title, body, footer, progress);
+  container.appendChild(card);
+
+  activityNotificationAdvanceTimer = window.setTimeout(advanceActivityNotification, 5000);
+}
+
+function queueActivityNotification(notification, organizationId) {
+  if (!activityNotificationMembershipActive || activeMemberOrganization?.id !== organizationId) return;
+  if (activityNotificationSeenIds.has(notification.id)) return;
+  activityNotificationSeenIds.add(notification.id);
+  activityNotificationQueue.push(notification);
+
+  const currentCursor = activityNotificationCursorToSave;
+  activityNotificationCursorToSave = {
+    organizationId,
+    timestamp: Math.max(
+      activityNotificationCursorTimestamp,
+      currentCursor?.organizationId === organizationId ? currentCursor.timestamp : 0,
+      notification.timestamp
+    )
+  };
+
+  if (activityNotificationQueue.length === 1 && !ensureActivityNotificationContainer().querySelector('.activity-notification-card')) {
+    renderActivityNotification();
+    return;
+  }
+
+  const count = ensureActivityNotificationContainer().querySelector('.activity-notification-footer span');
+  if (count) {
+    count.textContent = `${activityNotificationQueue.length} ${activityNotificationQueue.length === 1 ? 'notification' : 'notifications'} remaining`;
+  }
+}
+
+function stopActivityNotificationListeners() {
+  activityNotificationLiveUnsubscribes.forEach((unsubscribe) => unsubscribe());
+  activityNotificationLiveUnsubscribes = [];
+}
+
+function watchActivityNotificationOrganizationMembership(organizationId) {
+  activityNotificationMembershipUnsubscribe?.();
+  activityNotificationMembershipUnsubscribe = onSnapshot(doc(db, 'organizations', organizationId), (snapshot) => {
+    const organization = snapshot.exists()
+      ? { id: snapshot.id, ...snapshot.data() }
+      : null;
+    const isMember = Boolean(
+      organization
+      && organization.archived !== true
+      && getActiveOrganizationId() === organizationId
+      && organizationIncludesEmail(organization, userEmail)
+    );
+    const wasMember = activityNotificationMembershipActive;
+    activityNotificationMembershipActive = isMember;
+    if (isMember) {
+      activeMemberOrganization = organization;
+      if (!wasMember && !activityNotificationsInitialized) {
+        void loadActivityNotifications();
+      }
+      return;
+    }
+
+    stopActivityNotificationListeners();
+    clearActivityNotificationQueue();
+    activityNotificationsInitialized = false;
+    if (wasMember) {
+      console.warn('Activity notifications stopped because this account is no longer a member of the active organization.');
+    }
+  }, (error) => {
+    activityNotificationMembershipActive = false;
+    stopActivityNotificationListeners();
+    clearActivityNotificationQueue();
+    console.error('Unable to verify organization membership for activity notifications:', error);
+  });
+}
+
+function getActivityAnnouncementNotification(announcement, id) {
+  const timestamp = getActivityNotificationTimestamp(
+    announcement.createdAt || announcement.date || announcement.timestamp || announcement.postedAt
+  );
+  if (timestamp === null || announcement.archived) return null;
+  if (!matchesAnnouncementTarget(
+    announcement.assignedTo,
+    announcement.assignedToNames,
+    userEmail,
+    getUserName(userEmail)
+  )) return null;
+  return {
+    id: `announcement:${id}`,
+    category: 'New announcement',
+    title: announcement.title || 'New announcement',
+    body: announcement.content || announcement.description || 'A new announcement was posted.',
+    timestamp,
+    icon: 'fa-bullhorn'
+  };
+}
+
+function getActivityPollNotification(poll, id) {
+  const timestamp = getActivityNotificationTimestamp(poll.createdAt || poll.timestamp);
+  if (timestamp === null) return null;
+  return {
+    id: `poll:${id}`,
+    category: 'New poll',
+    title: poll.question || poll.title || 'New poll',
+    body: 'A new poll is ready for your vote.',
+    timestamp,
+    icon: 'fa-square-poll-vertical'
+  };
+}
+
+function getActivityTicketNotifications(ticket, id, cursor) {
+  const currentEmail = normalizeEmail(userEmail);
+  const ticketMembers = [ticket.submittedBy, ticket.submittedByEmail, ticket.assignedTo]
+    .map(normalizeEmail)
+    .filter(Boolean);
+  if (!ticketMembers.includes(currentEmail)) return [];
+
+  const notifications = [];
+  const createdAt = getActivityNotificationTimestamp(ticket.createdAt);
+  if (
+    createdAt !== null
+    && createdAt > cursor
+    && createdAt <= Date.now()
+    && normalizeEmail(ticket.submittedBy || ticket.submittedByEmail) !== currentEmail
+    && normalizeEmail(ticket.assignedTo) === currentEmail
+  ) {
+    notifications.push({
+      id: `ticket-created:${id}`,
+      category: 'New ticket',
+      title: ticket.title || 'A ticket was assigned to you',
+      body: ticket.description || 'A new support ticket was assigned to you.',
+      timestamp: createdAt,
+      icon: 'fa-ticket'
+    });
+  }
+
+  (Array.isArray(ticket.responses) ? ticket.responses : []).forEach((response, index) => {
+    const timestamp = getActivityNotificationTimestamp(response.createdAt);
+    if (timestamp === null || timestamp <= cursor || timestamp > Date.now()) return;
+    if (normalizeEmail(response.email) === currentEmail) return;
+    notifications.push({
+      id: `ticket-response:${id}:${timestamp}:${index}`,
+      category: 'Ticket update',
+      title: ticket.title || 'Ticket update',
+      body: response.content || 'There is a new response on your ticket.',
+      timestamp,
+      icon: 'fa-ticket'
+    });
+  });
+
+  const updateTimestamp = getActivityNotificationTimestamp(ticket.memberNotificationAt);
+  const updateReason = String(ticket.memberNotificationReason || '').toLowerCase();
+  if (
+    updateTimestamp !== null
+    && updateTimestamp > cursor
+    && updateTimestamp <= Date.now()
+    && updateReason !== 'admin_response'
+  ) {
+    notifications.push({
+      id: `ticket-update:${id}:${updateTimestamp}:${updateReason || 'update'}`,
+      category: 'Ticket update',
+      title: ticket.memberNotificationTitle || ticket.title || 'Ticket update',
+      body: ticket.memberNotificationMessage || `Your ticket status is now ${ticket.status || 'updated'}.`,
+      timestamp: updateTimestamp,
+      icon: 'fa-ticket'
+    });
+  }
+  return notifications;
+}
+
+function subscribeToActivityNotifications(organizationId, cursor) {
+  stopActivityNotificationListeners();
+
+  const tasksQuery = query(collection(db, 'tasks'), where('organizationId', '==', organizationId));
+  activityNotificationLiveUnsubscribes.push(onSnapshot(tasksQuery, (snapshot) => {
+    if (!activityNotificationMembershipActive || activeMemberOrganization?.id !== organizationId) return;
+    snapshot.docChanges().forEach((change) => {
+      if (change.type !== 'added') return;
+      const task = change.doc.data();
+      const createdAt = getActivityNotificationTimestamp(task.createdAt);
+      if (createdAt === null || createdAt <= cursor || createdAt > Date.now()) return;
+      if (!isActivityNotificationForMember(task.assignedTo, userEmail)) return;
+
+      const details = [task.description, task.deadline ? `Due ${task.deadline}` : '']
+        .filter(Boolean)
+        .join(' | ');
+      queueActivityNotification({
+        id: `task:${change.doc.id}`,
+        category: 'New task',
+        title: task.title || task.name || 'A task was assigned to you',
+        body: details || 'A new task has been assigned to you.',
+        timestamp: createdAt,
+        icon: 'fa-list-check'
+      }, organizationId);
+    });
+  }, (error) => {
+    console.error('Live task activity notification listener error:', error);
+  }));
+
+  const announcementsQuery = query(collection(db, 'announcements'), where('organizationId', '==', organizationId));
+  activityNotificationLiveUnsubscribes.push(onSnapshot(announcementsQuery, (snapshot) => {
+    if (!activityNotificationMembershipActive || activeMemberOrganization?.id !== organizationId) return;
+    snapshot.docChanges().forEach((change) => {
+      if (change.type !== 'added') return;
+      const notification = getActivityAnnouncementNotification(change.doc.data(), change.doc.id);
+      if (notification && notification.timestamp > cursor && notification.timestamp <= Date.now()) {
+        queueActivityNotification(notification, organizationId);
+      }
+    });
+  }, (error) => {
+    console.error('Live announcement activity notification listener error:', error);
+  }));
+
+  const pollsQuery = query(collection(db, 'polls'), where('organizationId', '==', organizationId));
+  activityNotificationLiveUnsubscribes.push(onSnapshot(pollsQuery, (snapshot) => {
+    if (!activityNotificationMembershipActive || activeMemberOrganization?.id !== organizationId) return;
+    snapshot.docChanges().forEach((change) => {
+      if (change.type !== 'added') return;
+      const notification = getActivityPollNotification(change.doc.data(), change.doc.id);
+      if (notification && notification.timestamp > cursor && notification.timestamp <= Date.now()) {
+        queueActivityNotification(notification, organizationId);
+      }
+    });
+  }, (error) => {
+    console.error('Live poll activity notification listener error:', error);
+  }));
+
+  const ticketsQuery = query(collection(db, 'tickets'), where('organizationId', '==', organizationId));
+  activityNotificationLiveUnsubscribes.push(onSnapshot(ticketsQuery, (snapshot) => {
+    if (!activityNotificationMembershipActive || activeMemberOrganization?.id !== organizationId) return;
+    snapshot.docChanges().forEach((change) => {
+      if (change.type === 'removed') return;
+      getActivityTicketNotifications(change.doc.data(), change.doc.id, cursor).forEach((notification) => {
+        if (notification.timestamp <= Date.now()) queueActivityNotification(notification, organizationId);
+      });
+    });
+  }, (error) => {
+    console.error('Live ticket activity notification listener error:', error);
+  }));
+
+  const roomsQuery = query(collection(db, 'liveChats'), where('organizationId', '==', organizationId));
+  activityNotificationLiveUnsubscribes.push(onSnapshot(roomsQuery, (snapshot) => {
+    if (!activityNotificationMembershipActive || activeMemberOrganization?.id !== organizationId) return;
+    snapshot.docChanges().forEach((change) => {
+      if (change.type !== 'added') return;
+      const room = change.doc.data();
+      const currentEmail = normalizeEmail(userEmail);
+
+      const messagesQuery = query(
+        collection(db, 'liveChats', change.doc.id, 'messages'),
+        where('createdAt', '>', cursor)
+      );
+      activityNotificationLiveUnsubscribes.push(onSnapshot(messagesQuery, (messagesSnapshot) => {
+        if (!activityNotificationMembershipActive || activeMemberOrganization?.id !== organizationId) return;
+        messagesSnapshot.docChanges().forEach((messageChange) => {
+          if (messageChange.type !== 'added') return;
+          const message = messageChange.doc.data();
+          const createdAt = getActivityNotificationTimestamp(message.createdAt);
+          if (createdAt === null || createdAt <= cursor || createdAt > Date.now()) return;
+          if (message.deleted || normalizeEmail(message.senderEmail) === currentEmail) return;
+
+          const senderName = message.senderName || getUserName(message.senderEmail) || 'A member';
+          const messageText = message.text || (message.imageData ? 'Sent an image' : 'Sent a message');
+          queueActivityNotification({
+            id: `message:${change.doc.id}:${messageChange.doc.id}`,
+            category: 'New message',
+            title: getChatRoomDisplayName(room, change.doc.id),
+            body: `${senderName}: ${messageText}`.slice(0, 360),
+            timestamp: createdAt,
+            icon: 'fa-comment-dots'
+          }, organizationId);
+        });
+      }, (error) => {
+        console.error(`Live chat activity notification listener error for room ${change.doc.id}:`, error);
+      }));
+    });
+  }, (error) => {
+    console.error('Live chat room activity notification listener error:', error);
+  }));
+}
+
+async function loadActivityNotifications() {
+  if (activityNotificationsInitialized || !userEmail || !activeMemberOrganization?.id) return;
+  activityNotificationsInitialized = true;
+
+  const organizationId = activeMemberOrganization.id;
+  const userRoleRef = doc(db, 'userRoles', normalizeEmail(userEmail));
+  const fetchedAt = Date.now();
+
+  try {
+    const organizationSnapshot = await getDoc(doc(db, 'organizations', organizationId));
+    const organization = organizationSnapshot.exists()
+      ? { id: organizationSnapshot.id, ...organizationSnapshot.data() }
+      : null;
+    if (
+      !organization
+      || organization.archived === true
+      || !organizationIncludesEmail(organization, userEmail)
+      || activeMemberOrganization?.id !== organizationId
+    ) {
+      activityNotificationMembershipActive = false;
+      activityNotificationsInitialized = false;
+      stopActivityNotificationListeners();
+      clearActivityNotificationQueue();
+      return;
+    }
+    activeMemberOrganization = organization;
+    activityNotificationMembershipActive = true;
+    watchActivityNotificationOrganizationMembership(organizationId);
+
+    const userRoleSnapshot = await getDoc(userRoleRef);
+    const savedCursors = userRoleSnapshot.exists()
+      ? userRoleSnapshot.data().activityNotificationCursors || {}
+      : {};
+    const cursor = getActivityNotificationTimestamp(savedCursors[organizationId]);
+    const [tasksSnapshot, announcementsSnapshot, pollsSnapshot, ticketsSnapshot, roomsSnapshot, meetingsSnapshot] = await Promise.all([
+      cursor === null
+        ? Promise.resolve(null)
+        : getDocs(query(collection(db, 'tasks'), where('organizationId', '==', organizationId))),
+      cursor === null
+        ? Promise.resolve(null)
+        : getDocs(query(collection(db, 'announcements'), where('organizationId', '==', organizationId))),
+      cursor === null
+        ? Promise.resolve(null)
+        : getDocs(query(collection(db, 'polls'), where('organizationId', '==', organizationId))),
+      cursor === null
+        ? Promise.resolve(null)
+        : getDocs(query(collection(db, 'tickets'), where('organizationId', '==', organizationId))),
+      cursor === null
+        ? Promise.resolve(null)
+        : getDocs(query(collection(db, 'liveChats'), where('organizationId', '==', organizationId))),
+      getDocs(query(collection(db, 'meetings'), where('organizationId', '==', organizationId)))
+    ]);
+    if (!activityNotificationMembershipActive || activeMemberOrganization?.id !== organizationId) {
+      clearActivityNotificationQueue();
+      activityNotificationsInitialized = false;
+      return;
+    }
+    const notifications = [];
+    activityNotificationCursorToSave = { organizationId, timestamp: fetchedAt };
+    if (cursor === null) {
+      try {
+        await saveActivityNotificationCursor(organizationId, fetchedAt);
+        activityNotificationCursorToSave = null;
+      } catch (error) {
+        console.error('Unable to save initial activity notification cursor:', error);
+      }
+    }
+
+    if (cursor !== null && tasksSnapshot && announcementsSnapshot && pollsSnapshot && ticketsSnapshot && roomsSnapshot) {
+      tasksSnapshot.forEach((taskSnapshot) => {
+        const task = taskSnapshot.data();
+        const createdAt = getActivityNotificationTimestamp(task.createdAt);
+        if (createdAt === null || createdAt <= cursor || createdAt > fetchedAt) return;
+        if (!isActivityNotificationForMember(task.assignedTo, userEmail)) return;
+
+        const details = [task.description, task.deadline ? `Due ${task.deadline}` : '']
+          .filter(Boolean)
+          .join(' | ');
+        notifications.push({
+          id: `task:${taskSnapshot.id}`,
+          category: 'New task',
+          title: task.title || task.name || 'A task was assigned to you',
+          body: details || 'A new task has been assigned to you.',
+          timestamp: createdAt,
+          icon: 'fa-list-check'
+        });
+      });
+
+      announcementsSnapshot.forEach((announcementSnapshot) => {
+        const notification = getActivityAnnouncementNotification(announcementSnapshot.data(), announcementSnapshot.id);
+        if (notification && notification.timestamp > cursor && notification.timestamp <= fetchedAt) {
+          notifications.push(notification);
+        }
+      });
+
+      pollsSnapshot.forEach((pollSnapshot) => {
+        const notification = getActivityPollNotification(pollSnapshot.data(), pollSnapshot.id);
+        if (notification && notification.timestamp > cursor && notification.timestamp <= fetchedAt) {
+          notifications.push(notification);
+        }
+      });
+
+      ticketsSnapshot.forEach((ticketSnapshot) => {
+        notifications.push(...getActivityTicketNotifications(ticketSnapshot.data(), ticketSnapshot.id, cursor)
+          .filter((notification) => notification.timestamp <= fetchedAt));
+      });
+
+      const currentEmail = normalizeEmail(userEmail);
+      const messageSnapshots = await Promise.all(roomsSnapshot.docs.map(async (roomSnapshot) => {
+        const room = roomSnapshot.data();
+
+        const messagesSnapshot = await getDocs(query(
+          collection(db, 'liveChats', roomSnapshot.id, 'messages'),
+          where('createdAt', '>', cursor)
+        ));
+        return messagesSnapshot.docs.map((messageSnapshot) => ({
+          room,
+          roomId: roomSnapshot.id,
+          id: messageSnapshot.id,
+          ...messageSnapshot.data()
+        }));
+      }));
+
+      messageSnapshots.flat().forEach((message) => {
+        const createdAt = getActivityNotificationTimestamp(message.createdAt);
+        if (createdAt === null || createdAt <= cursor || createdAt > fetchedAt) return;
+        if (message.deleted || normalizeEmail(message.senderEmail) === currentEmail) return;
+
+        const senderName = message.senderName || getUserName(message.senderEmail) || 'A member';
+        const messageText = message.text || (message.imageData ? 'Sent an image' : 'Sent a message');
+        notifications.push({
+          id: `message:${message.roomId}:${message.id}`,
+          category: 'New message',
+          title: getChatRoomDisplayName(message.room, message.roomId),
+          body: `${senderName}: ${messageText}`.slice(0, 360),
+          timestamp: createdAt,
+          icon: 'fa-comment-dots'
+        });
+      });
+    }
+
+    activityNotificationCursorTimestamp = cursor ?? fetchedAt;
+    const now = Date.now();
+    meetingsSnapshot.forEach((meetingSnapshot) => {
+      const meeting = { id: meetingSnapshot.id, ...meetingSnapshot.data() };
+      if (!isActivityNotificationMeetingActive(meeting, now)) return;
+
+      const meetingDateTime = getActivityNotificationMeetingDate(meeting);
+      if (!meetingDateTime) return;
+      const isOngoing = meetingDateTime.getTime() <= now;
+      notifications.push({
+        id: `meeting:${meeting.id}`,
+        category: isOngoing ? 'Ongoing meeting' : 'Upcoming meeting',
+        title: meeting.title || meeting.name || 'Video conference',
+        body: isOngoing
+          ? 'This meeting is in progress.'
+          : `Scheduled for ${meetingDateTime.toLocaleString()}.`,
+        timestamp: meetingDateTime.getTime(),
+        icon: 'fa-video'
+      });
+    });
+    notifications.sort((left, right) => left.timestamp - right.timestamp);
+    activityNotificationQueue = notifications;
+    activityNotificationSeenIds = new Set(notifications.map((notification) => notification.id));
+    if (notifications.length) {
+      activityNotificationCursorToSave = { organizationId, timestamp: fetchedAt };
+    }
+    if (activityNotificationQueue.length) {
+      renderActivityNotification();
+    } else {
+      finishActivityNotifications();
+    }
+    subscribeToActivityNotifications(organizationId, cursor ?? fetchedAt);
+  } catch (error) {
+    console.error('Unable to load activity notifications:', error);
+    activityNotificationsInitialized = false;
+  }
+}
+
 function getSafePollVotes(poll) {
   const votes = poll.votes || {};
   return typeof votes === 'object' && votes !== null ? votes : {};
@@ -5676,6 +6292,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     });
     
     void loadInAppNotifications();
+    void loadActivityNotifications();
 
     loadMemberTasks();
     loadHomeDashboard();
