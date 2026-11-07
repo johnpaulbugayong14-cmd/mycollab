@@ -13,6 +13,22 @@ service cloud.firestore {
       return left is string && right is string && left.lower() == right.lower();
     }
 
+    function taskDraftIsAssignedToMember(taskId, memberId) {
+      let assignedTo = get(/databases/$(database)/documents/tasks/$(taskId)).data.get('assignedTo', []);
+      return (assignedTo is string && (sameEmail(assignedTo, memberId) || assignedTo.lower() == 'everyone')) ||
+        (assignedTo is list && (memberId in assignedTo || 'everyone' in assignedTo));
+    }
+
+    function taskDraftMatches(taskId, draftId, draftData) {
+      let task = get(/databases/$(database)/documents/tasks/$(taskId)).data;
+      return draftData.organizationId is string &&
+        draftData.memberId is string &&
+        draftData.memberId != '' &&
+        draftData.organizationId == task.get('organizationId', '') &&
+        draftId == draftData.organizationId + '__' + draftData.memberId &&
+        taskDraftIsAssignedToMember(taskId, draftData.memberId);
+    }
+
     // For writes, verify organization membership (requires email-based auth)
     function isOrganizationMember(orgId) {
       return request.auth != null &&
@@ -22,6 +38,15 @@ service cloud.firestore {
         (sameEmail(get(/databases/$(database)/documents/organizations/$(orgId)).data.get('ownerEmail', ''), request.auth.token.email) ||
          request.auth.token.email.lower() in get(/databases/$(database)/documents/organizations/$(orgId)).data.get('adminEmails', []) ||
          request.auth.token.email.lower() in get(/databases/$(database)/documents/organizations/$(orgId)).data.get('memberEmails', []));
+    }
+
+    function isOrganizationAdmin(orgId) {
+      return request.auth != null &&
+        request.auth.token.email != null &&
+        orgId is string &&
+        exists(/databases/$(database)/documents/organizations/$(orgId)) &&
+        (sameEmail(get(/databases/$(database)/documents/organizations/$(orgId)).data.get('ownerEmail', ''), request.auth.token.email) ||
+         request.auth.token.email.lower() in get(/databases/$(database)/documents/organizations/$(orgId)).data.get('adminEmails', []));
     }
 
     match /userCredentials/{userId} {
@@ -93,6 +118,56 @@ service cloud.firestore {
       allow delete: if request.auth != null;
     }
 
+    match /tasks/{taskId}/submissionFiles/{fileId} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/tasks/$(taskId)).data.organizationId == resource.data.organizationId;
+      allow create, update: if request.auth != null &&
+        get(/databases/$(database)/documents/tasks/$(taskId)).data.organizationId == request.resource.data.organizationId &&
+        request.resource.data.originalFileName is string &&
+        request.resource.data.fileExtension is string &&
+        request.resource.data.mimeType is string &&
+        request.resource.data.originalFileSize is int &&
+        request.resource.data.originalFileSize >= 0 &&
+        request.resource.data.base64Data is string &&
+        request.resource.data.base64Data.size() <= 820000;
+      allow delete: if request.auth != null &&
+        get(/databases/$(database)/documents/tasks/$(taskId)).data.organizationId == resource.data.organizationId;
+    }
+
+    match /tasks/{taskId}/drafts/{draftId} {
+      allow get: if request.auth != null &&
+        get(/databases/$(database)/documents/tasks/$(taskId)).data.get('organizationId', '') is string &&
+        (resource == null || taskDraftMatches(taskId, draftId, resource.data));
+      allow list: if false;
+      allow create, update: if request.auth != null &&
+        taskDraftMatches(taskId, draftId, request.resource.data) &&
+        request.resource.data.html is string &&
+        request.resource.data.html.size() <= 700000 &&
+        request.resource.data.text is string &&
+        request.resource.data.text.size() <= 700000 &&
+        request.resource.data.files is list &&
+        request.resource.data.files.size() <= 10 &&
+        request.resource.data.filesEdited is bool &&
+        request.resource.data.updatedAt is timestamp;
+      allow delete: if request.auth != null && taskDraftMatches(taskId, draftId, resource.data);
+
+      match /files/{fileId} {
+        allow get: if request.auth != null && taskDraftMatches(taskId, draftId, resource.data);
+        allow list: if false;
+        allow create, update: if request.auth != null &&
+          taskDraftMatches(taskId, draftId, request.resource.data) &&
+          request.resource.data.originalFileName is string &&
+          request.resource.data.fileExtension is string &&
+          request.resource.data.mimeType is string &&
+          request.resource.data.originalFileSize is int &&
+          request.resource.data.originalFileSize >= 0 &&
+          request.resource.data.originalFileSize <= 614400 &&
+          request.resource.data.base64Data is string &&
+          request.resource.data.base64Data.size() <= 820000;
+        allow delete: if request.auth != null && taskDraftMatches(taskId, draftId, resource.data);
+      }
+    }
+
     match /announcements/{document} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && hasOrganizationId();
@@ -148,7 +223,9 @@ service cloud.firestore {
     match /events/{document} {
       allow read: if request.auth != null;
       allow create, update: if request.auth != null && hasOrganizationId();
-      allow delete: if request.auth != null;
+      allow delete: if request.auth != null &&
+        (isOrganizationAdmin(resource.data.organizationId) ||
+         sameEmail(resource.data.get('creatorEmail', ''), request.auth.token.email));
     }
 
     match /spotifyPlaylists/{document} {
@@ -169,6 +246,14 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create, update: if request.auth != null && get(/databases/$(database)/documents/organizations/$(organizationId)/flashcardSets/$(setId)).data.organizationId == organizationId;
       allow delete: if request.auth != null;
+    }
+
+    match /organizations/{organizationId}/memberWallets/{memberEmail} {
+      allow read, create, update, delete: if request.auth != null;
+    }
+
+    match /organizations/{organizationId}/memberWallets/{memberEmail}/walletTransactions/{transactionId} {
+      allow read, create, update, delete: if request.auth != null;
     }
 
     match /progressReports/{document} {

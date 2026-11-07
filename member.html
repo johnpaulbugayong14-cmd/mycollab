@@ -13,19 +13,22 @@
   <meta name="theme-color" content="#3b82f6">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=11">
-  <link rel="stylesheet" href="events.css?v=1">
+  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="ui-refresh.css?v=33">
+  <link rel="stylesheet" href="events.css?v=3">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://8x8.vc/vpaas-magic-cookie-31c887a17ea34701a28e22e5178164e3/external_api.js" async></script>
   <style>
     body {
-      background: #1F1F1F !important;
+      background: #f5f6f1 !important;
+      color: #20342f;
     }
     body::before,
     body::after {
       display: none !important;
+      animation: none !important;
     }
     .member-profile-setup-overlay {
       position: fixed;
@@ -74,6 +77,16 @@
       color: #e2e8f0;
       font-size: 0.85rem;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+    @media (min-width: 900px) {
+      body:has(.app-container:not(.has-collapsed-sidebar)) .member-global-loading {
+        box-sizing: border-box;
+        padding-left: 272px;
+      }
+      body:has(.app-container.has-collapsed-sidebar) .member-global-loading {
+        box-sizing: border-box;
+        padding-left: 3.5rem;
+      }
     }
     .member-loading-dots { display: inline-flex; align-items: center; gap: 0.22rem; }
     .member-loading-dot { width: 0.38rem; height: 0.38rem; border-radius: 50%; background: #93c5fd; animation: member-loading-dance 0.9s ease-in-out infinite; }
@@ -152,54 +165,18 @@
       50% { transform: scale(1.06); opacity: 0.85; }
     }
     .restricted-access-banner {
-      border: 1px solid rgba(248, 113, 113, 0.4);
-      background: linear-gradient(135deg, rgba(127, 29, 29, 0.9), rgba(30, 41, 59, 0.95));
+      border: 1px solid #f0c9c4;
+      background: #fff;
       border-radius: 1rem;
       padding: 1.25rem;
       margin-bottom: 1rem;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-      animation: restrictedPulse 1.8s ease-in-out infinite;
+      color: #20342f;
+      box-shadow: 0 12px 30px rgba(34, 57, 48, 0.08);
     }
     .restricted-access-banner .restricted-icon {
       font-size: 2rem;
-      color: #fca5a5;
+      color: #b42318;
       margin-bottom: 0.4rem;
-    }
-    .notification-banner {
-      position: fixed;
-      top: 1rem;
-      right: 1rem;
-      z-index: 9999;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      max-width: min(400px, calc(100% - 2rem));
-      pointer-events: none;
-    }
-    .notification-banner .notification-item {
-      pointer-events: auto;
-      border-radius: 0.9rem;
-      background: rgba(15, 23, 42, 0.95);
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      padding: 1rem 1rem 0.9rem 1rem;
-      color: #f8fafc;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-      animation: slideDownFade 0.35s ease-out;
-    }
-    .notification-banner .notification-item strong {
-      display: block;
-      font-size: 1rem;
-      margin-bottom: 0.35rem;
-    }
-    .notification-banner .notification-item button {
-      position: absolute;
-      top: 0.6rem;
-      right: 0.75rem;
-      background: transparent;
-      border: none;
-      color: #94a3b8;
-      cursor: pointer;
-      font-size: 1rem;
     }
     .maintenance-overlay {
       position: fixed;
@@ -806,7 +783,7 @@
   <!-- Sidebar Navigation -->
   <nav class="sidebar">
     <div class="sidebar-header">
-      <h2><i class="fas fa-house"></i> Home</h2>
+      <h2><i class="fas fa-briefcase"></i> MyCollab</h2>
       <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
     </div>
     <ul class="nav-list" id="member-nav-list">
@@ -835,19 +812,18 @@
         <div class="member-header-bottom-row">
           <div class="header-actions">
             <div style="display: flex; align-items: center; gap: 0.75rem;">
-              <div id="memberHeaderProfilePicture" onclick="document.getElementById('memberProfileInputHeader')?.click?.()" style="width: 40px; height: 40px; border-radius: 50%; background: #1f2937; border: 2px solid #4b5563; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;" aria-label="Profile picture">
+              <div id="memberHeaderProfilePicture" onclick="document.getElementById('memberProfileInputHeader')?.click?.()" style="width: 56px; height: 56px; border-radius: 50%; background: #1f2937; border: 2px solid #4b5563; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;" aria-label="Profile picture">
                 <i class="fas fa-user" style="color: #9ca3af; font-size: 1rem;"></i>
               </div>
-              <div id="welcome" class="welcome-header">Welcome, User</div>
+              <div style="display: flex; flex-direction: column; align-items: flex-start;">
+                <div id="welcome" class="welcome-header">Welcome, User</div>
+                <div id="memberActiveOrganization" style="color:#cbd5e1; font-size:0.9rem;">Loading organization...</div>
+              </div>
               <input type="file" id="memberProfileInputHeader" accept="image/*" style="display: none;" onchange="handleMemberProfileUpload(event)" />
             </div>
           </div>
         </div>
       </div>
-      <div class="member-header-title-row">
-        <h1 id="page-title"><i class="fas fa-briefcase"></i> My Collab</h1>
-      </div>
-      <div id="memberActiveOrganization" style="color:#cbd5e1; font-size:0.9rem;">Loading organization...</div>
       <div id="datetime" class="datetime-center">Loading date...</div>
     </div>
     
@@ -886,11 +862,11 @@
       <section id="my-balance" class="content-section">
         <div class="card">
           <h2><i class="fas fa-wallet"></i> My Balance</h2>
-          <div style="margin: 1rem 0 1.5rem; padding: 1.25rem; border: 1px solid #2563eb; border-radius: 0.75rem; background: linear-gradient(135deg, #172554, #1e3a8a);">
-            <p style="margin: 0 0 0.35rem; color: #bfdbfe;">Available wallet balance</p>
+          <div class="wallet-balance-panel">
+            <p class="wallet-balance-label">Available wallet balance</p>
             <strong id="memberWalletBalance" style="font-size: 2rem; color: #fff;">0.00</strong>
-            <button type="button" id="withdrawBalanceButton" style="display: block; margin-top: 1rem; padding: 0.65rem 1rem; border: 0; border-radius: 0.5rem; background: #10b981; color: #fff; font-weight: 700; cursor: pointer;"><i class="fas fa-money-bill-transfer"></i> Withdraw</button>
-            <p id="withdrawalNote" style="margin: 0.75rem 0 0; color: #bfdbfe; font-size: 0.9rem;">Check your withdrawal status in Ticket History.</p>
+            <button type="button" id="withdrawBalanceButton" class="wallet-withdraw-button"><i class="fas fa-money-bill-transfer"></i> Withdraw</button>
+            <p id="withdrawalNote" class="wallet-withdrawal-note">Check your withdrawal status in Ticket History.</p>
           </div>
           <h3 style="margin-bottom: 0.75rem;">Transaction history</h3>
           <div id="memberWalletHistory" aria-live="polite">
@@ -902,14 +878,14 @@
       <!-- My Tasks Section -->
       <section id="my-tasks" class="content-section">
         <div class="card">
-          <div id="createTaskForm" class="limited-admin-only" style="display:none; margin-bottom: 1.25rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.75rem; background: #0f172a;">
-            <h3 style="margin: 0 0 0.75rem 0; color: #f8fafc;">Create New Task</h3>
+          <div id="createTaskForm" class="limited-admin-only" style="display:none; margin-bottom: 1.25rem; padding: 1rem; border: 1px solid #e5e9e3; border-radius: 0.75rem; background: #f8faf7; color: #40564b;">
+            <h3 style="margin: 0 0 0.75rem 0; color: #20342f;">Create New Task</h3>
             <div style="display: grid; gap: 0.75rem;">
-              <input id="taskTitleCreate" type="text" placeholder="Task title" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #374151; background: #111827; color: #f8fafc;" />
-              <textarea id="taskDescriptionCreate" rows="3" placeholder="Task description" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #374151; background: #111827; color: #f8fafc;"></textarea>
+              <input id="taskTitleCreate" type="text" placeholder="Task title" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #dce4da; background: #fff; color: #20342f;" />
+              <textarea id="taskDescriptionCreate" rows="3" placeholder="Task description" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #dce4da; background: #fff; color: #20342f;"></textarea>
               <div style="display:grid; gap:0.75rem; grid-template-columns:1fr 1fr;">
-                <input id="taskDeadlineCreate" type="date" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #374151; background: #111827; color: #f8fafc;" />
-                <select id="taskAssignedTo" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #374151; background: #111827; color: #f8fafc;">
+                <input id="taskDeadlineCreate" type="date" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #dce4da; background: #fff; color: #20342f;" />
+                <select id="taskAssignedTo" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #dce4da; background: #fff; color: #20342f;">
                   <option value="everyone">Assign to Everyone</option>
                   <option value="kingfordnabor@gmail.com">Kingford Nabor</option>
                   <option value="allancorral@gmail.com">Allan Corral</option>
@@ -953,13 +929,13 @@
       <section id="active-polls" class="content-section">
         <div class="card">
           <h2 style="margin-bottom: 1rem;"><i class="fas fa-chart-bar"></i> Active Polls</h2>
-          <div id="createPollForm" class="limited-admin-only" style="display:none; margin-bottom: 1.25rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.75rem; background: #0f172a;">
-            <h3 style="margin: 0 0 0.75rem 0; color: #f8fafc;">Create Poll</h3>
+          <div id="createPollForm" class="limited-admin-only" style="display:none; margin-bottom: 1.25rem; padding: 1rem; border: 1px solid #e5e9e3; border-radius: 0.75rem; background: #f8faf7; color: #40564b;">
+            <h3 style="margin: 0 0 0.75rem 0; color: #20342f;">Create Poll</h3>
             <div style="display: grid; gap: 0.75rem;">
-              <input id="pollQuestion" type="text" placeholder="Poll question" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #374151; background: #111827; color: #f8fafc;" />
-              <input id="pollOption1" type="text" placeholder="Option 1" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #374151; background: #111827; color: #f8fafc;" />
-              <input id="pollOption2" type="text" placeholder="Option 2" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #374151; background: #111827; color: #f8fafc;" />
-              <input id="pollOption3" type="text" placeholder="Option 3" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #374151; background: #111827; color: #f8fafc;" />
+              <input id="pollQuestion" type="text" placeholder="Poll question" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #dce4da; background: #fff; color: #20342f;" />
+              <input id="pollOption1" type="text" placeholder="Option 1" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #dce4da; background: #fff; color: #20342f;" />
+              <input id="pollOption2" type="text" placeholder="Option 2" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #dce4da; background: #fff; color: #20342f;" />
+              <input id="pollOption3" type="text" placeholder="Option 3" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #dce4da; background: #fff; color: #20342f;" />
               <button onclick="createPoll()" style="width: fit-content; padding: 0.75rem 1rem; border: none; border-radius: 0.5rem; background: #3b82f6; color: white; cursor: pointer;">Create Poll</button>
             </div>
           </div>
@@ -974,11 +950,11 @@
       <section id="announcements" class="content-section">
         <div class="card">
           <h2 style="margin-bottom: 1rem;"><i class="fas fa-bullhorn"></i> Announcements</h2>
-          <div id="createAnnouncementForm" class="limited-admin-only" style="display:none; margin-bottom: 1.25rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.75rem; background: #0f172a;">
-            <h3 style="margin: 0 0 0.75rem 0; color: #f8fafc;">Create Announcement</h3>
+          <div id="createAnnouncementForm" class="limited-admin-only" style="display:none; margin-bottom: 1.25rem; padding: 1rem; border: 1px solid #e5e9e3; border-radius: 0.75rem; background: #f8faf7; color: #40564b;">
+            <h3 style="margin: 0 0 0.75rem 0; color: #20342f;">Create Announcement</h3>
             <div style="display: grid; gap: 0.75rem;">
-              <input id="announcementTitle" type="text" placeholder="Announcement title" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #374151; background: #111827; color: #f8fafc;" />
-              <textarea id="announcementContent" rows="4" placeholder="Announcement content" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #374151; background: #111827; color: #f8fafc;"></textarea>
+              <input id="announcementTitle" type="text" placeholder="Announcement title" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #dce4da; background: #fff; color: #20342f;" />
+              <textarea id="announcementContent" rows="4" placeholder="Announcement content" style="padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #dce4da; background: #fff; color: #20342f;"></textarea>
               <button onclick="createAnnouncement()" style="width: fit-content; padding: 0.75rem 1rem; border: none; border-radius: 0.5rem; background: #3b82f6; color: white; cursor: pointer;">Create Announcement</button>
             </div>
           </div>
@@ -1026,7 +1002,7 @@
 
           <!-- Scheduled Meetings List -->
           <div id="meetings-list" style="margin-bottom: 2rem;">
-            <h3 style="margin-bottom: 0.5rem; color: #f8fafc;">Scheduled Meetings</h3>
+            <h3 class="admin-list-heading" style="margin-bottom: 0.5rem;">Scheduled Meetings</h3>
             <div id="meetingsContainer"></div>
           </div>
 
@@ -1038,15 +1014,15 @@
       <section id="live-chat" class="content-section">
         <div class="card">
           <h2 style="margin-bottom: 1rem;"><i class="fas fa-comments"></i> Live Chat</h2>
-          <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #0f172a;">
+          <div class="admin-surface-panel" style="margin-bottom: 1rem; padding: 1rem; border-radius: 8px;">
             <form id="createChatForm" style="display: flex; gap: 0.75rem; align-items: center; justify-content: flex-start; flex-wrap: wrap;">
-              <input id="chatRoomName" type="text" maxlength="120" placeholder="Chat room name (optional)" aria-label="Optional chat room name" style="flex: 1 1 240px; min-width: 0; padding: 0.75rem 1rem; border: 1px solid #374151; border-radius: 8px; background: #020617; color: #f8fafc;">
+              <input id="chatRoomName" class="admin-light-input" type="text" maxlength="120" placeholder="Chat room name (optional)" aria-label="Optional chat room name" style="flex: 1 1 240px; min-width: 0; padding: 0.75rem 1rem; border-radius: 8px;">
               <button type="submit" style="padding: 0.75rem 1.25rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer;">Create Chat Room</button>
             </form>
           </div>
 
           <div id="chatRoomsList" style="margin-bottom: 2rem;">
-            <h3 style="margin-bottom: 0.75rem; color: #f8fafc;">Available Chat Rooms</h3>
+            <h3 class="admin-list-heading" style="margin-bottom: 0.75rem;">Available Chat Rooms</h3>
             <div id="chatRoomsContainer"></div>
           </div>
 
@@ -1098,7 +1074,6 @@
       </section>
 
     </div>
-    <div id="notificationBanner" class="notification-banner" style="display:none;"></div>
   </main>
 </div>
 
@@ -1221,10 +1196,10 @@ function renderMemberNavigation(isRestricted) {
   applyLimitedAdminNavigationVisibility();
 </script>
 <script type="module" src="events.js?v=1"></script>
-<script type="module" src="member.js?v=29"></script>
+<script type="module" src="member.js?v=41"></script>
 <script>
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js");
+  navigator.serviceWorker.register("service-worker.js?v=39", { updateViaCache: "none" });
 }
 </script>
 

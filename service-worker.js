@@ -1,9 +1,10 @@
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'task-manager-v14';
+const CACHE_NAME = 'task-manager-v39';
 const UPDATE_META_CACHE = 'mycollab-update-meta-v1';
 const IS_GITHUB_PAGES = self.location.hostname.endsWith('.github.io');
+const IS_LOCAL_PREVIEW = ['localhost', '127.0.0.1', '::1'].includes(self.location.hostname);
 const ACTIVE_KEY = new Request('/__mycollab_active_version__');
 const PREVIOUS_KEY = new Request('/__mycollab_previous_version__');
 const PENDING_KEY = new Request('/__mycollab_pending_version__');
@@ -21,6 +22,7 @@ const urlsToCache = [
   'chat.html',
   'survey.html',
   'style.css',
+  'ui-refresh.css',
   'manifest.json',
   'firebase.js',
   'auth.js',
@@ -121,6 +123,23 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith((async () => {
+    if (IS_LOCAL_PREVIEW) {
+      try {
+        const response = await fetch(event.request, { cache: 'no-store' });
+        if (response?.ok) {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone)).catch(error => console.warn('Failed to cache preview response:', error));
+        }
+        return response;
+      } catch (error) {
+        const previewCache = await caches.open(CACHE_NAME);
+        const cachedResponse = await previewCache.match(event.request, { ignoreSearch: true });
+        if (cachedResponse) return cachedResponse;
+        console.warn('Local preview request failed:', error);
+        return Response.error();
+      }
+    }
+
     const releaseCacheName = await activeReleaseCache();
     if (releaseCacheName && !IS_GITHUB_PAGES) {
       const releaseCache = await caches.open(releaseCacheName);

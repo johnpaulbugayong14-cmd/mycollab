@@ -63,7 +63,7 @@ function renderSchedule() {
 
 function renderProjects() {
   if (!state.organizations.length) { setContent('spaceProjects', emptyState('fa-building', 'No organizations yet', 'Join an organization to get started.')); return; }
-  const cards = state.organizations.map((organization) => { const tasks = state.docs.tasks.filter((task) => task.organizationId === organization.id); return `<article class="space-project-card"><div class="space-card-title"><i class="fas fa-building"></i>${escapeHtml(organization.name || 'Organization')}</div><p>${tasks.length} task${tasks.length === 1 ? '' : 's'} · ${organization.memberEmails?.length || 0} members</p></article>`; }).join('');
+  const cards = state.organizations.map((organization) => `<article class="space-project-card"><div class="space-card-title"><i class="fas fa-building"></i>${escapeHtml(organization.name || 'Organization')}</div><p>${organization.memberEmails?.length || 0} members</p></article>`).join('');
   setContent('spaceProjects', cards);
 }
 

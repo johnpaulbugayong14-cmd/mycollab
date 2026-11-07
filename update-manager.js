@@ -200,7 +200,7 @@ async function registerUpdater() {
   if (!(await isNativeRuntime())) return;
   if (!('serviceWorker' in navigator)) return;
   try {
-    await navigator.serviceWorker.register('./service-worker.js', { updateViaCache: 'none' });
+    await navigator.serviceWorker.register('./service-worker.js?v=39', { updateViaCache: 'none' });
     const registration = await navigator.serviceWorker.ready;
     const activeVersion = localStorage.getItem(VERSION_KEY);
     if (activeVersion) registration.active?.postMessage({ type: 'MARK_HEALTHY', version: activeVersion });

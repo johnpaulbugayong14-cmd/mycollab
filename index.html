@@ -190,7 +190,7 @@
 <script type="module" src="auth.js?v=7"></script>
 <script>
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js");
+  navigator.serviceWorker.register("service-worker.js?v=39", { updateViaCache: "none" });
 }
 
 // Wait for the auth module to load, then attach form handler

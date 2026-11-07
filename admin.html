@@ -12,12 +12,13 @@
   <link rel="manifest" href="manifest.json?v=5">
   <meta name="theme-color" content="#3b82f6">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M20 50l15 15 45-45' stroke='%233b82f6' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
-  <link rel="stylesheet" href="style.css?v=2">
-  <link rel="stylesheet" href="events.css?v=1">
+  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="events.css?v=3">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
     body {
-      background: #1F1F1F !important;
+      background: #fff !important;
+      background-image: none !important;
     }
     body::before,
     body::after {
@@ -29,11 +30,12 @@
     }
     .survey-management-item {
       overflow: hidden;
-      border: 1px solid #334155;
+      border: 1px solid #dbe3ec;
       border-left: 4px solid #3b82f6;
       border-radius: 0.7rem;
-      background: rgba(15, 23, 42, 0.72);
-      box-shadow: 0 8px 24px rgba(2, 6, 23, 0.18);
+      background: #ffffff;
+      color: #1f2937;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
     }
     .survey-folder-summary {
       display: flex;
@@ -55,13 +57,13 @@
     }
     .survey-folder-content {
       padding: 0 1.2rem 1.1rem;
-      border-top: 1px solid rgba(71, 85, 105, 0.55);
+      border-top: 1px solid #e2e8f0;
     }
     .survey-response-folder {
       margin-top: 0.65rem;
-      border: 1px solid rgba(71, 85, 105, 0.65);
+      border: 1px solid #dbe3ec;
       border-radius: 0.5rem;
-      background: rgba(2, 6, 23, 0.42);
+      background: #f8fafc;
       overflow: hidden;
     }
     .survey-response-folder summary {
@@ -71,7 +73,7 @@
       gap: 0.75rem;
       padding: 0.75rem 0.85rem;
       cursor: pointer;
-      color: #e2e8f0;
+      color: #1f2937;
       list-style: none;
     }
     .survey-response-folder summary::-webkit-details-marker { display: none; }
@@ -95,7 +97,7 @@
     }
     .survey-management-title {
       margin: 0;
-      color: #f8fafc;
+      color: #1f2937;
       font-size: 1.05rem;
       text-align: left;
       overflow-wrap: anywhere;
@@ -103,12 +105,12 @@
     .survey-management-meta,
     .survey-management-target {
       margin: 0.3rem 0 0;
-      color: #94a3b8;
+      color: #475569;
       font-size: 0.82rem;
       overflow-wrap: anywhere;
     }
     .survey-management-target strong {
-      color: #cbd5e1;
+      color: #334155;
     }
     .survey-management-actions {
       display: flex;
@@ -116,7 +118,7 @@
       flex-wrap: wrap;
       margin-top: 0.85rem;
       padding-top: 0.85rem;
-      border-top: 1px solid rgba(71, 85, 105, 0.55);
+      border-top: 1px solid #e2e8f0;
     }
     .survey-management-actions button {
       width: auto;
@@ -132,7 +134,50 @@
     .survey-feedback-list {
       margin-top: 0.85rem;
       padding-top: 0.85rem;
-      border-top: 1px solid rgba(71, 85, 105, 0.55);
+      border-top: 1px solid #e2e8f0;
+    }
+    #manage-surveys .survey-management-item,
+    #manage-surveys .survey-response-folder,
+    #manage-surveys .survey-response-content > div[style] {
+      background: #ffffff !important;
+      color: #1f2937 !important;
+    }
+    #manage-surveys .survey-folder-content,
+    #manage-surveys .survey-response-content {
+      color: #334155 !important;
+    }
+    #manage-surveys .survey-management-title,
+    #manage-surveys .survey-folder-summary,
+    #manage-surveys .survey-response-folder summary,
+    #manage-surveys .survey-response-folder summary strong,
+    #manage-surveys .survey-response-content div,
+    #manage-surveys .survey-response-content strong {
+      color: #1f2937 !important;
+    }
+    #manage-surveys .survey-management-meta,
+    #manage-surveys .survey-management-target,
+    #manage-surveys .survey-response-folder summary span {
+      color: #475569 !important;
+    }
+    #manage-surveys .survey-management-target strong {
+      color: #334155 !important;
+    }
+    #manage-surveys .survey-response-content {
+      border-top-color: #e2e8f0;
+    }
+    #manage-surveys .survey-response-content > div[style*="background"] {
+      background: #f8fafc !important;
+      border-color: #e2e8f0 !important;
+    }
+    #manage-surveys .survey-management-header > span {
+      background: #dcfce7 !important;
+      color: #166534 !important;
+    }
+    #manage-surveys .survey-response-folder summary::before {
+      color: #2563eb;
+    }
+    #manage-surveys .survey-management-actions {
+      border-top-color: #e2e8f0;
     }
     body.admin-loading .nav-btn,
     body.admin-loading .content-section {
@@ -188,7 +233,8 @@
       <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
     </div>
     <ul class="nav-list">
-      <li><button class="nav-btn active" onclick="showSection('create-task')"><i class="fas fa-plus"></i> Create Task</button></li>
+      <li><button class="nav-btn active" onclick="showSection('task-analytics')"><i class="fas fa-chart-bar"></i> Analytics</button></li>
+      <li><button class="nav-btn" onclick="showSection('create-task')"><i class="fas fa-plus"></i> Create Task</button></li>
       <li><button class="nav-btn" onclick="showSection('create-poll')"><i class="fas fa-poll"></i> Create Poll</button></li>
       <li><button class="nav-btn" onclick="showSection('create-survey')"><i class="fas fa-clipboard-check"></i> Create Survey</button></li>
       <li><button class="nav-btn" onclick="showSection('manage-surveys')"><i class="fas fa-list-check"></i> Manage Surveys</button></li>
@@ -205,7 +251,6 @@
       <li><button class="nav-btn" onclick="showSection('eventsSection')"><i class="fas fa-calendar-days"></i> Events</button></li>
       <li><button class="nav-btn" onclick="showSection('manage-wallet')"><i class="fas fa-wallet"></i> Member Wallets</button></li>
       <li><button class="nav-btn" onclick="showSection('progress-report')"><i class="fas fa-chart-line"></i> Progress Report</button></li>
-      <li><button class="nav-btn" onclick="showSection('task-analytics')"><i class="fas fa-chart-bar"></i> Analytics</button></li>
       <li><button class="nav-btn" onclick="showSection('all-tasks')"><i class="fas fa-clipboard-list"></i> All Tasks</button></li>
       <li><button class="nav-btn" onclick="showSection('video-conference')"><i class="fas fa-video"></i> Video Conference</button></li>
       <li><button class="nav-btn" onclick="showSection('live-chat')"><i class="fas fa-comments"></i> Live Chat</button></li>
@@ -215,13 +260,13 @@
   <!-- Main Content -->
   <main class="main-content">
     <div class="content-header">
-      <h1 id="page-title"><i class="fas fa-chart-bar"></i> Admin Dashboard</h1>
+      <h1 id="page-title"><i class="fas fa-chart-bar"></i> Task Analytics</h1>
       <div class="header-actions">
         <div style="display: flex; align-items: center; gap: 0.75rem;">
           <div id="adminHeaderProfilePicture" onclick="document.getElementById('adminProfileInputHeader').click()" style="width: 40px; height: 40px; border-radius: 50%; background: #1f2937; border: 2px solid #4b5563; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
             <i class="fas fa-user" style="color: #9ca3af; font-size: 1rem;"></i>
           </div>
-          <div id="welcome" class="welcome-header">welcome, boss pi!</div>
+          <div id="welcome" class="welcome-header">welcome, John Paul!</div>
           <input type="file" id="adminProfileInputHeader" accept="image/*" style="display: none;" onchange="handleAdminProfileUpload(event)" />
         </div>
         <div class="organization-header-buttons">
@@ -239,7 +284,7 @@
         </div>
       </section>
       <!-- Create New Task Section -->
-      <section id="create-task" class="content-section active">
+      <section id="create-task" class="content-section">
         <div class="card">
           <h2>Create New Task</h2>
           
@@ -621,11 +666,11 @@
       </section>
       
       <!-- Task Analytics Section -->
-      <section id="task-analytics" class="content-section">
+      <section id="task-analytics" class="content-section active">
         <div class="card analytics-card">
           <h2><i class="fas fa-chart-bar"></i> Task Analytics</h2>
-          <div class="analytics-list-container" style="display: flex; flex-direction: column; gap: 1rem; padding-top: 1rem;">
-            <div id="taskAnalyticsList" class="analytics-list" style="display: grid; gap: 1rem;"></div>
+          <div class="analytics-list-container">
+            <div id="taskAnalyticsList" class="analytics-list"></div>
           </div>
         </div>
       </section>
@@ -644,13 +689,13 @@
           <h2><i class="fas fa-video"></i> Video Conference</h2>
 
           <!-- Admin schedule form -->
-          <div id="admin-schedule-panel" style="margin-bottom: 2rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #1e293b;">
-            <h3 style="margin-bottom: 1rem; color: #f8fafc;">Schedule a Meeting</h3>
+          <div id="admin-schedule-panel" class="admin-surface-panel" style="margin-bottom: 2rem; padding: 1rem; border-radius: 8px;">
+            <h3 style="margin-bottom: 1rem;">Schedule a Meeting</h3>
             <form id="adminMeetingForm" style="display: flex; flex-direction: column; gap: 1rem;">
-              <input type="text" id="adminMeetingTitle" placeholder="Meeting Title" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc;">
+              <input type="text" id="adminMeetingTitle" placeholder="Meeting Title" required class="admin-light-input" style="padding: 0.5rem; border-radius: 4px;">
               <div style="display: flex; gap: 1rem;">
-                <input type="date" id="adminMeetingDate" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc; flex: 1;">
-                <input type="time" id="adminMeetingTime" required style="padding: 0.5rem; border: 1px solid #374151; border-radius: 4px; background: #0f172a; color: #f8fafc; flex: 1;">
+                <input type="date" id="adminMeetingDate" required class="admin-light-input" style="padding: 0.5rem; border-radius: 4px; flex: 1;">
+                <input type="time" id="adminMeetingTime" required class="admin-light-input" style="padding: 0.5rem; border-radius: 4px; flex: 1;">
               </div>
               <button type="submit" style="padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">Schedule Meeting</button>
             </form>
@@ -664,7 +709,7 @@
 
           <!-- Scheduled Meetings List -->
           <div id="adminMeetingsList" style="margin-bottom: 2rem;">
-            <h3 style="margin-bottom: 1rem; color: #f8fafc;">Scheduled Meetings</h3>
+            <h3 class="admin-list-heading" style="margin-bottom: 1rem;">Scheduled Meetings</h3>
             <div id="adminMeetingsContainer"></div>
           </div>
 
@@ -676,15 +721,15 @@
       <section id="live-chat" class="content-section">
         <div class="card">
           <h2><i class="fas fa-comments"></i> Live Chat</h2>
-          <div style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 8px; background: #0f172a;">
+          <div class="admin-surface-panel" style="margin-bottom: 1rem; padding: 1rem; border-radius: 8px;">
             <form id="adminCreateChatForm" style="display: flex; gap: 0.75rem; align-items: center; justify-content: flex-start; flex-wrap: wrap;">
-              <input id="adminChatRoomName" type="text" maxlength="120" placeholder="Chat room name (optional)" aria-label="Optional chat room name" style="flex: 1 1 240px; min-width: 0; padding: 0.75rem 1rem; border: 1px solid #374151; border-radius: 8px; background: #020617; color: #f8fafc;">
+              <input id="adminChatRoomName" class="admin-light-input" type="text" maxlength="120" placeholder="Chat room name (optional)" aria-label="Optional chat room name" style="flex: 1 1 240px; min-width: 0; padding: 0.75rem 1rem; border-radius: 8px;">
               <button type="submit" style="padding: 0.75rem 1.25rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer;">Create Chat Room</button>
             </form>
           </div>
 
           <div id="adminChatRoomsList" style="margin-bottom: 2rem;">
-            <h3 style="margin-bottom: 0.75rem; color: #f8fafc;">Chat Rooms</h3>
+            <h3 class="admin-list-heading" style="margin-bottom: 0.75rem;">Chat Rooms</h3>
             <div id="adminChatRoomsContainer"></div>
           </div>
 
@@ -720,11 +765,11 @@
   </main>
 </div>
 
-<div id="taskAnalyticsModalOverlay" class="analytics-modal-overlay" onclick="hideMemberTaskDetails()">
+<div id="taskAnalyticsModalOverlay" class="analytics-modal-overlay" onclick="hideMemberTaskDetails()" role="dialog" aria-modal="true" aria-labelledby="taskAnalyticsModalTitle">
   <div class="analytics-modal" onclick="event.stopPropagation()">
     <div class="analytics-modal-header">
-      <h3 style="margin: 0; color: #f8fafc;">Task Details</h3>
-      <button type="button" class="analytics-modal-close" onclick="hideMemberTaskDetails()">×</button>
+      <h3 id="taskAnalyticsModalTitle" style="margin: 0; color: #f8fafc;">Task Details</h3>
+      <button type="button" class="analytics-modal-close" onclick="hideMemberTaskDetails()" aria-label="Close task details">×</button>
     </div>
     <p id="taskAnalyticsDetailsMessage" style="color: #94a3b8; margin-top: 0.75rem;">Select a member to view pending, needs action, or overdue tasks.</p>
     <div id="taskAnalyticsDetailsList" style="display: grid; gap: 0.75rem; margin-top: 0.75rem;"></div>
@@ -767,10 +812,10 @@ function closeMobileSidebar() {
   await requireAuth(['admin']);
 </script>
 <script type="module" src="events.js?v=1"></script>
-<script type="module" src="admin.js?v=11"></script>
+<script type="module" src="admin.js?v=18"></script>
 <script>
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js");
+  navigator.serviceWorker.register("service-worker.js?v=39", { updateViaCache: "none" });
 }
 </script>
 <script>
@@ -947,12 +992,11 @@ function renderAdminMeetings(meetings) {
 
   meetings.forEach((meeting) => {
     const meetingDiv = document.createElement('div');
+    meetingDiv.className = 'admin-content-card';
     meetingDiv.style.cssText = `
-      border: 1px solid #374151;
       border-radius: 8px;
       padding: 1rem;
       margin-bottom: 1rem;
-      background: #1e293b;
     `;
 
     const meetingDateTime = new Date(`${meeting.date}T${meeting.time}`);
@@ -983,15 +1027,15 @@ function renderAdminMeetings(meetings) {
 
     meetingDiv.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
-        <h4 style="margin: 0; color: #f8fafc;">${meeting.title}</h4>
-        <span style="background: ${statusColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem;">
+        <h4 style="margin: 0;">${meeting.title}</h4>
+        <span class="admin-meeting-status" style="background: ${statusColor}; color: white !important; -webkit-text-fill-color: white !important; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem;">
           ${currentStatus}
         </span>
       </div>
-      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.5rem;">
+      <div class="admin-content-card-meta" style="font-size: 0.85rem; margin-bottom: 0.5rem;">
         <i class="fas fa-calendar"></i> ${meetingDateTime.toLocaleDateString()} at ${meetingDateTime.toLocaleTimeString()}
       </div>
-      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.5rem;">
+      <div class="admin-content-card-meta" style="font-size: 0.85rem; margin-bottom: 0.5rem;">
         <i class="fas fa-user"></i> Assigned to: ${members.find(m => m.uid === meeting.assignedTo)?.name || 'Unassigned'}
       </div>
       <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">

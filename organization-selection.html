@@ -89,12 +89,81 @@
       .selection-maintenance-card h2 { font-size: 1.875rem; }
       .selection-maintenance-card p { font-size: 1.05rem; }
     }
+    body {
+      background: #f5f6f1 !important;
+      color: #20342f;
+    }
+    .selection-header,
+    .selection-footer {
+      border-color: #e5e9e3;
+    }
+    .selection-shell .selection-brand,
+    .selection-shell > h1 {
+      color: #20342f !important;
+      -webkit-text-fill-color: #20342f !important;
+      text-shadow: none;
+    }
+    .selection-welcome,
+    .subtitle,
+    .selection-footer-credit {
+      color: #5f6f66;
+    }
+    .selection-logout,
+    .selection-my-space button {
+      border-color: #dce4da;
+      background: #fff;
+      color: #315a46;
+    }
+    .selection-logout:hover,
+    .selection-my-space button:hover {
+      border-color: #c9d9b1;
+      background: #f4f8e9;
+      color: #294b34;
+    }
+    .selection-avatar {
+      border-color: #dce4da;
+      background: #e8efe2;
+      color: #315a46;
+    }
+    .organization-card,
+    .empty-state {
+      border-color: #e5e9e3;
+      border-radius: 0.75rem;
+      background: #fff;
+      color: #40564b;
+      box-shadow: 0 12px 30px rgba(34, 57, 48, 0.065);
+    }
+    .organization-card:hover,
+    .organization-card:focus-visible {
+      border-color: #c9d9b1;
+      background: #f8faf5;
+    }
+    .organization-card:focus-visible {
+      outline: 3px solid rgba(144, 173, 98, 0.28);
+      outline-offset: 2px;
+    }
+    .organization-avatar {
+      background: #d7ed71;
+      color: #253321;
+    }
+    .organization-name,
+    .selection-footer-name {
+      color: #20342f;
+    }
+    .organization-description {
+      color: #5f6f66;
+    }
+    body::before,
+    body::after {
+      display: none !important;
+      animation: none !important;
+    }
   </style>
 </head>
 <body>
   <main class="selection-shell">
     <header class="selection-header">
-      <h1 class="selection-brand">My Collab</h1>
+      <h1 class="selection-brand">MyCollab</h1>
       <div class="selection-user">
         <button type="button" class="selection-logout" onclick="signOutUser()">Logout</button>
         <div class="selection-user-profile">

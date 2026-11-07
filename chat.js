@@ -47,6 +47,9 @@ function getReadableChatTextColor(hexColor) {
 function applyChatTheme(theme) {
   if (!theme || typeof theme !== 'object') {
     document.body.classList.remove('chat-theme');
+    document.body.style.removeProperty('--chat-gallery-background');
+    document.body.style.removeProperty('--chat-gallery-surface');
+    document.body.style.removeProperty('--chat-gallery-text');
     return;
   }
 
@@ -69,9 +72,10 @@ function applyChatTheme(theme) {
   document.body.style.setProperty('--chat-accent-color', accent);
   document.body.style.setProperty('--chat-header-text-color', getReadableChatTextColor(header));
   document.body.style.setProperty('--chat-card-text-color', getReadableChatTextColor(card));
+  document.body.style.setProperty('--chat-gallery-background', card);
+  document.body.style.setProperty('--chat-gallery-surface', card);
+  document.body.style.setProperty('--chat-gallery-text', getReadableChatTextColor(card));
 
-  const interfaceGradient = `linear-gradient(${direction}, ${start} 0%, ${end} 100%)`;
-  document.querySelector('.chat-page-card')?.style.setProperty('background', interfaceGradient, 'important');
   document.getElementById('chatMessages')?.style.setProperty('background', card, 'important');
   document.querySelectorAll('.chat-message').forEach((message) => {
     message.style.setProperty('background', card, 'important');
@@ -379,6 +383,19 @@ function setReplyTarget(message) {
   if (input) input.focus();
 }
 
+function renderReplyQuote(replyTo) {
+  if (!replyTo || replyTo.deleted) return '';
+  const originalMessage = allChatMessages.find(message => message.id === replyTo.id);
+  if (originalMessage?.deleted) return '';
+
+  return `
+    <div class="chat-reply-quote">
+      <div class="chat-reply-quote-label">Replying to ${escapeHtml(replyTo.senderName || 'Unknown')}</div>
+      <div class="chat-reply-quote-text">${escapeHtml(replyTo.text || (replyTo.imageData ? '[image]' : ''))}</div>
+    </div>
+  `;
+}
+
 function highlightSearchTerms(text, query) {
   if (!query) return escapeHtml(text);
   
@@ -606,12 +623,7 @@ function renderChatMessages(messages) {
     const safeText = escapeHtml(messageText);
     const renderedText = msg.deleted ? safeText : formatMessageWithLinks(formatMessageWithMentions(safeText));
     const imageMarkup = !msg.deleted && msg.imageData ? `<div style="margin: 0.35rem 0;"><img class="chat-image" src="${escapeHtml(msg.imageData)}" alt="Chat image" loading="lazy" /></div>` : '';
-    const replyQuote = msg.replyTo ? `
-      <div class="chat-reply-quote">
-        <div class="chat-reply-quote-label">Replying to ${escapeHtml(msg.replyTo.senderName || 'Unknown')}</div>
-        <div class="chat-reply-quote-text">${escapeHtml(msg.replyTo.text || (msg.replyTo.imageData ? '[image]' : ''))}</div>
-      </div>
-    ` : '';
+    const replyQuote = msg.deleted ? '' : renderReplyQuote(msg.replyTo);
     const normalizedCurrentUserEmail = normalizeEmail(currentUserEmail || '');
     const isOwnMessage = normalizedCurrentUserEmail && normalizeEmail(msg.senderEmail) === normalizedCurrentUserEmail;
     const unsendButton = isOwnMessage && !msg.deleted ? `<button type="button" class="chat-unsend-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(248, 113, 113, 0.12); color: #f97316; border: 1px solid rgba(248, 113, 113, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">Unsend</button>` : '';
@@ -637,7 +649,7 @@ function renderChatMessages(messages) {
         <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; padding-top: 0.5rem; border-top: 1px solid #374151;">
           ${Object.entries(msg.reactions).map(([emoji, users]) => `
             <div class="chat-reaction-badge" data-message-id="${msg.id}" data-emoji="${emoji}" data-users='${JSON.stringify(users)}' style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.2); border-radius: 9999px; font-size: 0.8rem; cursor: pointer;">
-              <span>${emoji}</span>
+              <span class="chat-reaction-emoji">${escapeHtml(emoji)}</span>
               <span style="color: #94a3b8;">${users.length}</span>
             </div>
           `).join('')}
@@ -745,12 +757,7 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
     const highlightedText = msg.deleted ? messageText : highlightSearchTerms(messageText, searchQuery);
     const renderedText = msg.deleted ? messageText : formatMessageWithLinks(formatMessageWithMentions(highlightedText));
     const imageMarkup = !msg.deleted && msg.imageData ? `<div style="margin: 0.35rem 0;"><img class="chat-image" src="${escapeHtml(msg.imageData)}" alt="Chat image" loading="lazy" /></div>` : '';
-    const replyQuote = msg.replyTo ? `
-      <div class="chat-reply-quote">
-        <div class="chat-reply-quote-label">Replying to ${escapeHtml(msg.replyTo.senderName || 'Unknown')}</div>
-        <div class="chat-reply-quote-text">${escapeHtml(msg.replyTo.text || (msg.replyTo.imageData ? '[image]' : ''))}</div>
-      </div>
-    ` : '';
+    const replyQuote = msg.deleted ? '' : renderReplyQuote(msg.replyTo);
     const normalizedCurrentUserEmail = normalizeEmail(currentUserEmail || '');
     const isOwnMessage = normalizedCurrentUserEmail && normalizeEmail(msg.senderEmail) === normalizedCurrentUserEmail;
     const unsendButton = isOwnMessage && !msg.deleted ? `<button type="button" class="chat-unsend-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(248, 113, 113, 0.12); color: #f97316; border: 1px solid rgba(248, 113, 113, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">Unsend</button>` : '';
@@ -776,7 +783,7 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
         <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; padding-top: 0.5rem; border-top: 1px solid #374151;">
           ${Object.entries(msg.reactions).map(([emoji, users]) => `
             <div class="chat-reaction-badge" data-message-id="${msg.id}" data-emoji="${emoji}" data-users='${JSON.stringify(users)}' style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.2); border-radius: 9999px; font-size: 0.8rem; cursor: pointer;">
-              <span>${emoji}</span>
+              <span class="chat-reaction-emoji">${escapeHtml(emoji)}</span>
               <span style="color: #94a3b8;">${users.length}</span>
             </div>
           `).join('')}
@@ -858,7 +865,6 @@ function showFullscreenImagePreview(imageSrc) {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.95);
     z-index: 100001;
     padding: 1rem;
   `;
@@ -885,18 +891,8 @@ function showFullscreenImagePreview(imageSrc) {
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
+  closeBtn.className = 'chat-fullscreen-close-btn';
   closeBtn.textContent = '✕ Close';
-  closeBtn.style.cssText = `
-    margin-top: 1rem;
-    padding: 0.75rem 1.5rem;
-    background: rgba(248, 113, 113, 0.15);
-    color: #f97316;
-    border: 1px solid rgba(248, 113, 113, 0.35);
-    border-radius: 0.5rem;
-    cursor: pointer;
-    font-size: 0.95rem;
-    font-weight: 600;
-  `;
   closeBtn.addEventListener('click', () => modal.remove());
 
   imgContainer.appendChild(img);
@@ -940,7 +936,7 @@ function showReactionDetails(emoji, users) {
   if (!content) return;
 
   content.innerHTML = `
-    <div style="font-size: 2.5rem; text-align: center; margin-bottom: 0.75rem;">${escapeHtml(emoji)}</div>
+    <div class="chat-reaction-details-emoji" style="font-size: 2.5rem; text-align: center; margin-bottom: 0.75rem;">${escapeHtml(emoji)}</div>
     <div style="text-align: center; color: #94a3b8; margin-bottom: 1rem;">${users.length} ${users.length === 1 ? 'person reacted' : 'people reacted'}</div>
     <div style="display: grid; gap: 0.5rem; max-height: 280px; overflow-y: auto; margin-bottom: 1rem;">
       ${users.map(user => `<div style="padding: 0.75rem 0.85rem; border-radius: 0.75rem; background: #111827; color: #e5e7eb;">${escapeHtml(user)}</div>`).join('')}
@@ -961,6 +957,7 @@ function showReactionMenu(messageId, event) {
   emojis.forEach((emoji) => {
     const btn = document.createElement('button');
     btn.type = 'button';
+    btn.className = 'chat-reaction-emoji';
     btn.textContent = emoji;
     btn.style.cssText = 'width: 2.5rem; height: 2.5rem; font-size: 1.2rem; border: none; border-radius: 0.75rem; background: #111827; color: #f8fafc; cursor: pointer;';
     btn.addEventListener('click', (e) => {
@@ -1336,22 +1333,29 @@ async function loadChatRoomInfo(chatId) {
     localStorage.setItem(`chatLastRead:${currentUserEmail}:${chatId}`, String(Date.now()));
   }
   const titleEl = document.getElementById('chatTitle');
+  const panelTitleEl = document.getElementById('chatInfoTitle');
   const metaEl = document.getElementById('chatMeta');
+  const panelMetaEl = document.getElementById('chatPanelMeta');
   const statusEl = document.getElementById('chatStatus');
+  const panelStatusEl = document.getElementById('chatPanelStatus');
 
   if (titleEl) titleEl.textContent = data.title || 'Live Chat';
+  if (panelTitleEl) panelTitleEl.textContent = data.title || 'Live Chat';
   if (metaEl) {
     const createdBy = normalizeEmail(data.createdByEmail) === 'johnpaulbugayong@gmail.com'
       ? 'John Paul Bugayong'
       : (data.createdByName && !/^[^@\s]+@[^\s]+\.[^@\s]+$/.test(data.createdByName)
         ? data.createdByName
         : getUserName(data.createdByEmail));
-    metaEl.textContent = `Created by ${createdBy} • ${new Date(data.createdAt).toLocaleString()}`;
+    const meta = `Created by ${createdBy} • ${new Date(data.createdAt).toLocaleString()}`;
+    metaEl.textContent = meta;
+    if (panelMetaEl) panelMetaEl.textContent = meta;
   }
   if (statusEl) {
     statusEl.textContent = `Status: ${data.status || 'Active'}`;
     statusEl.style.background = data.status === 'Closed' ? '#7f1d1d' : '#1f2937';
   }
+  if (panelStatusEl) panelStatusEl.textContent = data.status || 'Active';
 
   clearError();
   subscribeChatMessages(chatId);
@@ -1367,7 +1371,63 @@ function setupBackButton(from) {
   }
 }
 
+function setupChatInfoPanel() {
+  const chatWorkspace = document.getElementById('chatWorkspace');
+  const chatInfoToggle = document.getElementById('chatInfoToggle');
+  const chatPanelBackdrop = document.getElementById('chatPanelBackdrop');
+  const chatPanelBackButton = document.getElementById('chatPanelBackButton');
+  const setChatPanelOpen = (isOpen) => {
+    if (!chatWorkspace || !chatInfoToggle) return;
+    chatWorkspace.classList.toggle('is-panel-collapsed', !isOpen);
+    chatInfoToggle.setAttribute('aria-expanded', String(isOpen));
+    chatInfoToggle.setAttribute('aria-label', isOpen ? 'Close chat info' : 'Open chat info');
+  };
+
+  if (chatWorkspace && window.matchMedia('(min-width: 901px)').matches) {
+    setChatPanelOpen(true);
+  }
+  chatInfoToggle?.addEventListener('click', () => {
+    setChatPanelOpen(chatWorkspace?.classList.contains('is-panel-collapsed'));
+  });
+  chatPanelBackdrop?.addEventListener('click', () => setChatPanelOpen(false));
+  chatPanelBackButton?.addEventListener('click', () => {
+    setChatPanelOpen(false);
+    chatInfoToggle?.focus();
+  });
+
+  document.querySelectorAll('[data-chat-panel-section]').forEach((toggle) => {
+    toggle.addEventListener('click', () => {
+      const sectionId = toggle.getAttribute('data-chat-panel-section');
+      const content = sectionId ? document.getElementById(sectionId) : null;
+      if (!content) return;
+
+      const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', String(!isExpanded));
+      content.hidden = isExpanded;
+    });
+  });
+
+  document.querySelectorAll('[data-open-chat-panel]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const sectionId = button.getAttribute('data-open-chat-panel');
+      const sectionContent = sectionId ? document.getElementById(sectionId) : null;
+      setChatPanelOpen(true);
+      if (sectionContent) sectionContent.hidden = false;
+      if (sectionId === 'chatSearchSection') {
+        window.setTimeout(() => document.getElementById('chatSearchInput')?.focus(), 0);
+      }
+    });
+  });
+
+  const pinnedMessagesList = document.getElementById('pinnedMessagesList');
+  pinnedMessagesList?.addEventListener('click', (event) => {
+    const item = event.target.closest('.pinned-message-item');
+    if (item) scrollToPinnedMessage(item.dataset.pinnedMessageId);
+  });
+}
+
 async function init() {
+  setupChatInfoPanel();
   await requireAuth(['member', 'limited-admin', 'admin']);
   currentUserEmail = await getStoredUserEmail();
   syncChatTheme(currentUserEmail);
@@ -1400,37 +1460,16 @@ async function init() {
     clearSearchButton.addEventListener('click', clearSearch);
   }
 
-  const albumButton = document.getElementById('chatAlbumButton');
   const albumModal = document.getElementById('chatAlbumModal');
-  
-  if (albumButton) {
-    albumButton.addEventListener('click', displayChatAlbum);
-  }
+  document.querySelectorAll('[data-open-chat-album]').forEach((button) => {
+    button.addEventListener('click', displayChatAlbum);
+  });
   
   if (albumModal) {
     albumModal.addEventListener('click', (event) => {
       if (event.target === albumModal) {
         closeChatAlbum();
       }
-    });
-  }
-
-  const pinnedMessagesToggle = document.getElementById('pinnedMessagesToggle');
-  const pinnedMessagesList = document.getElementById('pinnedMessagesList');
-  const pinnedMessagesChevron = document.getElementById('pinnedMessagesChevron');
-  if (pinnedMessagesToggle && pinnedMessagesList) {
-    pinnedMessagesToggle.addEventListener('click', () => {
-      const isExpanded = pinnedMessagesToggle.getAttribute('aria-expanded') === 'true';
-      pinnedMessagesToggle.setAttribute('aria-expanded', String(!isExpanded));
-      pinnedMessagesList.style.display = isExpanded ? 'none' : 'flex';
-      if (pinnedMessagesChevron) {
-        pinnedMessagesChevron.className = isExpanded ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
-      }
-    });
-
-    pinnedMessagesList.addEventListener('click', (event) => {
-      const item = event.target.closest('.pinned-message-item');
-      if (item) scrollToPinnedMessage(item.dataset.pinnedMessageId);
     });
   }
 

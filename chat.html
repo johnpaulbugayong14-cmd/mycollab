@@ -9,11 +9,13 @@
   <style>
     body {
       min-height: 100vh;
+      height: 100vh;
+      height: 100dvh;
       margin: 0;
       background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
       color: #e2e8f0;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      overflow-x: hidden;
+      overflow: hidden;
     }
 
     body.chat-theme {
@@ -66,11 +68,13 @@
     }
 
     .chat-page {
-      min-height: 100vh;
+      height: 100%;
+      min-height: 0;
       padding: 0.75rem 0.75rem 1rem;
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
+      box-sizing: border-box;
     }
 
     .chat-header {
@@ -109,7 +113,9 @@
       padding: 0;
       display: flex;
       flex-direction: column;
-      min-height: calc(100vh - 3rem);
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
     }
 
     .chat-meta {
@@ -200,7 +206,8 @@
     }
 
     .pinned-messages-section {
-      margin-bottom: 1rem;
+      flex: 0 0 auto;
+      margin-bottom: 0.75rem;
       border: 1px solid rgba(250, 204, 21, 0.25);
       border-radius: 0.75rem;
       background: rgba(30, 41, 59, 0.72);
@@ -231,6 +238,9 @@
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
+      max-height: 20vh;
+      overflow-y: auto;
+      overscroll-behavior: contain;
       padding: 0 0.75rem 0.75rem;
     }
 
@@ -575,6 +585,8 @@
       justify-content: center !important;
       text-align: center !important;
       line-height: 1 !important;
+      font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+      font-variant-emoji: emoji !important;
     }
 
     #chatReactionMenu button span {
@@ -583,6 +595,17 @@
       justify-content: center;
       width: 100%;
       height: 100%;
+      line-height: 1;
+    }
+
+    .chat-reaction-emoji,
+    .chat-reaction-details-emoji {
+      font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+      font-variant-emoji: emoji !important;
+    }
+
+    .chat-reaction-emoji {
+      font-size: 1.05rem;
       line-height: 1;
     }
 
@@ -681,9 +704,9 @@
     }
 
     #chatMessageInput:focus {
-      background: rgba(15, 23, 42, 0.95);
-      border-color: rgba(59, 130, 246, 0.5);
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      background: #fff;
+      border-color: #90ad62;
+      box-shadow: 0 0 0 3px rgba(144, 173, 98, 0.18);
     }
 
     #chatMessageInput::placeholder {
@@ -753,9 +776,9 @@
       width: 200px;
       height: 39.2px;
       margin: 0;
-      background: rgba(99, 102, 241, 0.15);
-      color: #818cf8;
-      border: 1px solid rgba(99, 102, 241, 0.35);
+      background: #edf2e8;
+      color: #3b6654;
+      border: 1px solid #dce4da;
       border-radius: 0.75rem;
       cursor: pointer;
       font-size: 0.9rem;
@@ -767,14 +790,15 @@
     }
 
     .chat-album-button:hover {
-      background: rgba(99, 102, 241, 0.25);
-      border-color: rgba(99, 102, 241, 0.5);
+      background: #e4ecd9;
+      border-color: #c9d9b1;
     }
 
     #chatAlbumModal {
       position: fixed;
       inset: 0;
-      background: rgba(15, 23, 42, 0.98);
+      background: var(--chat-gallery-background, #f5f6f1);
+      color: var(--chat-gallery-text, #20342f);
       z-index: 99999;
       display: flex;
       flex-direction: column;
@@ -788,14 +812,14 @@
       align-items: center;
       margin-bottom: 2rem;
       padding-bottom: 1.5rem;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      border-bottom: 1px solid #dfe6dc;
       gap: 1rem;
     }
 
     .chat-album-header h2 {
       margin: 0;
       font-size: 1.75rem;
-      color: #f8fafc;
+      color: var(--chat-gallery-text, #20342f);
       flex: 1;
       font-weight: 600;
     }
@@ -804,9 +828,9 @@
       padding: 0;
       width: 2.5rem;
       height: 2.5rem;
-      background: rgba(248, 113, 113, 0.15);
-      color: #f97316;
-      border: 1px solid rgba(248, 113, 113, 0.35);
+      background: #edf2e8;
+      color: #3b6654;
+      border: 1px solid #dce4da;
       border-radius: 0.5rem;
       cursor: pointer;
       font-size: 1.1rem;
@@ -815,12 +839,13 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      box-shadow: none !important;
       transition: all 0.2s ease;
     }
 
     .chat-album-close-btn:hover {
-      background: rgba(248, 113, 113, 0.25);
-      border-color: rgba(248, 113, 113, 0.5);
+      background: #e4ecd9;
+      border-color: #c9d9b1;
     }
 
     #chatAlbumGrid {
@@ -835,22 +860,105 @@
       aspect-ratio: 1;
       border-radius: 0.75rem;
       overflow: hidden;
-      border: 1px solid rgba(148, 163, 184, 0.2);
+      border: 1px solid #dce4da;
       cursor: pointer;
       transition: all 0.3s ease;
-      background: rgba(17, 24, 39, 0.8);
+      background: var(--chat-gallery-surface, #fff);
     }
 
     .chat-album-thumbnail:hover {
-      transform: scale(1.08);
-      border-color: rgba(59, 130, 246, 0.5);
-      box-shadow: 0 8px 16px rgba(59, 130, 246, 0.2);
+      transform: scale(1.04);
+      border-color: #9fb77a;
+      box-shadow: 0 8px 16px rgba(54, 83, 50, 0.14);
+    }
+
+    .chat-album-thumbnail:focus-visible,
+    .chat-album-close-btn:focus-visible,
+    .chat-panel-quick-actions button:focus-visible,
+    .chat-panel-section-toggle:focus-visible {
+      outline: 2px solid #9aab7d;
+      outline-offset: 2px;
+      box-shadow: none !important;
+    }
+
+    .chat-panel-quick-actions button:hover,
+    .chat-panel-quick-actions button:focus-visible,
+    .chat-panel-section-toggle:hover,
+    .chat-panel-section-toggle:focus-visible {
+      background: #f4f8e9;
+      color: #315a46;
+      box-shadow: none !important;
+    }
+
+    .chat-panel-quick-actions button:focus:not(:focus-visible),
+    .chat-panel-section-toggle:focus:not(:focus-visible) {
+      outline: none;
+      box-shadow: none !important;
+    }
+
+    .chat-panel-quick-actions button:active,
+    .chat-panel-section-toggle:active,
+    .chat-panel-quick-actions button:hover,
+    .chat-panel-section-toggle:hover {
+      background: #f4f8e9 !important;
+      color: #315a46 !important;
+      box-shadow: none !important;
+      transform: none !important;
     }
 
     .chat-album-thumbnail img {
       width: 100%;
       height: 100%;
       object-fit: cover;
+    }
+
+    #chatFullscreenImageModal {
+      background: var(--chat-gallery-background, #f5f6f1) !important;
+      color: var(--chat-gallery-text, #20342f);
+    }
+
+    .chat-fullscreen-close-btn {
+      margin-top: 1rem;
+      padding: 0.75rem 1.5rem;
+      border: 1px solid #dce4da;
+      border-radius: 0.65rem;
+      background: #edf2e8;
+      color: #315a46;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 600;
+      box-shadow: none !important;
+    }
+
+    .chat-fullscreen-close-btn:hover {
+      border-color: #c9d9b1;
+      background: #e4ecd9;
+    }
+
+    .chat-fullscreen-close-btn:focus-visible {
+      outline: 2px solid #8da969;
+      outline-offset: 2px;
+      box-shadow: 0 0 0 3px rgba(141, 169, 105, 0.18) !important;
+    }
+
+    body.chat-theme #chatAlbumModal,
+    body.chat-theme #chatFullscreenImageModal {
+      background: var(--chat-gallery-background, var(--chat-card-color)) !important;
+      color: var(--chat-gallery-text, var(--chat-card-text-color));
+    }
+
+    body.chat-theme .chat-album-header h2 {
+      color: var(--chat-gallery-text, var(--chat-card-text-color));
+    }
+
+    body.chat-theme .chat-album-thumbnail {
+      background: var(--chat-gallery-surface, var(--chat-card-color));
+    }
+
+    body.chat-theme .chat-fullscreen-close-btn {
+      border-color: rgba(141, 169, 105, 0.55);
+      background: rgba(141, 169, 105, 0.18);
+      color: var(--chat-gallery-text, var(--chat-card-text-color));
     }
 
     .chat-album-empty {
@@ -868,7 +976,9 @@
         padding: 1rem;
       }
       .chat-page-card {
-        min-height: calc(100vh - 8rem);
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
         padding: 1rem;
       }
       .chat-header {
@@ -978,7 +1088,7 @@
       }
       .chat-page-card {
         padding: 0.75rem;
-        min-height: calc(100vh - 4rem);
+        min-height: 0;
       }
       .chat-header-left {
         display: contents;
@@ -1083,55 +1193,797 @@
       display: none !important;
     }
   </style>
+  <style>
+    body {
+      height: 100vh;
+      height: 100dvh;
+      min-height: 0;
+      overflow: hidden;
+      background: #f3f4f6 !important;
+      color: #202124;
+    }
+
+    .chat-page {
+      height: 100%;
+      min-height: 0;
+      padding: 0.65rem;
+    }
+
+    .chat-workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 0.65rem;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      min-width: 0;
+    }
+
+    .chat-main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      border: 1px solid #e6e8eb;
+      border-radius: 0.9rem;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(34, 45, 55, 0.08);
+    }
+
+    .chat-header {
+      flex: 0 0 auto;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 0.75rem;
+      min-height: 64px;
+      padding: 0.65rem 0.9rem;
+      border: 0;
+      border-bottom: 1px solid #f1e4dc;
+      border-radius: 0;
+      background: #f3c7b3 !important;
+    }
+
+    body.chat-theme .chat-header {
+      background: #f3c7b3 !important;
+    }
+
+    .chat-header-left {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .chat-room-avatar {
+      display: inline-flex;
+      width: 42px;
+      height: 42px;
+      flex: 0 0 42px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(115, 68, 46, 0.15);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.75);
+      color: #a64e25;
+      font-size: 1.05rem;
+    }
+
+    .chat-room-heading {
+      min-width: 0;
+    }
+
+    #chatTitle {
+      overflow: hidden;
+      color: #27221f !important;
+      font-size: 1rem !important;
+      font-weight: 700 !important;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      -webkit-text-fill-color: #27221f !important;
+    }
+
+    .chat-meta {
+      margin: 0.15rem 0 0;
+      overflow: hidden;
+      color: #765d51 !important;
+      font-size: 0.77rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    body.chat-theme .chat-header .chat-meta {
+      color: #765d51 !important;
+    }
+
+    #chatStatus {
+      display: none;
+    }
+
+    .chat-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin-left: auto;
+    }
+
+    #backButton,
+    #chatInfoToggle {
+      display: inline-flex;
+      width: 2.5rem;
+      height: 2.5rem;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent !important;
+      color: #a64e25 !important;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    #backButton {
+      width: auto;
+      padding: 0 0.7rem;
+      border-radius: 0.65rem;
+    }
+
+    #backButton:hover,
+    #chatInfoToggle:hover {
+      background: rgba(255, 255, 255, 0.55) !important;
+    }
+
+    #backButton:focus-visible,
+    #chatInfoToggle:focus-visible {
+      outline: 2px solid #8da969;
+      outline-offset: 2px;
+      box-shadow: 0 0 0 3px rgba(141, 169, 105, 0.18) !important;
+    }
+
+    .chat-page-card {
+      flex: 1 1 auto;
+      width: auto;
+      min-height: 0;
+      padding: 0.55rem 0.85rem 0.75rem;
+      overflow: hidden;
+      border: 0;
+      border-radius: 0;
+      background: #fff !important;
+      box-shadow: none;
+    }
+
+    body.chat-theme .chat-page-card {
+      background: #fff !important;
+    }
+
+    #chatError {
+      flex: 0 0 auto;
+    }
+
+    #chatMessages {
+      flex: 1 1 auto;
+      min-height: 0;
+      margin: 0 0 0.55rem;
+      padding: 0.75rem;
+      overflow-y: auto;
+      border: 0;
+      border-radius: 0.7rem;
+      background: #faf7f5 !important;
+    }
+
+    .chat-message {
+      padding: 0.45rem 0.35rem !important;
+      border-bottom: 1px solid #eee9e6 !important;
+    }
+
+    .chat-message-content {
+      border: 1px solid #eee8e4 !important;
+      border-radius: 0.85rem !important;
+      background: #fff !important;
+      color: #262626 !important;
+    }
+
+    #chatMessages .chat-message div[style*="color: #94a3b8"],
+    .chat-message-time,
+    .chat-date-separator {
+      color: #4b5563 !important;
+    }
+
+    body.chat-theme #chatMessages .chat-message div[style*="color: #94a3b8"],
+    body.chat-theme .chat-message-time,
+    body.chat-theme .chat-date-separator {
+      color: #4b5563 !important;
+    }
+
+    .chat-reply-quote {
+      background: #f1f5f9 !important;
+      color: #374151 !important;
+    }
+
+    .chat-reply-quote-label {
+      color: #526170 !important;
+    }
+
+    .chat-reply-quote-text {
+      color: #374151 !important;
+    }
+
+    body.chat-theme .chat-reply-quote,
+    body.chat-theme .chat-reply-quote-label,
+    body.chat-theme .chat-reply-quote-text {
+      color: #374151 !important;
+    }
+
+    .chat-reply-btn {
+      color: #35617d !important;
+    }
+
+    .chat-pin-btn {
+      color: #655a27 !important;
+    }
+
+    body.chat-theme .chat-message-content {
+      border-color: #eee8e4 !important;
+      background: #fff !important;
+      color: #262626 !important;
+    }
+
+    #chatMessageForm {
+      flex: 0 0 auto;
+      gap: 0.45rem;
+      align-items: center;
+      padding: 0.45rem;
+      border: 1px solid #f0dfd5;
+      border-radius: 0.8rem;
+      background: #fffaf7;
+    }
+
+    #chatMessageForm .chat-message-action {
+      width: 2.5rem !important;
+      min-width: 2.5rem !important;
+      max-width: 2.5rem !important;
+      height: 2.5rem !important;
+      min-height: 2.5rem !important;
+      border-radius: 50%;
+      background: transparent !important;
+      color: #a64e25 !important;
+    }
+
+    #chatMessageForm #submitChatButton {
+      background: #a64e25 !important;
+      color: #fff !important;
+    }
+
+    #chatMessageInput {
+      min-height: 2.5rem;
+      padding: 0.65rem 0.8rem !important;
+      border: 0 !important;
+      border-radius: 1.25rem !important;
+      background: #fff !important;
+      color: #202124 !important;
+      resize: none;
+    }
+
+    .chat-info-panel {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      padding: 1.15rem 1rem;
+      overflow: auto;
+      border: 1px solid #e6e8eb;
+      border-radius: 0.9rem;
+      background: #fff !important;
+      color: #202124 !important;
+      box-shadow: 0 2px 8px rgba(34, 45, 55, 0.08);
+    }
+
+    .chat-panel-back-button {
+      display: none;
+    }
+
+    .chat-panel-identity {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0.35rem 0.2rem 1rem;
+      text-align: center;
+    }
+
+    .chat-panel-room-avatar {
+      display: inline-flex;
+      width: 76px;
+      height: 76px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #eee3dd;
+      border-radius: 50%;
+      background: #f8eee9;
+      color: #a64e25;
+      font-size: 1.8rem;
+    }
+
+    #chatInfoTitle {
+      max-width: 100%;
+      margin: 0.65rem 0 0.15rem;
+      overflow-wrap: anywhere;
+      color: #202124;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    #chatPanelStatus {
+      color: #687078;
+      font-size: 0.8rem;
+    }
+
+    .chat-panel-quick-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.35rem;
+      width: 100%;
+      margin-top: 1rem;
+    }
+
+    .chat-panel-quick-actions button {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.5rem 0.2rem;
+      border: 0;
+      border-radius: 0.65rem;
+      background: transparent;
+      color: #343a40;
+      font: inherit;
+      font-size: 0.74rem;
+      cursor: pointer;
+      box-shadow: none !important;
+    }
+
+    .chat-panel-quick-actions button:hover {
+      background: #f4f8e9;
+      color: #315a46;
+    }
+
+    .chat-panel-quick-actions i {
+      display: inline-flex;
+      width: 2.25rem;
+      height: 2.25rem;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: #eef0f2;
+      color: #343a40;
+      font-size: 0.95rem;
+    }
+
+    .chat-panel-sections {
+      margin-top: 0.6rem;
+      border-top: 1px solid #f0f1f2;
+    }
+
+    .chat-panel-section {
+      border-bottom: 1px solid #f0f1f2;
+    }
+
+    .chat-panel-section-toggle {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.7rem;
+      padding: 0.85rem 0;
+      border: 0;
+      background: transparent;
+      color: #25292d;
+      text-align: left;
+      font: inherit;
+      font-size: 0.86rem;
+      font-weight: 650;
+      cursor: pointer;
+      box-shadow: none !important;
+    }
+
+    .chat-panel-section-toggle:hover {
+      background: #f4f8e9;
+      color: #315a46;
+    }
+
+    .chat-panel-section-toggle > i {
+      color: #727980;
+      font-size: 0.72rem;
+      transition: transform 160ms ease;
+    }
+
+    .chat-panel-section-toggle[aria-expanded="true"] > i {
+      transform: rotate(180deg);
+    }
+
+    .chat-panel-section-content {
+      padding: 0 0 0.8rem;
+    }
+
+    .chat-panel-section-content[hidden] {
+      display: none !important;
+    }
+
+    .chat-panel-meta {
+      margin: 0;
+      color: #5e666d;
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+
+    #pinnedMessagesSection {
+      margin: 0;
+      overflow: visible;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+
+    #pinnedMessagesList {
+      max-height: 24vh;
+      padding: 0 0 0.3rem;
+      overflow-y: auto;
+      background: transparent;
+    }
+
+    .pinned-message-item {
+      border-color: #e8ebef !important;
+      background: #fff !important;
+      color: #343a40 !important;
+    }
+
+    .pinned-message-sender {
+      color: #8a431f !important;
+    }
+
+    .pinned-message-preview,
+    .pinned-messages-empty {
+      color: #3f474e !important;
+    }
+
+    #chatSearchContainer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      align-items: center;
+    }
+
+    #chatSearchInput {
+      width: 100%;
+      min-width: 0 !important;
+      padding: 0.65rem 0.75rem !important;
+      border: 1px solid #dfe3e7 !important;
+      border-radius: 0.6rem !important;
+      background: #fff !important;
+      color: #202124 !important;
+    }
+
+    #chatSearchResultsCount {
+      color: #636b73 !important;
+    }
+
+    #chatClearSearchButton {
+      padding: 0.45rem 0.65rem !important;
+      border: 1px solid #e5c4b5 !important;
+      border-radius: 0.55rem !important;
+      background: #fff7f2 !important;
+      color: #8a431f !important;
+    }
+
+    .chat-workspace.is-panel-collapsed {
+      grid-template-columns: minmax(0, 1fr) 0;
+    }
+
+    .chat-workspace.is-panel-collapsed .chat-info-panel {
+      display: none;
+    }
+
+    .chat-panel-backdrop {
+      display: none;
+    }
+
+    @media (max-width: 900px) {
+      .chat-page {
+        padding: 0;
+      }
+
+      .chat-header {
+        display: flex;
+        grid-template-columns: none;
+      }
+
+      .chat-workspace {
+        display: block;
+        position: relative;
+      }
+
+      .chat-main {
+        height: 100%;
+        border: 0;
+        border-radius: 0;
+      }
+
+      .chat-main #chatMessages {
+        min-height: 0;
+        max-height: none;
+      }
+
+      .chat-header {
+        padding: 0.55rem 0.7rem;
+      }
+
+      .chat-header > div:last-child,
+      .chat-header-actions {
+        width: auto;
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-end;
+      }
+
+      .chat-header-left {
+        flex-direction: row;
+        width: auto;
+      }
+
+      .chat-header-left > div:first-child {
+        min-width: 0;
+        margin: 0 !important;
+      }
+
+      .chat-room-avatar {
+        width: 38px;
+        height: 38px;
+        flex-basis: 38px;
+      }
+
+      #chatTitle {
+        width: auto;
+        font-size: 0.95rem !important;
+      }
+
+      .chat-header #chatTitle {
+        color: #27221f !important;
+        -webkit-text-fill-color: #27221f !important;
+      }
+
+      .chat-info-panel {
+        position: fixed;
+        z-index: 51;
+        top: 0.5rem;
+        right: 0.5rem;
+        bottom: 0.5rem;
+        width: min(340px, calc(100vw - 1rem));
+        box-sizing: border-box;
+        border-radius: 0.9rem;
+      }
+
+      .chat-panel-back-button {
+        display: inline-flex;
+        width: fit-content;
+        max-width: 100%;
+        align-items: center;
+        align-self: flex-start;
+        gap: 0.55rem;
+        margin: 0 0 0.65rem !important;
+        padding: 0.4rem 0.65rem;
+        border: 1px solid #e6e8eb;
+        border-radius: 0.65rem;
+        background: transparent !important;
+        color: #a64e25 !important;
+        font: inherit;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: none !important;
+      }
+
+      .chat-panel-back-button:hover,
+      .chat-panel-back-button:active,
+      .chat-panel-back-button:focus-visible {
+        border-color: #a64e25 !important;
+        background: transparent !important;
+        color: #a64e25 !important;
+        box-shadow: none !important;
+      }
+
+      .chat-panel-back-button:focus-visible {
+        outline: 2px solid #a64e25;
+        outline-offset: 2px;
+      }
+
+      .chat-workspace:not(.is-panel-collapsed) .chat-panel-backdrop {
+        display: block;
+        position: fixed;
+        z-index: 50;
+        inset: 0;
+        width: 100%;
+        border: 0;
+        background: rgba(20, 24, 28, 0.35);
+      }
+
+      .chat-workspace.is-panel-collapsed .chat-panel-backdrop {
+        display: none;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .chat-header {
+        gap: 0.35rem;
+      }
+
+      .chat-header-left {
+        gap: 0.4rem;
+      }
+
+      #backButton {
+        width: 2rem;
+        padding: 0;
+        font-size: 0;
+      }
+
+      #backButton i {
+        font-size: 0.85rem;
+      }
+
+      .chat-page-card {
+        padding: 0.35rem 0.45rem 0.55rem;
+      }
+
+      #chatMessageForm {
+        gap: 0.2rem;
+        padding: 0.3rem;
+      }
+
+      #chatMessageForm .chat-message-action {
+        width: 2.15rem !important;
+        min-width: 2.15rem !important;
+        max-width: 2.15rem !important;
+        height: 2.15rem !important;
+        min-height: 2.15rem !important;
+      }
+    }
+
+    .chat-header {
+      justify-content: flex-start;
+    }
+
+    .chat-header-left {
+      flex: 0 1 auto;
+    }
+
+    .chat-room-heading {
+      flex: 0 1 auto;
+      width: auto;
+      text-align: left;
+    }
+
+    .chat-header #chatTitle {
+      width: auto;
+      margin: 0 0 0.15rem !important;
+      text-align: left !important;
+    }
+
+    .chat-header .chat-meta {
+      margin: 0;
+      text-align: left;
+    }
+
+    .chat-header-actions {
+      margin-left: auto;
+    }
+
+    @media (max-width: 640px) {
+      .chat-header-left {
+        display: flex;
+      }
+
+      .chat-room-heading {
+        min-width: 0;
+      }
+
+      .chat-header #chatTitle {
+        flex: 0 1 auto;
+      }
+    }
+  </style>
 </head>
 <body>
   <div class="chat-page">
-    <div class="chat-header">
-      <div class="chat-header-left">
-        <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 0.5rem;">
-          <button id="backButton" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 0.5rem; padding: 0.65rem 1rem; cursor: pointer; width: fit-content; font-weight: 600; transition: all 0.2s ease;"><i class="fas fa-chevron-left"></i> Back</button>
-          <h1 id="chatTitle" style="margin: 0; font-size: 1.8rem; color: #f8fafc; font-weight: 600;"><i class="fas fa-comments"></i> Live Chat</h1>
-        </div>
-        <p id="chatMeta" class="chat-meta"><i class="fas fa-circle" style="color: #10b981; font-size: 0.6rem;"></i> Loading chat...</p>
-        <span id="chatStatus" style="width: fit-content; padding: 0.5rem 0.9rem; border-radius: 0.5rem; background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.9rem; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 500;"><i class="fas fa-circle" style="font-size: 0.6rem;"></i> Active</span>
-      </div>
-      <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; justify-content: flex-end;">
-        <button id="chatAlbumButton" class="chat-album-button"><i class="fas fa-images"></i> Images</button>
-        <div id="chatSearchContainer" style="display: flex; gap: 0.5rem; align-items: center;">
-          <input id="chatSearchInput" type="text" placeholder="Search messages..." style="padding: 0.65rem 0.95rem; border-radius: 0.5rem; border: 1px solid rgba(148, 163, 184, 0.25); background: rgba(15, 23, 42, 0.8); color: #f8fafc; outline: none; min-width: 200px; font-size: 0.9rem; transition: all 0.2s ease;" />
-          <span id="chatSearchResultsCount" style="color: #94a3b8; font-size: 0.85rem; white-space: nowrap;"></span>
-          <button id="chatClearSearchButton" type="button" style="display: none; padding: 0.65rem 0.95rem; border-radius: 0.5rem; border: 1px solid rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.15); color: #f97316; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all 0.2s ease;"><i class="fas fa-times"></i> Clear</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="chat-page-card">
-      <div id="chatError"></div>
-      <section id="pinnedMessagesSection" class="pinned-messages-section" aria-label="Pinned messages">
-        <button type="button" id="pinnedMessagesToggle" class="pinned-messages-header" aria-expanded="true">
-          <span><i class="fas fa-thumbtack"></i> Pinned messages <span id="pinnedMessagesCount">0</span></span>
-          <i id="pinnedMessagesChevron" class="fas fa-chevron-up" aria-hidden="true"></i>
-        </button>
-        <div id="pinnedMessagesList" class="pinned-messages-list"></div>
-      </section>
-      <div id="chatMessages"><div class="chat-loading-state" role="status" aria-live="polite"><span class="chat-loading-dots" aria-hidden="true"><span class="chat-loading-dot"></span><span class="chat-loading-dot"></span><span class="chat-loading-dot"></span></span><span>Loading messages...</span></div></div>
-      <div id="chatImagePreview"></div>
-      <div id="replyPreview" class="reply-preview">
-        <div class="reply-preview-row">
-          <div>
-            <div class="reply-preview-label"><i class="fas fa-reply"></i> Replying to</div>
-            <div id="replyPreviewText" class="reply-preview-text"></div>
+    <div class="chat-workspace" id="chatWorkspace">
+      <button type="button" class="chat-panel-backdrop" id="chatPanelBackdrop" aria-label="Close chat info panel"></button>
+      <main class="chat-main">
+        <div class="chat-header">
+          <div class="chat-header-left">
+            <button id="backButton" aria-label="Back"><i class="fas fa-chevron-left"></i> Back</button>
+            <span class="chat-room-avatar" aria-hidden="true"><i class="fas fa-comments"></i></span>
+            <div class="chat-room-heading">
+              <h1 id="chatTitle">Live Chat</h1>
+              <p id="chatMeta" class="chat-meta">Loading chat...</p>
+            </div>
+            <span id="chatStatus">Active</span>
           </div>
-          <button type="button" id="cancelReplyButton" class="reply-preview-cancel"><i class="fas fa-times"></i></button>
+          <div class="chat-header-actions">
+            <button type="button" id="chatInfoToggle" aria-label="Open chat info" aria-expanded="false" title="Chat info">
+              <i class="fas fa-circle-info"></i>
+            </button>
+          </div>
         </div>
-      </div>
-      <form id="chatMessageForm" autocomplete="off" style="position: relative;">
-        <button type="button" id="attachImageButton" class="chat-message-action" aria-label="Attach image" title="Attach image" style="order: 1;"><i class="fas fa-paperclip"></i></button>
-        <button type="submit" id="submitChatButton" class="chat-message-action" aria-label="Send message" title="Send message" style="order: 2;"><i class="fas fa-paper-plane"></i></button>
-        <textarea id="chatMessageInput" rows="2" placeholder="Type your message here..." style="order: 3; width:100%; min-width:0; font-family: inherit; font-size: 0.95rem; padding: 0.9rem 1.15rem; flex: 1 1 auto;"></textarea>
-        <div id="chatMentionDropdown" class="mention-dropdown"></div>
-        <input id="chatImageInput" type="file" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.svg,.ico,.tif,.tiff,.heic,.heif,.avif,.jfif" style="display:none;" />
-      </form>
+
+        <div class="chat-page-card">
+          <div id="chatError"></div>
+          <div id="chatMessages"><div class="chat-loading-state" role="status" aria-live="polite"><span class="chat-loading-dots" aria-hidden="true"><span class="chat-loading-dot"></span><span class="chat-loading-dot"></span><span class="chat-loading-dot"></span></span><span>Loading messages...</span></div></div>
+          <div id="chatImagePreview"></div>
+          <div id="replyPreview" class="reply-preview">
+            <div class="reply-preview-row">
+              <div>
+                <div class="reply-preview-label"><i class="fas fa-reply"></i> Replying to</div>
+                <div id="replyPreviewText" class="reply-preview-text"></div>
+              </div>
+              <button type="button" id="cancelReplyButton" class="reply-preview-cancel"><i class="fas fa-times"></i></button>
+            </div>
+          </div>
+          <form id="chatMessageForm" autocomplete="off" style="position: relative;">
+            <button type="button" id="attachImageButton" class="chat-message-action" aria-label="Attach image" title="Attach image" style="order: 1;"><i class="fas fa-paperclip"></i></button>
+            <button type="submit" id="submitChatButton" class="chat-message-action" aria-label="Send message" title="Send message" style="order: 2;"><i class="fas fa-paper-plane"></i></button>
+            <textarea id="chatMessageInput" rows="2" placeholder="Type your message here..." style="order: 3; width:100%; min-width:0; font-family: inherit; font-size: 0.95rem; padding: 0.9rem 1.15rem; flex: 1 1 auto;"></textarea>
+            <div id="chatMentionDropdown" class="mention-dropdown"></div>
+            <input id="chatImageInput" type="file" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.svg,.ico,.tif,.tiff,.heic,.heif,.avif,.jfif" style="display:none;" />
+          </form>
+        </div>
+      </main>
+
+      <aside class="chat-info-panel" id="chatInfoPanel" aria-label="Chat details">
+        <button type="button" class="chat-panel-back-button" id="chatPanelBackButton">
+          <i class="fas fa-arrow-left" aria-hidden="true"></i>
+          <span>Back to chat</span>
+        </button>
+        <div class="chat-panel-identity">
+          <div class="chat-panel-room-avatar" aria-hidden="true"><i class="fas fa-comments"></i></div>
+          <h2 id="chatInfoTitle">Live Chat</h2>
+          <span id="chatPanelStatus">Active</span>
+          <div class="chat-panel-quick-actions">
+            <button type="button" data-open-chat-panel="pinnedMessagesList">
+              <i class="fas fa-thumbtack"></i><span>Pinned <span id="pinnedMessagesCount">0</span></span>
+            </button>
+            <button type="button" data-open-chat-panel="chatSearchSection">
+              <i class="fas fa-magnifying-glass"></i><span>Search</span>
+            </button>
+            <button type="button" data-open-chat-album>
+              <i class="fas fa-images"></i><span>Images</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="chat-panel-sections">
+          <section class="chat-panel-section">
+            <button type="button" class="chat-panel-section-toggle" data-chat-panel-section="chatInfoDetails" aria-expanded="false" aria-controls="chatInfoDetails">
+              <span>Chat info</span><i class="fas fa-chevron-down" aria-hidden="true"></i>
+            </button>
+            <div id="chatInfoDetails" class="chat-panel-section-content" hidden>
+              <p id="chatPanelMeta" class="chat-panel-meta">Loading chat details...</p>
+            </div>
+          </section>
+
+          <section class="chat-panel-section" id="pinnedMessagesSection" aria-label="Pinned messages">
+            <div id="pinnedMessagesList" class="chat-panel-section-content" hidden></div>
+          </section>
+
+          <section class="chat-panel-section">
+            <div id="chatSearchSection" class="chat-panel-section-content" hidden>
+              <div id="chatSearchContainer">
+                <input id="chatSearchInput" type="text" placeholder="Search messages..." aria-label="Search messages" />
+                <span id="chatSearchResultsCount"></span>
+                <button id="chatClearSearchButton" type="button" style="display: none;"><i class="fas fa-times"></i> Clear search</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </aside>
     </div>
   </div>
 
@@ -1143,7 +1995,12 @@
     <div id="chatAlbumGrid"></div>
   </div>
 
-  <script type="module" src="chat.js?v=2"></script>
+  <script>
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      document.getElementById('chatWorkspace')?.classList.add('is-panel-collapsed');
+    }
+  </script>
+  <script type="module" src="chat.js?v=5"></script>
   <script type="module" src="update-manager.js"></script>
 </body>
 </html>

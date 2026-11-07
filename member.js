@@ -45,12 +45,8 @@ let memberStatusDocs = {};
 let latestTicketSnapshotDocs = null;
 let ticketHistoryTarget = { containerId: 'ticketHistory', emptyStateId: 'ticketHistoryEmptyState' };
 let previousTaskMap = new Map();
-let previousPollMap = new Map();
-let previousAnnouncementMap = new Map();
 let previousTicketMap = new Map();
 let taskNotificationsInitialized = false;
-let pollNotificationsInitialized = false;
-let announcementNotificationsInitialized = false;
 let ticketNotificationsInitialized = false;
 let memberStatusPollTimer = null;
 let presenceHeartbeatTimer = null;
@@ -80,7 +76,7 @@ const welcomeEl = document.getElementById("welcome");
 const datetimeEl = document.getElementById("datetime");
 const pollsContainer = document.getElementById("polls");
 const pollsEmptyState = document.getElementById("pollsEmptyState");
-const announcementsContainer = document.getElementById("announcements");
+const announcementsContainer = document.getElementById("announcementsList");
 const announcementsEmptyState = document.getElementById("announcementsEmptyState");
 const members = [
   { uid: "everyone", name: "Everyone" }
@@ -111,11 +107,11 @@ const defaultMemberGradientTheme = {
   accent: '#3b82f6'
 };
 let currentMemberThemeTextColors = {
-  body: '#f8fafc',
-  sidebar: '#f8fafc',
-  header: '#f8fafc',
-  card: '#f8fafc',
-  input: '#f8fafc'
+  body: '#20342f',
+  sidebar: '#cbd5e1',
+  header: '#40564b',
+  card: '#20342f',
+  input: '#263a32'
 };
 
 function getMemberGradientStorageKey(email = userEmail) {
@@ -135,6 +131,7 @@ function applyMemberThemeTextColors(colors = currentMemberThemeTextColors) {
   const targets = [
     ['#datetime', colors.header],
     ['#welcome', colors.header],
+    ['#memberActiveOrganization', colors.header],
     ['#home-greeting', colors.card]
   ];
 
@@ -162,12 +159,13 @@ function applyOriginalMemberTheme() {
   });
 
   currentMemberThemeTextColors = {
-    body: '#f8fafc',
+    body: '#20342f',
     sidebar: '#cbd5e1',
-    header: '#cbd5e1',
-    card: '#f1f5f9',
-    input: '#e2e8f0'
+    header: '#40564b',
+    card: '#20342f',
+    input: '#263a32'
   };
+  applyMemberThemeTextColors();
 
   const startInput = document.getElementById('memberGradientStart');
   const endInput = document.getElementById('memberGradientEnd');
@@ -661,11 +659,16 @@ function isHiddenMember(memberOrEmail) {
 function ensureMemberEntry(email, fallbackName = null) {
   const normalized = normalizeEmail(email);
   if (!normalized || isHiddenMember(normalized)) return null;
+  const displayName = normalized === 'johnpaulbugayong@gmail.com'
+    ? 'John Paul Bugayong'
+    : fallbackName || normalized.split('@')[0] || normalized;
 
   let member = members.find(m => normalizeEmail(m.uid) === normalized);
   if (!member) {
-    member = { uid: normalized, name: fallbackName || normalized.split('@')[0] || normalized };
+    member = { uid: normalized, name: displayName };
     members.push(member);
+  } else if (normalized === 'johnpaulbugayong@gmail.com') {
+    member.name = displayName;
   }
 
   if (!mentionUsers.find(user => normalizeEmail(user.uid) === normalized)) {
@@ -745,6 +748,7 @@ function getFriendlyName(value) {
 async function getWelcomeName(email) {
   const normalized = normalizeEmail(email);
   if (!normalized) return 'Member';
+  if (normalized === 'johnpaulbugayong@gmail.com') return 'John Paul Bugayong';
 
   try {
     const storedUserRaw = localStorage.getItem('authUser');
@@ -3039,7 +3043,7 @@ function renderMemberStatusPanel() {
     return `
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; border: 1px solid #374151; border-radius: 0.75rem; margin-bottom: 0.75rem; background: rgba(17, 24, 39, 0.88);">
         <div style="display: flex; align-items: center; gap: 0.85rem; min-width: 0; flex: 1;">
-          ${renderUserAvatarMarkup(member.uid, 36)}
+          ${renderUserAvatarMarkup(member.uid, 56)}
           <div style="min-width: 0; flex: 1;">
             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.2rem;">
               <span style="font-weight: 700; color: #f8fafc; font-size: 0.96rem;">${displayName}</span>
@@ -3264,48 +3268,6 @@ async function markInAppNotificationSeen(notification) {
   } catch (error) {
     console.warn('Failed to persist shownTo for in-app notification:', error);
   }
-}
-
-function displayNotificationBanner({ title, message, type = 'info', duration = 9000 }) {
-  const bannerContainer = document.getElementById('notificationBanner');
-  if (!bannerContainer) return;
-
-  const notificationId = `notification-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const item = document.createElement('div');
-  item.className = 'notification-item';
-  item.id = notificationId;
-  item.style.position = 'relative';
-
-  const titleEl = document.createElement('strong');
-  titleEl.textContent = title || 'Notification';
-
-  const messageEl = document.createElement('div');
-  messageEl.style.marginBottom = '0.5rem';
-  messageEl.style.whiteSpace = 'pre-wrap';
-  messageEl.style.wordBreak = 'break-word';
-  messageEl.textContent = message || '';
-
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.textContent = '×';
-  closeBtn.onclick = () => item.remove();
-
-  item.appendChild(titleEl);
-  item.appendChild(messageEl);
-  item.appendChild(closeBtn);
-  bannerContainer.style.display = 'flex';
-  bannerContainer.appendChild(item);
-
-  setTimeout(() => {
-    if (item.parentElement) {
-      item.remove();
-    }
-  }, duration);
-}
-
-function showAdminUpdateNotification(title, message) {
-  showLocalNotification(title, message);
-  displayNotificationBanner({ title, message });
 }
 
 async function showInAppNotificationOverlay(notification) {
@@ -3560,7 +3522,7 @@ function watchMemberWallet() {
     const balanceEl = document.getElementById('memberWalletBalance');
     if (balanceEl) {
       balanceEl.textContent = balance.toFixed(2);
-      const balanceColor = balance < 0 ? '#f87171' : '#fff';
+      const balanceColor = balance < 0 ? '#b42318' : '#28715c';
       balanceEl.classList.toggle('negative-wallet-balance', balance < 0);
       balanceEl.style.setProperty('color', balanceColor, 'important');
       balanceEl.style.setProperty('-webkit-text-fill-color', balanceColor, 'important');
@@ -4404,17 +4366,6 @@ function loadPolls() {
     snap.forEach(doc => docs.push(doc));
     docs.sort((a, b) => b.data().createdAt.toMillis() - a.data().createdAt.toMillis());
 
-    // Notify on newly created polls after the first snapshot
-    docs.forEach(doc => {
-      const poll = doc.data() || {};
-      const previous = previousPollMap.get(doc.id);
-      if (pollNotificationsInitialized && !previous && poll.question) {
-        showAdminUpdateNotification('New Poll Created', `A new poll has been created: "${poll.question}"`);
-      }
-      previousPollMap.set(doc.id, poll);
-    });
-    pollNotificationsInitialized = true;
-
     // Separate active and closed polls
     const activePolls = docs.filter(doc => (doc.data().status || 'active') === 'active');
     const closedPolls = docs.filter(doc => (doc.data().status || 'active') === 'closed');
@@ -4612,10 +4563,11 @@ function renderAnnouncementComments(announcementId, comments) {
 }
 
 function loadAnnouncements() {
-  onSnapshot(activeMemberOrganization?.id ? query(collection(db, "announcements"), where("organizationId", "==", activeMemberOrganization.id)) : collection(db, "announcements"), (snap) => {
+  onSnapshot(activeMemberOrganization?.id ? query(collection(db, "announcements"), where("organizationId", "==", activeMemberOrganization.id)) : collection(db, "announcements"), async (snap) => {
     announcementsContainer.innerHTML = "";
     let announcementCount = 0;
     const archivedAnnouncements = [];
+    const memberName = await getWelcomeName(userEmail);
 
     const docs = [];
     snap.forEach(doc => docs.push(doc));
@@ -4623,18 +4575,10 @@ function loadAnnouncements() {
 
     docs.forEach(doc => {
       const announcement = doc.data() || {};
-      const previous = previousAnnouncementMap.get(doc.id);
       const assignedTo = Array.isArray(announcement.assignedTo) ? announcement.assignedTo : ["everyone"];
+      const assignedToNames = Array.isArray(announcement.assignedToNames) ? announcement.assignedToNames : [];
 
-      if (announcementNotificationsInitialized && !previous && announcement.archived !== true && announcement.title) {
-        const shouldNotify = matchesAnnouncementTarget(assignedTo, userEmail);
-        if (shouldNotify) {
-          showAdminUpdateNotification('New Announcement', `New announcement: "${announcement.title}"`);
-        }
-      }
-      previousAnnouncementMap.set(doc.id, announcement);
-
-      if (!matchesAnnouncementTarget(assignedTo, userEmail)) return;
+      if (!matchesAnnouncementTarget(assignedTo, assignedToNames, userEmail, memberName)) return;
 
       if (announcement.archived === true) {
         archivedAnnouncements.push({ id: doc.id, ...announcement });
@@ -4644,8 +4588,8 @@ function loadAnnouncements() {
       const announcementDate = formatAnnouncementDate(announcement.createdAt);
       const commentsEnabled = announcement.commentsEnabled !== false;
       const commentHtml = renderAnnouncementComments(doc.id, announcement.comments);
-      const assignedToNames = Array.isArray(announcement.assignedToNames) ? announcement.assignedToNames : ["Everyone"];
-      const assignedToText = assignedToNames.length > 1 ? `Assigned to: ${assignedToNames.join(", ")}` : `Assigned to: ${assignedToNames[0]}`;
+      const displayAssignedToNames = assignedToNames.length ? assignedToNames : ["Everyone"];
+      const assignedToText = displayAssignedToNames.length > 1 ? `Assigned to: ${displayAssignedToNames.join(", ")}` : `Assigned to: ${displayAssignedToNames[0]}`;
       announcementCount++;
 
       announcementsContainer.innerHTML += `
@@ -4688,7 +4632,6 @@ function loadAnnouncements() {
       `;
     }
 
-    announcementNotificationsInitialized = true;
     announcementsEmptyState.style.display = announcementCount === 0 ? "block" : "none";
     void hydrateProfileAvatars();
     refreshHomeDashboard();
@@ -4807,12 +4750,11 @@ function renderMeetings(meetings) {
 
   activeMeetings.forEach((meeting) => {
     const meetingDiv = document.createElement('div');
+    meetingDiv.className = 'admin-content-card';
     meetingDiv.style.cssText = `
-      border: 1px solid #374151;
       border-radius: 8px;
       padding: 1rem;
       margin-bottom: 1rem;
-      background: #1e293b;
     `;
 
     const meetingDateTime = new Date(`${meeting.date}T${meeting.time}`);
@@ -4836,12 +4778,12 @@ function renderMeetings(meetings) {
 
     meetingDiv.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
-        <h4 style="margin: 0; color: #f8fafc;">${meeting.title}</h4>
+        <h4 style="margin: 0;">${meeting.title}</h4>
         <span style="background: ${statusColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem;">
           ${status}
         </span>
       </div>
-      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.5rem;">
+      <div class="admin-content-card-meta" style="font-size: 0.85rem; margin-bottom: 0.5rem;">
         <i class="fas fa-calendar"></i> ${meetingDateTime.toLocaleDateString()} at ${meetingDateTime.toLocaleTimeString()}
       </div>
       <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -5060,7 +5002,8 @@ function renderChatRooms(chatRooms) {
   chatRooms.forEach((room) => {
     chatRoomsById[room.id] = room;
     const roomDiv = document.createElement('div');
-    roomDiv.style.cssText = 'border: 1px solid #374151; background: #1e293b; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;';
+    roomDiv.className = 'admin-content-card';
+    roomDiv.style.cssText = 'border-radius: 8px; padding: 1rem; margin-bottom: 1rem;';
     const createdBy = normalizeEmail(room.createdByEmail) === 'johnpaulbugayong@gmail.com'
       ? 'John Paul Bugayong'
       : (room.createdByName
@@ -5072,8 +5015,8 @@ function renderChatRooms(chatRooms) {
     roomDiv.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem;">
         <div style="min-width: 0;">
-          <h4 style="margin: 0; color: #f8fafc;">${room.title}</h4>
-          <p style="margin: 0.5rem 0 0; color: #94a3b8; font-size: 0.9rem;">Created by ${createdBy}</p>
+          <h4 style="margin: 0;">${room.title}</h4>
+          <p class="admin-content-card-meta" style="margin: 0.5rem 0 0; font-size: 0.9rem;">Created by ${createdBy}</p>
         </div>
         <span style="background: ${statusColor}; color: white; padding: 0.35rem 0.75rem; border-radius: 9999px; font-size: 0.8rem;">${room.status || 'Active'}</span>
       </div>
@@ -5717,6 +5660,7 @@ setupMentionAutocomplete('chatMessageInput', 'memberMentionDropdown');
     if (!hasProfilePicture) return;
     setMemberGlobalLoading(false);
     loadResources();
+    loadAnnouncements();
     loadProgressReport();
     loadMeetings();
     checkMaintenance();
@@ -5931,12 +5875,6 @@ function renderTicketHistory(containerId, emptyStateId, docs) {
 
     const previousTicket = previousTicketMap.get(ticketDoc.id);
     ticketCount++;
-    if (ticketNotificationsInitialized && !previousTicket) {
-      const recipientEmail = ticket.assignedTo || ticket.submittedBy;
-      if (normalizeEmail(recipientEmail) === currentEmail) {
-        showAdminUpdateNotification('Ticket Created', `A new ticket has been created: "${ticket.title}"`);
-      }
-    }
     previousTicketMap.set(ticketDoc.id, ticket);
     const createdAt = ticket.createdAt?.toDate?.() || ticket.createdAt;
     const createdDate = createdAt instanceof Date && !Number.isNaN(createdAt.getTime())
@@ -5944,6 +5882,8 @@ function renderTicketHistory(containerId, emptyStateId, docs) {
       : "Unknown date";
     const status = ticket.status || "open";
     const statusLabel = status === "pending validation" ? "Pending Validation" : status.charAt(0).toUpperCase() + status.slice(1);
+    const statusBackground = status === 'open' ? '#b42318' : status === 'pending validation' ? '#fbbf24' : '#15803d';
+    const statusForeground = status === 'pending validation' ? '#422006' : '#ffffff';
     const responses = Array.isArray(ticket.responses) ? ticket.responses : [];
     const responseHtml = responses.length > 0 ?
       responses.map(response => `
@@ -5956,7 +5896,7 @@ function renderTicketHistory(containerId, emptyStateId, docs) {
       <div data-ticket-id="${escapeHtml(ticketDoc.id)}" style="margin-bottom: 1rem; padding: 1rem; border: 1px solid #374151; border-radius: 0.5rem; background: #1e293b;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
           <h4 style="margin: 0; color: #f3f4f6;">${escapeHtml(ticket.title || 'Support request')}</h4>
-          <span style="padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; font-weight: 600; background: ${status === 'open' ? '#ef4444' : status === 'pending validation' ? '#f59e0b' : '#10b981'}; color: white;">${escapeHtml(statusLabel)}</span>
+          <span style="padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; font-weight: 600; background: ${statusBackground}; color: ${statusForeground} !important; -webkit-text-fill-color: ${statusForeground} !important;">${escapeHtml(statusLabel)}</span>
         </div>
         <p style="margin: 0 0 0.5rem 0; color: #94a3b8; font-size: 0.8rem;">Assigned: ${createdDate}</p>
         <p style="margin: 0 0 0.5rem 0; color: #d1d5db; white-space: pre-wrap; word-break: break-word;">${escapeHtml(ticket.description || '')}</p>
@@ -5981,4 +5921,3 @@ window.forceRefreshTicketHistory = async function() {
   ticketSyncState = 'inactive';
   await startTicketHistorySync();
 };
-

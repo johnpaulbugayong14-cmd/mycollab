@@ -1710,8 +1710,9 @@ function applyAdminRoleRestrictions() {
   });
 
   const firstAllowed = allowedSections.find(id => document.getElementById(id));
-  if (firstAllowed && typeof window.showSection === 'function') {
-    window.showSection(firstAllowed);
+  const defaultSection = allowedSections.includes('task-analytics') ? 'task-analytics' : firstAllowed;
+  if (defaultSection && typeof window.showSection === 'function') {
+    window.showSection(defaultSection);
   }
 }
 
@@ -2756,9 +2757,16 @@ onSnapshot(getActiveOrganizationId() ? query(collection(db, "tasks"), where("org
 
   allTasks.forEach(t => {
     const assignedMember = t.assignedToName || t.assignedTo || "Unassigned";
-    const memberName = normalizeEmail(assignedMember) === 'johnpaulbugayong@gmail.com' ? 'John Paul Bugayong' : assignedMember;
+    const matchedMember = members.find(member =>
+      normalizeEmail(member.uid) === normalizeEmail(assignedMember) ||
+      normalizeEmail(member.name) === normalizeEmail(assignedMember)
+    );
+    const memberName = normalizeEmail(assignedMember) === 'johnpaulbugayong@gmail.com'
+      || normalizeEmail(matchedMember?.uid) === 'johnpaulbugayong@gmail.com'
+      ? 'John Paul Bugayong'
+      : matchedMember?.name || assignedMember;
 
-    let status = (t.status || "pending").toLowerCase().trim();
+    let status = String(t.status || "pending").toLowerCase().trim().replace(/_/g, " ");
     const deadline = parseDeadline(t.deadline);
     if (deadline && deadline.getTime() < now && (status === "pending" || status === "pending validation")) {
       status = "overdue";
@@ -2778,7 +2786,10 @@ onSnapshot(getActiveOrganizationId() ? query(collection(db, "tasks"), where("org
   members
     .filter(member => member.uid !== 'everyone' && member.name)
     .forEach(member => {
-      const memberName = normalizeEmail(member.name) === 'johnpaulbugayong@gmail.com' ? 'John Paul Bugayong' : member.name;
+      const memberName = normalizeEmail(member.uid) === 'johnpaulbugayong@gmail.com'
+        || normalizeEmail(member.name) === 'johnpaulbugayong@gmail.com'
+        ? 'John Paul Bugayong'
+        : member.name;
       if (!memberProgress[memberName]) {
         memberProgress[memberName] = { done: 0, pending: 0, overdue: 0, needsAction: 0, pendingValidation: 0 };
       }
@@ -3247,7 +3258,9 @@ function updateChart(memberProgress) {
     return;
   }
 
-  const memberNames = Object.keys(memberProgress).filter(name => name && name !== "").sort();
+  const memberNames = Object.keys(memberProgress).filter(name => name && name !== "").sort((a, b) => {
+    return getAnalyticsMemberDisplayName(a).localeCompare(getAnalyticsMemberDisplayName(b));
+  });
   if (memberNames.length === 0) {
     container.innerHTML = `<p style="color: #94a3b8; text-align: center; padding: 2rem;">No task data available. Create a task to see analytics.</p>`;
     return;
@@ -3255,111 +3268,173 @@ function updateChart(memberProgress) {
 
   memberNames.forEach(member => {
     const progress = memberProgress[member] || {};
-    const pending = progress.pending || 0;
-    const needsAction = progress.needsAction || 0;
-    const overdue = progress.overdue || 0;
-
+    const matchedMember = findAnalyticsMember(member);
+    const displayName = getAnalyticsMemberDisplayName(member);
+    const tasks = getMemberAnalyticsTasks(member);
     const card = document.createElement('div');
-    card.style.padding = '1rem';
-    card.style.border = '1px solid #334155';
-    card.style.borderRadius = '0.75rem';
-    card.style.background = '#0f172a';
-    card.style.display = 'grid';
-    card.style.gap = '0.5rem';
+    card.className = 'analytics-member-card';
 
-    const title = document.createElement('h3');
-    title.textContent = member;
-    title.style.margin = '0';
-    title.style.fontSize = '1.05rem';
-    title.style.color = '#f8fafc';
-
-    card.appendChild(title);
-
-    const statusContainer = document.createElement('div');
-    statusContainer.style.display = 'flex';
-    statusContainer.style.flexWrap = 'wrap';
-    statusContainer.style.gap = '0.75rem';
-
-    const addStatus = (label, value, color, bg) => {
-      const status = document.createElement('span');
-      status.textContent = `${label}: ${value}`;
-      status.style.color = color;
-      status.style.background = bg;
-      status.style.padding = '0.35rem 0.75rem';
-      status.style.borderRadius = '999px';
-      status.style.fontSize = '0.92rem';
-      status.style.fontWeight = '600';
-      status.style.minWidth = 'max-content';
-      statusContainer.appendChild(status);
-    };
-
-    if (pending > 0) addStatus('Pending', pending, '#1d4ed8', 'rgba(59,130,246,0.12)');
-    if (needsAction > 0) addStatus('Needs Action', needsAction, '#b45309', 'rgba(245,158,11,0.15)');
-    if (overdue > 0) addStatus('Overdue', overdue, '#dc2626', 'rgba(239,68,68,0.15)');
-
-    if (pending === 0 && needsAction === 0 && overdue === 0) {
-      const empty = document.createElement('p');
-      empty.textContent = 'No pending, needs action, or overdue tasks.';
-      empty.style.margin = '0';
-      empty.style.color = '#94a3b8';
-      card.appendChild(empty);
+    const avatar = document.createElement('div');
+    avatar.className = 'analytics-member-avatar';
+    avatar.setAttribute('aria-label', `${displayName} profile picture`);
+    if (matchedMember?.profilePicture) {
+      const image = document.createElement('img');
+      image.src = matchedMember.profilePicture;
+      image.alt = '';
+      image.onerror = () => {
+        avatar.textContent = getInitialsFromEmail(displayName);
+      };
+      avatar.appendChild(image);
     } else {
-      card.appendChild(statusContainer);
+      avatar.textContent = getInitialsFromEmail(displayName);
+    }
+    card.appendChild(avatar);
 
-      const detailsButton = document.createElement('button');
-      detailsButton.textContent = 'View Tasks';
-      detailsButton.style.marginTop = '0.75rem';
-      detailsButton.style.padding = '0.65rem 0.95rem';
-      detailsButton.style.border = 'none';
-      detailsButton.style.borderRadius = '0.75rem';
-      detailsButton.style.background = '#2563eb';
-      detailsButton.style.color = '#ffffff';
-      detailsButton.style.cursor = 'pointer';
-      detailsButton.style.fontWeight = '600';
-      detailsButton.onclick = () => showMemberTaskDetails(member);
-      card.appendChild(detailsButton);
+    const content = document.createElement('div');
+    content.className = 'analytics-member-content';
+    const title = document.createElement('h3');
+    title.className = 'analytics-member-name';
+    title.textContent = displayName;
+    content.appendChild(title);
+
+    const counts = [
+      ['Pending', progress.pending || 0],
+      ['Needs action', progress.needsAction || 0],
+      ['Overdue', progress.overdue || 0],
+      ['Pending review', progress.pendingValidation || 0],
+    ].filter(([, value]) => value > 0);
+    if (counts.length > 0) {
+      const summary = document.createElement('p');
+      summary.className = 'analytics-member-summary';
+      summary.textContent = counts.map(([label, value]) => `${label}: ${value}`).join(' · ');
+      content.appendChild(summary);
     }
 
+    if (tasks.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'analytics-member-empty';
+      empty.textContent = 'No pending tasks.';
+      content.appendChild(empty);
+    } else {
+      const taskList = document.createElement('ul');
+      taskList.className = 'analytics-member-task-list';
+      tasks.slice(0, 3).forEach(task => {
+        taskList.appendChild(createAnalyticsTaskRow(task));
+      });
+      content.appendChild(taskList);
+
+      if (tasks.length > 3) {
+        const detailsButton = document.createElement('button');
+        detailsButton.type = 'button';
+        detailsButton.className = 'analytics-view-more';
+        detailsButton.textContent = `View more tasks (${tasks.length - 3})`;
+        detailsButton.onclick = () => showMemberTaskDetails(member);
+        content.appendChild(detailsButton);
+      }
+    }
+
+    card.appendChild(content);
     container.appendChild(card);
   });
 }
 
-function showMemberTaskDetails(memberName) {
-  const modalOverlay = document.getElementById('taskAnalyticsModalOverlay');
-  const detailMessage = document.getElementById('taskAnalyticsDetailsMessage');
-  const detailList = document.getElementById('taskAnalyticsDetailsList');
+function findAnalyticsMember(memberName) {
+  const normalizedName = normalizeEmail(memberName) === 'john paul bugayong'
+    ? 'johnpaulbugayong@gmail.com'
+    : normalizeEmail(memberName);
+  return members.find(member =>
+    normalizeEmail(member.name) === normalizedName ||
+    normalizeEmail(member.uid) === normalizedName
+  );
+}
 
-  if (!modalOverlay || !detailMessage || !detailList) {
-    console.error('Analytics detail modal elements not found');
-    return;
+function getAnalyticsMemberDisplayName(memberName) {
+  const normalizedName = normalizeEmail(memberName);
+  if (normalizedName === 'johnpaulbugayong@gmail.com'
+    || normalizedName === 'john paul bugayong') {
+    return 'John Paul Bugayong';
   }
 
-  const tasks = window.lastAnalyticsTasks || [];
+  const member = findAnalyticsMember(memberName);
+  const memberIdentities = [memberName, member?.uid, member?.name].map(normalizeEmail);
+  if (memberIdentities.includes('johnpaulbugayong@gmail.com')
+    || memberIdentities.includes('john paul bugayong')) {
+    return 'John Paul Bugayong';
+  }
+  return member?.name || memberName;
+}
+
+function getMemberAnalyticsTasks(memberName) {
+  const member = findAnalyticsMember(memberName);
+  const identities = new Set([
+    memberName,
+    member?.name,
+    member?.uid,
+  ].map(normalizeEmail).filter(Boolean));
   const now = Date.now();
 
-  const filtered = tasks.map(task => {
-    const status = (task.status || 'pending').toLowerCase().trim();
+  return (window.lastAnalyticsTasks || []).map(task => {
+    const status = String(task.status || 'pending').toLowerCase().trim().replace(/_/g, ' ');
     const deadline = parseDeadline(task.deadline);
     const isOverdue = deadline && deadline.getTime() < now && (status === 'pending' || status === 'pending validation');
     return {
       ...task,
       displayStatus: isOverdue ? 'overdue' : status,
+      assignedIdentities: [task.assignedToName, task.assignedTo].map(normalizeEmail).filter(Boolean),
     };
-  }).filter(task => {
-    const name = task.assignedToName || task.assignedTo || 'Unassigned';
-    return name === memberName && ['pending', 'needs action', 'overdue'].includes(task.displayStatus);
-  });
+  }).filter(task =>
+    task.assignedIdentities.some(identity => identities.has(identity)) &&
+    ['pending', 'pending validation', 'needs action', 'overdue'].includes(task.displayStatus)
+  );
+}
+
+function createAnalyticsTaskRow(task) {
+  const item = document.createElement('li');
+  item.className = 'analytics-member-task';
+
+  const title = document.createElement('span');
+  title.className = 'analytics-member-task-title';
+  title.textContent = task.title || 'Untitled Task';
+
+  const status = document.createElement('span');
+  status.className = 'analytics-task-status';
+  if (task.displayStatus === 'overdue') status.classList.add('is-overdue');
+  if (task.displayStatus === 'needs action') status.classList.add('is-needs-action');
+  status.textContent = task.displayStatus === 'needs action'
+    ? 'Needs action'
+    : task.displayStatus === 'pending validation'
+      ? 'Pending review'
+      : task.displayStatus.charAt(0).toUpperCase() + task.displayStatus.slice(1);
+
+  item.append(title, status);
+  return item;
+}
+
+function showMemberTaskDetails(memberName) {
+  const modalOverlay = document.getElementById('taskAnalyticsModalOverlay');
+  const modalTitle = document.getElementById('taskAnalyticsModalTitle');
+  const detailMessage = document.getElementById('taskAnalyticsDetailsMessage');
+  const detailList = document.getElementById('taskAnalyticsDetailsList');
+
+  if (!modalOverlay || !modalTitle || !detailMessage || !detailList) {
+    console.error('Analytics detail modal elements not found');
+    return;
+  }
+
+  const displayName = getAnalyticsMemberDisplayName(memberName);
+  const filtered = getMemberAnalyticsTasks(memberName);
 
   detailList.innerHTML = '';
   modalOverlay.style.display = 'flex';
   modalOverlay.classList.add('show');
   modalOverlay.style.visibility = 'visible';
   modalOverlay.style.opacity = '1';
-  detailMessage.textContent = `Showing overdue, needs action, and pending tasks for ${memberName}.`;
+  modalTitle.textContent = `Tasks for ${displayName}`;
+  detailMessage.textContent = `Showing all pending, needs action, overdue, and pending review tasks for ${displayName}.`;
   document.body.style.overflow = 'hidden';
 
   if (filtered.length === 0) {
-    detailList.innerHTML = `<p style="margin:0; color:#94a3b8;">No overdue, needs action, or pending tasks found for this member.</p>`;
+    detailList.innerHTML = `<p style="margin:0; color:#94a3b8;">No pending tasks found for this member.</p>`;
     return;
   }
 
@@ -3367,10 +3442,9 @@ function showMemberTaskDetails(memberName) {
 
   filtered.forEach(task => {
     const item = document.createElement('div');
+    item.className = 'analytics-member-task';
+    item.style.display = 'block';
     item.style.padding = '0.85rem';
-    item.style.border = '1px solid rgba(148, 163, 184, 0.2)';
-    item.style.borderRadius = '0.75rem';
-    item.style.background = '#111827';
 
     const title = document.createElement('p');
     title.textContent = task.title || 'Untitled Task';
@@ -3387,7 +3461,13 @@ function showMemberTaskDetails(memberName) {
     status.style.fontWeight = '600';
     status.style.marginBottom = '0.5rem';
     status.style.color = '#ffffff';
-    status.style.background = task.displayStatus === 'overdue' ? '#dc2626' : task.displayStatus === 'needs action' ? '#d97706' : '#2563eb';
+    status.style.background = task.displayStatus === 'overdue'
+      ? '#dc2626'
+      : task.displayStatus === 'needs action'
+        ? '#d97706'
+        : task.displayStatus === 'pending validation'
+          ? '#7c3aed'
+          : '#2563eb';
 
     const deadline = document.createElement('p');
     const deadlineDate = parseDeadline(task.deadline);
@@ -3425,6 +3505,12 @@ function hideMemberTaskDetails() {
   modalOverlay.style.display = 'none';
   document.body.style.overflow = '';
 }
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.getElementById('taskAnalyticsModalOverlay')?.classList.contains('show')) {
+    hideMemberTaskDetails();
+  }
+});
 
 window.showMemberTaskDetails = showMemberTaskDetails;
 window.hideMemberTaskDetails = hideMemberTaskDetails;
@@ -4138,13 +4224,14 @@ function renderAdminChatRooms(rooms) {
     const canDelete = true;
 
     const roomDiv = document.createElement('div');
-    roomDiv.style.cssText = 'border: 1px solid #374151; background: #1e293b; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;';
+    roomDiv.className = 'admin-content-card';
+    roomDiv.style.cssText = 'border-radius: 8px; padding: 1rem; margin-bottom: 1rem;';
     roomDiv.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
         <div style="min-width: 0;">
-          <h4 style="margin: 0; color: #f8fafc;">${room.title}</h4>
-          <p style="margin: 0.5rem 0 0; color: #94a3b8; font-size: 0.9rem;">Created by ${createdBy}</p>
-          <p style="margin: 0.25rem 0 0; color: #94a3b8; font-size: 0.8rem;">${new Date(room.createdAt).toLocaleString()}</p>
+          <h4 style="margin: 0;">${room.title}</h4>
+          <p class="admin-content-card-meta" style="margin: 0.5rem 0 0; font-size: 0.9rem;">Created by ${createdBy}</p>
+          <p class="admin-content-card-meta" style="margin: 0.25rem 0 0; font-size: 0.8rem;">${new Date(room.createdAt).toLocaleString()}</p>
         </div>
         <span style="background: ${statusColor}; color: white; padding: 0.35rem 0.75rem; border-radius: 9999px; font-size: 0.8rem;">${room.status}</span>
       </div>
