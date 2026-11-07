@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Login - mytaskForMyCollab</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#3b82f6">
+  <link rel="stylesheet" href="style.css?v=1">
+  <style>
+    body {
+      background: #f3f5ef !important;
+      color: #20342f;
+      min-height: 100vh;
+    }
+
+    body.login-page::before,
+    body.login-page::after {
+      display: none;
+    }
+
+    .login-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(420px, 0.92fr);
+      min-height: 100vh;
+      min-height: 100svh;
+    }
+
+    .login-illustration {
+      position: relative;
+      min-height: 100vh;
+      min-height: 100svh;
+      overflow: hidden;
+      padding: clamp(2.5rem, 6vw, 5.5rem);
+      background: #e7ede3;
+    }
+
+    .login-illustration::before,
+    .login-illustration::after {
+      position: absolute;
+      width: 22rem;
+      height: 22rem;
+      border: 1px solid rgba(67, 99, 77, 0.1);
+      border-radius: 50%;
+      content: "";
+      pointer-events: none;
+    }
+
+    .login-illustration::before {
+      top: -13rem;
+      left: -9rem;
+    }
+
+    .login-illustration::after {
+      right: -14rem;
+      bottom: -15rem;
+      width: 34rem;
+      height: 34rem;
+    }
+
+    .feature-carousel {
+      position: absolute;
+      z-index: 2;
+      right: clamp(2.5rem, 6vw, 5.5rem);
+      bottom: clamp(2.5rem, 6vw, 5.5rem);
+      left: clamp(2.5rem, 6vw, 5.5rem);
+      display: grid;
+      align-items: end;
+      overflow: visible;
+    }
+
+    .login-art {
+      position: absolute;
+      z-index: 1;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 2rem 2rem 9rem;
+      pointer-events: none;
+    }
+
+    .login-art svg {
+      display: block;
+      width: min(100%, 44rem);
+      max-height: 70vh;
+      height: auto;
+      animation: illustration-drift 7s ease-in-out infinite;
+    }
+
+    .feature-card {
+      position: relative;
+      display: grid;
+      grid-template-columns: 3.25rem minmax(0, 1fr);
+      align-items: start;
+      gap: 1.15rem;
+      width: min(100%, 31rem);
+      overflow: hidden;
+      padding: 1.55rem 1.6rem;
+      border: 1px solid rgba(68, 96, 75, 0.22);
+      border-radius: 1rem;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 20px 48px rgba(48, 69, 51, 0.15), 0 3px 10px rgba(48, 69, 51, 0.06);
+      backdrop-filter: blur(12px);
+      opacity: 0;
+      transform: translate3d(-135%, 12px, 0) rotate(-1.5deg) scale(0.97);
+      filter: blur(3px);
+      transition: opacity 420ms ease, transform 760ms cubic-bezier(0.16, 1, 0.3, 1), filter 500ms ease;
+      will-change: transform, opacity;
+    }
+
+    .feature-card::before {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 4px;
+      background: linear-gradient(180deg, #a6c76e, #527a63 75%, #345a49);
+      content: "";
+      animation: accent-blink 700ms steps(2, start) infinite;
+      box-shadow: 0 0 8px rgba(82, 122, 99, 0.55);
+    }
+
+    .feature-card::after {
+      position: absolute;
+      top: -80%;
+      left: -45%;
+      width: 28%;
+      height: 260%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.62), transparent);
+      content: "";
+      opacity: 0;
+      pointer-events: none;
+      transform: rotate(22deg);
+    }
+
+    .feature-card.is-visible {
+      opacity: 1;
+      filter: blur(0);
+      transform: translate3d(0, 0, 0) rotate(0) scale(1);
+    }
+
+    .feature-card.is-visible::after {
+      animation: card-sheen 900ms ease-out 180ms both;
+    }
+
+    .feature-card.is-leaving {
+      opacity: 0;
+      filter: blur(2px);
+      transform: translate3d(-135%, -8px, 0) rotate(-1deg) scale(0.97);
+      transition-duration: 340ms, 620ms, 350ms;
+      transition-timing-function: ease-in, cubic-bezier(0.55, 0, 0.8, 0.4), ease-in;
+    }
+
+    .feature-card-icon {
+      display: grid;
+      width: 3.1rem;
+      height: 3.1rem;
+      place-items: center;
+      border-radius: 0.9rem;
+      background: linear-gradient(145deg, #edf3e9, #dce8d9);
+      color: #285643;
+      box-shadow: inset 0 0 0 1px rgba(75, 112, 82, 0.09);
+      transition: transform 450ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 450ms ease;
+    }
+
+    .feature-card.is-visible .feature-card-icon {
+      animation: icon-arrive 650ms cubic-bezier(0.2, 0.8, 0.2, 1) 160ms both;
+      box-shadow: inset 0 0 0 1px rgba(75, 112, 82, 0.09), 0 7px 16px rgba(62, 99, 69, 0.12);
+    }
+
+    .feature-card-icon svg {
+      display: block;
+      width: 1.65rem;
+      height: 1.65rem;
+    }
+
+    .feature-card-copy {
+      min-width: 0;
+      padding-top: 0.1rem;
+    }
+
+    .feature-card.is-visible .feature-card-copy > * {
+      animation: copy-arrive 480ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    }
+
+    .feature-card.is-visible .feature-card-eyebrow {
+      animation-delay: 130ms;
+    }
+
+    .feature-card.is-visible .feature-card-title {
+      animation-delay: 210ms;
+    }
+
+    .feature-card.is-visible .feature-card-description {
+      animation-delay: 290ms;
+    }
+
+    .feature-card-eyebrow {
+      margin: 0 0 0.35rem;
+      color: #65796b;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .feature-card-title {
+      margin: 0 0 0.45rem;
+      color: #203b30;
+      font-size: clamp(1.3rem, 2.5vw, 1.85rem);
+      font-weight: 700;
+      letter-spacing: -0.035em;
+      line-height: 1.15;
+      text-align: left;
+    }
+
+    .feature-card-description {
+      margin: 0;
+      color: #52665a;
+      font-size: 0.95rem;
+      line-height: 1.55;
+    }
+
+    .feature-card-progress {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 4px;
+      height: 3px;
+      overflow: hidden;
+      background: rgba(82, 122, 99, 0.1);
+    }
+
+    .feature-card-progress::after {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #9fbf6b, #527a63);
+      content: "";
+      transform: scaleX(0);
+      transform-origin: left center;
+    }
+
+    .feature-card.is-visible .feature-card-progress::after {
+      animation: feature-progress 2600ms linear both;
+    }
+
+    @keyframes illustration-drift {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-7px); }
+    }
+
+    @keyframes card-sheen {
+      0% { left: -45%; opacity: 0; }
+      18% { opacity: 1; }
+      100% { left: 125%; opacity: 0; }
+    }
+
+    @keyframes icon-arrive {
+      0% { transform: scale(0.76) rotate(-8deg); }
+      70% { transform: scale(1.08) rotate(2deg); }
+      100% { transform: scale(1) rotate(0); }
+    }
+
+    @keyframes copy-arrive {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes feature-progress {
+      to { transform: scaleX(1); }
+    }
+
+    @keyframes accent-blink {
+      0%, 49% {
+        opacity: 1;
+        filter: brightness(1.25);
+        box-shadow: 0 0 9px rgba(82, 122, 99, 0.7);
+      }
+      50%, 100% {
+        opacity: 0.08;
+        filter: brightness(0.7);
+        box-shadow: 0 0 0 rgba(82, 122, 99, 0);
+      }
+    }
+
+    .login-container {
+      display: grid;
+      width: 100%;
+      min-height: 100%;
+      place-items: center;
+      padding: clamp(1.5rem, 3vw, 2.5rem);
+    }
+    
+    .login-card {
+      width: min(100%, 27rem);
+      padding: clamp(1.7rem, 3vw, 2.5rem);
+      border: 1px solid #e1e7dd;
+      border-radius: 1rem;
+      background: #fff;
+      box-shadow: 0 14px 36px rgba(34, 57, 48, 0.08);
+    }
+
+    .login-brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.65rem;
+      margin-bottom: 2rem;
+      color: #244b3e;
+      font-size: 0.88rem;
+      font-weight: 750;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .login-brand-mark {
+      display: grid;
+      width: 2.15rem;
+      height: 2.15rem;
+      place-items: center;
+      border-radius: 0.7rem;
+      background: #173a33;
+      color: #fff;
+      box-shadow: 0 3px 8px rgba(23, 58, 51, 0.18);
+    }
+
+    .login-brand-mark svg {
+      position: static;
+      display: block;
+      width: 1.35rem;
+      height: 1.35rem;
+      pointer-events: none;
+    }
+
+    @media (max-width: 900px) {
+      .login-layout {
+        grid-template-columns: minmax(0, 1fr) minmax(360px, 0.9fr);
+      }
+
+      .login-illustration {
+        min-height: 100svh;
+        padding: 2.25rem;
+      }
+
+      .login-container {
+        padding: 2rem;
+      }
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 1.8rem;
+    }
+    
+    .login-header h1 {
+      margin: 0 0 0.45rem;
+      font-size: 1.85rem;
+      font-weight: 700;
+      letter-spacing: -0.035em;
+      color: #20342f;
+      background: none;
+      -webkit-text-fill-color: #20342f;
+      -webkit-background-clip: initial;
+      background-clip: initial;
+      text-align: center;
+    }
+    
+    .login-header p {
+      margin: 0;
+      color: #56665c;
+      font-size: 0.95rem;
+    }
+
+    .login-card form {
+      margin: 0;
+    }
+
+    .login-card .form-group {
+      margin-bottom: 1.1rem;
+    }
+
+    .login-card label {
+      margin-bottom: 0.45rem;
+      color: #344a3f;
+      text-align: left;
+      font-weight: 650;
+    }
+
+    .login-card input {
+      min-height: 3.1rem;
+      margin: 0;
+      padding: 0.8rem 0.9rem;
+      border-color: #d7e0d5;
+      border-radius: 0.7rem;
+      background: #fbfcf9;
+      color: #263a32;
+      box-shadow: none;
+      transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+    }
+
+    .login-card input::placeholder {
+      color: #6d7d72;
+      opacity: 1;
+    }
+
+    .login-card input:focus {
+      border-color: #64864f;
+      outline: 3px solid rgba(100, 134, 79, 0.18);
+      background: #fff;
+      box-shadow: none;
+    }
+
+    .login-card button[type="submit"] {
+      min-height: 3.15rem;
+      margin-top: 0.6rem;
+      border-radius: 0.7rem;
+      background: #173a33;
+      color: #fff;
+      box-shadow: 0 5px 14px rgba(23, 58, 51, 0.18);
+    }
+
+    .login-card button[type="submit"]:hover {
+      background: #245849;
+    }
+
+    .login-card button[type="submit"]:focus-visible {
+      outline: 3px solid rgba(36, 95, 73, 0.3);
+      outline-offset: 3px;
+    }
+
+    #loginMessage {
+      color: #8f2823;
+      text-align: left;
+    }
+
+    @media (max-width: 680px) {
+      .login-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .login-illustration {
+        min-height: 27rem;
+        padding: 1.25rem 1.5rem 0.5rem;
+      }
+
+      .feature-carousel {
+        right: 1.5rem;
+        bottom: 1.25rem;
+        left: 1.5rem;
+      }
+
+      .login-art {
+        padding: 0.5rem 1rem 8rem;
+      }
+
+      .login-art svg {
+        max-height: 20rem;
+      }
+
+      .feature-card {
+        grid-template-columns: 2.7rem minmax(0, 1fr);
+        gap: 0.9rem;
+        padding: 1.15rem;
+      }
+
+      .feature-card-icon {
+        width: 2.6rem;
+        height: 2.6rem;
+      }
+
+      .feature-card-title {
+        font-size: 1.25rem;
+      }
+
+      .feature-card-description {
+        font-size: 0.86rem;
+      }
+
+      .login-container {
+        min-height: auto;
+        padding: 1rem 1.25rem 2rem;
+      }
+
+      .login-card {
+        padding: 1.65rem 1.35rem;
+      }
+
+      .login-brand {
+        margin-bottom: 1.5rem;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .login-art svg {
+        animation: none;
+      }
+
+      .feature-card {
+        transition: none;
+        transform: none;
+        filter: none;
+        will-change: auto;
+      }
+
+      .feature-card.is-leaving {
+        transition: none;
+      }
+
+      .feature-card.is-visible::after,
+      .feature-card::before,
+      .feature-card.is-visible .feature-card-icon,
+      .feature-card.is-visible .feature-card-copy > *,
+      .feature-card.is-visible .feature-card-progress::after {
+        animation: none;
+      }
+
+      .feature-card-progress {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body class="login-page">
+
+<main class="login-layout">
+  <section class="login-illustration" aria-label="MyCollab helps teams plan projects together">
+    <div class="login-art" aria-hidden="true">
+      <svg viewBox="0 0 800 570" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="405" cy="514" rx="283" ry="24" fill="#D6E0D3"/>
+        <path d="M170 112c0-15 12-27 27-27h367c15 0 27 12 27 27v242H170V112Z" fill="#F8FAF5" stroke="#A8B9A5" stroke-width="3"/>
+        <path d="M194 120h370v207H194V120Z" fill="#EAF0E6"/>
+        <path d="M224 153h105M224 169h72" stroke="#8EA68E" stroke-width="8" stroke-linecap="round"/>
+        <rect x="223" y="194" width="104" height="90" rx="10" fill="#FCFDF9" stroke="#C9D5C6" stroke-width="2"/>
+        <path d="M239 215h69M239 232h48" stroke="#9DAF9B" stroke-width="6" stroke-linecap="round"/>
+        <path d="m240 260 17 10 24-23" stroke="#547C63" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="345" y="153" width="91" height="131" rx="10" fill="#FCFDF9" stroke="#C9D5C6" stroke-width="2"/>
+        <path d="M362 177h56M362 193h43" stroke="#9DAF9B" stroke-width="6" stroke-linecap="round"/>
+        <path d="M363 255v-28m20 28v-48m20 48v-36" stroke="#6D9678" stroke-width="10" stroke-linecap="round"/>
+        <rect x="455" y="153" width="81" height="57" rx="10" fill="#FCFDF9" stroke="#C9D5C6" stroke-width="2"/>
+        <circle cx="477" cy="181" r="8" fill="#D9A856"/>
+        <circle cx="496" cy="181" r="8" fill="#83A88A"/>
+        <circle cx="515" cy="181" r="8" fill="#6E8CA1"/>
+        <path d="M455 235h81M455 251h58" stroke="#9DAF9B" stroke-width="6" stroke-linecap="round"/>
+        <path d="M145 354h498l-42 35H187l-42-35Z" fill="#C5D3C0"/>
+        <path d="M205 389h376l-25 98H230l-25-98Z" fill="#F5F7F1" stroke="#A8B9A5" stroke-width="3"/>
+        <path d="M250 487h281" stroke="#A8B9A5" stroke-width="9" stroke-linecap="round"/>
+        <path d="M333 354c0-36 29-65 65-65s65 29 65 65" fill="#D5E2D1"/>
+        <circle cx="398" cy="253" r="28" fill="#D6A27D"/>
+        <path d="M370 253c0-23 13-38 30-38 19 0 30 14 30 38-9-8-18-15-30-15-11 0-21 7-30 15Z" fill="#394B40"/>
+        <path d="M357 351v-44c0-23 18-41 41-41s41 18 41 41v44" fill="#527A63"/>
+        <path d="M380 302h36a6 6 0 0 1 6 6v18a6 6 0 0 1-6 6h-13l-9 7v-7h-14a6 6 0 0 1-6-6v-18a6 6 0 0 1 6-6Z" fill="#E8F0E4"/>
+        <circle cx="386" cy="317" r="2.5" fill="#527A63"/>
+        <circle cx="398" cy="317" r="2.5" fill="#527A63"/>
+        <circle cx="410" cy="317" r="2.5" fill="#527A63"/>
+        <path d="M277 379c0-19 15-34 34-34s34 15 34 34v34h-68v-34Z" fill="#D9E5D5"/>
+        <circle cx="311" cy="317" r="22" fill="#B97C59"/>
+        <path d="M289 318c0-19 10-32 23-32 14 0 22 12 22 31-6-6-13-10-22-10-8 0-16 4-23 11Z" fill="#493D38"/>
+        <path d="m310 358 32 21" stroke="#B97C59" stroke-width="12" stroke-linecap="round"/>
+        <path d="M475 379c0-19 15-34 34-34s34 15 34 34v34h-68v-34Z" fill="#8BA3B0"/>
+        <circle cx="509" cy="317" r="22" fill="#E0B38D"/>
+        <path d="M487 316c2-19 12-30 24-30 14 0 22 12 20 30-7-6-14-10-22-10-8 0-15 4-22 10Z" fill="#6A5548"/>
+        <path d="m507 359-31 20" stroke="#E0B38D" stroke-width="12" stroke-linecap="round"/>
+        <path d="M115 188c-13 0-23-10-23-23 0-12 10-22 23-22 3-14 15-23 29-23 16 0 29 13 29 29 12 2 21 12 21 24 0 14-11 25-25 25h-54" fill="#F5E7C8" stroke="#D8C59A" stroke-width="3"/>
+        <path d="M141 157v20m-10-10h20" stroke="#B28B45" stroke-width="4" stroke-linecap="round"/>
+        <path d="M631 161h58v47h-58z" fill="#F8FAF5" stroke="#A8B9A5" stroke-width="3"/>
+        <path d="m643 189 12-13 10 9 12-14" stroke="#63896C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M651 223c0 11-9 20-20 20s-20-9-20-20c0-9 8-18 20-34 12 16 20 25 20 34Z" fill="#DCE8D8" stroke="#9BB29A" stroke-width="3"/>
+        <path d="M616 222c7 3 14 3 21 0" stroke="#63896C" stroke-width="3" stroke-linecap="round"/>
+        <path d="M132 304h38m-19-19v38" stroke="#8FA78F" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="660" cy="289" r="18" fill="#E7D5B6"/>
+        <path d="m651 289 6 6 12-13" stroke="#9C7641" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M283 107c8-13 24-19 39-14m-8-8 10 8-11 8M540 294c12 5 19 18 17 31m8-10-8 11-8-11" stroke="#86A287" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+<div class="feature-carousel">
+  <article class="feature-card" id="loginFeatureCard" aria-live="polite" aria-atomic="true">
+    <span class="feature-card-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+        <path d="M9 3h6v4H9zM8 12l1.5 1.5L12 11m2 1h2m-8 5 1.5 1.5L12 17m2 1h2"/>
+      </svg>
+    </span>
+    <div class="feature-card-copy">
+      <p class="feature-card-eyebrow">One workspace for your team</p>
+      <h2 class="feature-card-title" id="loginFeatureTitle">Tasks</h2>
+      <p class="feature-card-description" id="loginFeatureDescription">Keep work, owners, and deadlines in one clear view.</p>
+    </div>
+    <span class="feature-card-progress" aria-hidden="true"></span>
+  </article>
+</div>
+  </section>
+  <div class="login-container">
+  <div class="login-card">
+    <div class="login-brand" aria-label="MyCollab">
+      <span class="login-brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3.25" y="4.25" width="12.5" height="16.5" rx="2.5" stroke="currentColor" stroke-width="1.7"/>
+          <path d="m6.8 9.2 1.4 1.4 2.5-2.7M12.8 9.5h.9M6.8 14.1l1.4 1.4 2.5-2.7M12.8 14.4h.9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="18" cy="7" r="2.25" fill="#d7ed71" stroke="#173a33" stroke-width="1.2"/>
+          <path d="M17 7h2M18 6v2" stroke="#173a33" stroke-width="1.1" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span>MyCollab</span>
+    </div>
+    <div class="login-header">
+      <h1>Welcome Back</h1>
+      <p>Sign in to your MyCollab account</p>
+    </div>
+    <form onsubmit="event.preventDefault(); login();">
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input id="email" type="email" placeholder="your@mycollab.com" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="Enter your password" required>
+      </div>
+      <div id="loginMessage" class="alert" style="display:none; margin-bottom: 1rem;"></div>
+      <button type="submit">Sign In</button>
+    </form>
+  </div>
+</div>
+</main>
+
+<script>
+(() => {
+  const card = document.getElementById('loginFeatureCard');
+  const title = document.getElementById('loginFeatureTitle');
+  const description = document.getElementById('loginFeatureDescription');
+  const features = [
+    { title: 'Tasks', description: 'Keep work, owners, and deadlines in one clear view.' },
+    { title: 'Polls', description: 'Gather opinions and make team decisions together.' },
+    { title: 'Events & Announcements', description: 'Share important updates and keep everyone in sync.' },
+    { title: 'Video Conference & Meetings', description: 'Bring conversations and collaboration into the same workspace.' },
+    { title: 'Organization Management', description: 'Manage members, roles, and the way your organization works.' },
+    { title: 'MyCollab', description: 'Everything your team needs to move forward, together.' }
+  ];
+
+  if (!card || !title || !description || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    card?.classList.add('is-visible');
+    return;
+  }
+
+  let featureIndex = 0;
+  const showFeature = () => {
+    const feature = features[featureIndex];
+    title.textContent = feature.title;
+    description.textContent = feature.description;
+    card.classList.remove('is-leaving');
+    requestAnimationFrame(() => card.classList.add('is-visible'));
+
+    window.setTimeout(() => {
+      card.classList.remove('is-visible');
+      card.classList.add('is-leaving');
+      window.setTimeout(() => {
+        featureIndex = (featureIndex + 1) % features.length;
+        showFeature();
+      }, 650);
+    }, 2600);
+  };
+
+  showFeature();
+})();
+</script>
+<script type="module" src="auth.js?v=8"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js?v=45", { updateViaCache: "none" });
+}
+</script>
+
+<script type="module" src="update-manager.js"></script>
+</body>
+</html>
