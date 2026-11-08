@@ -1,6 +1,6 @@
 {
-  "version": "2.0.78",
-  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.78/",
+  "version": "2.0.80",
+  "releaseUrl": "https://johnpaulbugayong14-cmd.github.io/mycollab/updates/releases/2.0.80/",
   "required": true,
   "releaseNotes": [
     "Implemented cumulative major updates to improve overall system functionality and performance.",
