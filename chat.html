@@ -756,6 +756,8 @@
 
     #chatImagePreview {
       display: none;
+      flex: 0 1 auto;
+      min-height: 0;
       padding: 1rem;
       border-radius: 0.75rem;
       background: rgba(17, 24, 39, 0.8);
@@ -765,6 +767,11 @@
 
     #chatImagePreview img {
       max-width: 100%;
+      max-height: 22vh;
+      max-height: min(22dvh, 180px);
+      width: auto;
+      height: auto;
+      object-fit: contain;
       border-radius: 0.75rem;
       display: block;
       margin-bottom: 0.75rem;
@@ -1891,6 +1898,7 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="mobile-ui.css?v=3">
 </head>
 <body>
   <div class="chat-page">
