@@ -1,0 +1,262 @@
+{
+  "name": "mytaskForMyCollab",
+  "short_name": "MyTask",
+  "description": "Task management system for My Collab",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "scope": "./",
+  "permissions": [
+    "notifications",
+    "background-sync"
+  ],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%233b82f6'/><text x='256' y='280' font-family='Arial, sans-serif' font-size='200' font-weight='bold' text-anchor='middle' fill='white'>✓</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%233b82f6'/><text x='256' y='280' font-family='Arial, sans-serif' font-size='200' font-weight='bold' text-anchor='middle' fill='white'>✓</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "version": "2.0.85",
+  "files": [
+    {
+      "path": ".",
+      "size": 21116,
+      "sha256": "397e68050ab7fae500f66e72438f99ca6643644739fc4878896c2167cf70b121"
+    },
+    {
+      "path": "admin.html",
+      "size": 63552,
+      "sha256": "6f455c03d825f214cf8bebb9b53775e7098bbcaa8ab4bc4526b39fcc0aa40d56"
+    },
+    {
+      "path": "admin.js",
+      "size": 216672,
+      "sha256": "a65c6fd3c201e0b9e770ed81aa8849e13249b39a94aa0b221a39220b89e94484"
+    },
+    {
+      "path": "auth.js",
+      "size": 34260,
+      "sha256": "291d026b5ec6407af7e5a2a1b9d2980be3565ae339e8eca74d55031b68adbd8c"
+    },
+    {
+      "path": "chat.html",
+      "size": 52036,
+      "sha256": "9968758aa448009ae2862dbd55bfd2eb3f4566dc7c885f1ae9ec1ab7da7cfdaa"
+    },
+    {
+      "path": "chat.js",
+      "size": 60886,
+      "sha256": "68c41635dc2b25a191bffc781b646fb716c39b1758997d751ddf11606046f9a2"
+    },
+    {
+      "path": "email-config-new.js",
+      "size": 2174,
+      "sha256": "b4c96bc391fad2082ded4f266279589a759d1ef999cfd81dfe20ce05bd1b44b7"
+    },
+    {
+      "path": "email-config.js",
+      "size": 1462,
+      "sha256": "b3c273135e6a01fd5f28e36846177cc280299d6e1870fddb0b7dc7a289bad1c0"
+    },
+    {
+      "path": "events.css",
+      "size": 5307,
+      "sha256": "210742df425cf7366643e36b9fff02962e2dcba301795652f3147ed860ee995b"
+    },
+    {
+      "path": "events.js",
+      "size": 13307,
+      "sha256": "e62d0fe5b7e61cffb78e800a876eb7fa1d61414542864c1798df97717b8cc113"
+    },
+    {
+      "path": "firebase.js",
+      "size": 1491,
+      "sha256": "6c257ac2ee74351f80877889097fcd23510f891a688808b2b506ef6e6140283a"
+    },
+    {
+      "path": "firebase.json",
+      "size": 113,
+      "sha256": "bb8957f0e454e94f3626d08e887b9145382f47d0690689b70ddc9897b0930cab"
+    },
+    {
+      "path": "firestore.rules",
+      "size": 12786,
+      "sha256": "7dd191cb379ba9210b96cf3e08d3a01a34e9ed6024eaed8d9656e43ab620fa52"
+    },
+    {
+      "path": "github-email-trigger.js",
+      "size": 2725,
+      "sha256": "4077f815ad4abac8781297bb101e7dc37da9e83344216f84233e677dcab6cbf8"
+    },
+    {
+      "path": "github-token.js",
+      "size": 303,
+      "sha256": "fd6c11208bbd6d206bcb8877ded8299e8cc85f58b0eaa41d9bdf319c67a37128"
+    },
+    {
+      "path": "index.html",
+      "size": 21116,
+      "sha256": "397e68050ab7fae500f66e72438f99ca6643644739fc4878896c2167cf70b121"
+    },
+    {
+      "path": "link-handler.js",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "login.html",
+      "size": 21144,
+      "sha256": "c1f3d7a14725870f02cb359ce615df8142e775a37bbd59d82314c39429605caf"
+    },
+    {
+      "path": "maintenance-illustration.png",
+      "size": 121186,
+      "sha256": "10fce7210a38b7fe0db401bac573acb1ed3f6bb023bcfd32e2ee2de5951f4153"
+    },
+    {
+      "path": "member.html",
+      "size": 76244,
+      "sha256": "4898dd4c73975af94eb1be161a7a3392566183fc99977406b2a48a5f1f094efe"
+    },
+    {
+      "path": "member.js",
+      "size": 291801,
+      "sha256": "66c1808067e738a5fc04fa9f7fce9b0f23090b3c3f0e9d0a85455f249e7c5dd5"
+    },
+    {
+      "path": "mobile-ui.css",
+      "size": 11399,
+      "sha256": "8ab65e330890ae10abe612890c30d13e9db88a7e17a9ad33be5246afc3333988"
+    },
+    {
+      "path": "myspace.html",
+      "size": 14514,
+      "sha256": "71221397e7fee962d356380643dbf9cc4f8e5f71cc276d5a8510a161f40b98d7"
+    },
+    {
+      "path": "myspace.js",
+      "size": 17904,
+      "sha256": "66cd94e0d6f7e74bef71fa13886700d2230b857edc7c6fd39b731b1db6381a8e"
+    },
+    {
+      "path": "native-notifications.js",
+      "size": 7281,
+      "sha256": "754126f6cf857f28244534962cff7a1177ff244e17d2e2e6a1399bf7ff93b962"
+    },
+    {
+      "path": "notifications.js",
+      "size": 6471,
+      "sha256": "ffd06936cfe089d1450dc21c02c943fc4582371b07965f1caefa22245a0ca9e5"
+    },
+    {
+      "path": "organization-management.html",
+      "size": 15127,
+      "sha256": "e1191950879b279d58bbc0b36650179a79cc5f69894a743bc223414cffb1da95"
+    },
+    {
+      "path": "organization-selection.html",
+      "size": 16256,
+      "sha256": "73f44e3ef2da28dfe366280d707e809e5d85775f3b104d58c5a9a7bd28166abe"
+    },
+    {
+      "path": "organizations.js",
+      "size": 6170,
+      "sha256": "eacda129dd06e53b1ce797f2a4464b0c4292aa1ea5c4dd64db328e18917f8f78"
+    },
+    {
+      "path": "package-lock.json",
+      "size": 122369,
+      "sha256": "abffafe3d43ce4c38f196ef4e479c839034504ca4812b87e1c3063ed7aff094a"
+    },
+    {
+      "path": "package.json",
+      "size": 135,
+      "sha256": "fb0fbc521fa98b82f62ea36b438787a8f8a8d786b79118a2cb821da3f8269046"
+    },
+    {
+      "path": "previous_admin.html",
+      "size": 76222,
+      "sha256": "a96af3f6f6c767ea89c9ec24fb20baae9d3f6612689fa14e6af10fa35ddfaa4d"
+    },
+    {
+      "path": "send-notification.js",
+      "size": 1601,
+      "sha256": "2d4c70590e8281fe7736931040d7ab54181c10c8cc6f3d19ed9149ca49a16625"
+    },
+    {
+      "path": "server.js",
+      "size": 6022,
+      "sha256": "eea2ac7fbb9e8c66890f91281e877030731cae83fa776a6ac846616f1013b593"
+    },
+    {
+      "path": "service-worker.js",
+      "size": 9088,
+      "sha256": "a772d74255767a94bf06df26196d93171d3054b6cd5a7f821a9e2eec1843b726"
+    },
+    {
+      "path": "storage.rules",
+      "size": 186,
+      "sha256": "dba9a0bc69779ee4779822b1e04a4ffc9b2435e127ef14325f06bd3f8ce65090"
+    },
+    {
+      "path": "style.css",
+      "size": 56194,
+      "sha256": "e078c0ec28b49e791c8f4dc85d581f469a99739a6f05ba6fa8b4af76d0b2c0e0"
+    },
+    {
+      "path": "survey.html",
+      "size": 4789,
+      "sha256": "7a0a7088d0e2de0ffdccb5e8a51a84ad60a42ff2fe375d3a215b9f6cfcdf2430"
+    },
+    {
+      "path": "survey.js",
+      "size": 9159,
+      "sha256": "f1327af9fb80d838c7bbfb9d71ead0f411bfaebfc792a948af650f47afbdaf77"
+    },
+    {
+      "path": "trigger-email.js",
+      "size": 3015,
+      "sha256": "e25b7e96bb2131b7ead5be011d0092b993cebc470735faa6ea3d9d5df8d7f4b7"
+    },
+    {
+      "path": "ui-refresh.css",
+      "size": 55651,
+      "sha256": "ae508443bd24d746bc94b940f1fb902e08927ec96563f67e851a3196f5be4e71"
+    },
+    {
+      "path": "update-config.js",
+      "size": 377,
+      "sha256": "277f8137479150a50d64537d9c195246224b4ab74ef2c6293442b0e5d5ff356a"
+    },
+    {
+      "path": "update-manager.js",
+      "size": 14672,
+      "sha256": "e7f3fa86bd6f576b15ec52e0a17caa0044ed5c9b056a0b313c0c122dab0511a4"
+    },
+    {
+      "path": "vercel.json",
+      "size": 277,
+      "sha256": "6db4342674873da9fe5a66dd023482f3bfc6a9b6fe481ae964a8f8aa82e05034"
+    },
+    {
+      "path": "version.json",
+      "size": 11614,
+      "sha256": "7753770f0efe127210c97afda723e0d4fae4f0bfdda1ef60cc4c87d18a2f9659"
+    },
+    {
+      "path": "watchtogether.js",
+      "size": 10948,
+      "sha256": "88f140127b1ad54fbf97d1ef0121aee9b5b8f803337790c91254d0f64d2566ad"
+    }
+  ]
+}
