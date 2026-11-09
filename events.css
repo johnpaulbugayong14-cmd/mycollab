@@ -3,6 +3,8 @@
 .events-toolbar h2 { margin: 0; }
 .events-month-controls { display: flex; align-items: center; gap: 0.5rem; }
 .events-month-controls button, .events-submit { border: 1px solid #dce4da; border-radius: 0.45rem; padding: 0.55rem 0.8rem; background: #fff; color: #315a46; cursor: pointer; }
+.content-section .card .events-month-controls > button { width: auto; min-width: 2.75rem; flex: 0 0 auto; margin-top: 0; white-space: nowrap; line-height: 1.25; }
+.content-section .card .events-month-controls > #eventsToday { min-width: 4.25rem; }
 .events-month-controls button:hover, .events-submit:hover { background: #f4f8e9; }
 .events-month-label { min-width: 150px; text-align: center; color: #20342f; font-weight: 700; }
 .events-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 1rem; }
@@ -34,8 +36,23 @@
 .event-details-panel { position: relative; width: min(100%, 460px); padding: 1.5rem; border: 1px solid #e5e9e3; border-radius: 0.75rem; background: #fff; color: #40564b; box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.2); }
 .event-details-close { position: absolute; top: 0.65rem; right: 0.75rem; width: 2rem; height: 2rem; min-width: 0; margin: 0; padding: 0; border: 0; background: transparent; color: #52645a; font-size: 1.5rem; line-height: 1; cursor: pointer; box-shadow: none; }
 .event-details-label { margin: 0 0 0.4rem; color: #28715c; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-.event-details-panel h2 { margin: 0 2rem 0.5rem 0; font-size: 1.3rem; }
+.event-details-panel h2 { margin: 0 2rem 0.5rem 0; color: #20342f; font-size: 1.3rem; line-height: 1.35; text-align: left; overflow-wrap: anywhere; }
 .event-details-date { margin: 0; color: #285f4d; font-weight: 600; }
-.event-details-description { margin: 1rem 0 0; color: #40564b; line-height: 1.6; white-space: pre-wrap; }
+.event-details-description { margin: 1rem 0 0; color: #40564b; font-size: 1rem; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 900px) { .events-layout { grid-template-columns: 1fr; } }
-@media (max-width: 600px) { .events-day { min-height: 80px; padding: 0.25rem; } .events-weekdays span { padding: 0.35rem 0.1rem; font-size: 0.68rem; } .events-item { font-size: 0.65rem; } .events-month-label { min-width: 125px; } }
+@media (max-width: 600px) {
+  .events-toolbar { align-items: flex-start; }
+  .events-month-controls { width: 100%; min-width: 0; justify-content: space-between; gap: 0.35rem; }
+  .events-month-label { min-width: 0; flex: 1 1 auto; font-size: 0.9rem; }
+  .events-month-controls > button { min-width: 2.75rem; padding: 0.55rem 0.6rem; font-size: 0.9rem; }
+  .events-month-controls > #eventsToday { min-width: 4.25rem; }
+  .events-day { min-height: 80px; padding: 0.25rem; }
+  .events-weekdays span { padding: 0.35rem 0.1rem; font-size: 0.68rem; }
+  .events-item { font-size: 0.65rem; }
+  .event-details-dialog { padding: 0.75rem; }
+  .event-details-panel { max-height: 90dvh; overflow-y: auto; padding: 1.25rem; }
+  .event-details-label { font-size: 0.85rem; }
+  .event-details-panel h2 { margin-right: 2rem; font-size: 1.2rem; }
+  .event-details-date { font-size: 1.05rem; }
+  .event-details-description { font-size: 1.15rem; }
+}

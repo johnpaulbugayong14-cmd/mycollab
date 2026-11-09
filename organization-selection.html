@@ -75,7 +75,7 @@
     .selection-maintenance-overlay { position: fixed; inset: 0; z-index: 9999; display: none; place-items: center; padding: 1.5rem; background: #f9f9f9; color: #535368; text-align: center; }
     .selection-maintenance-overlay.visible { display: grid; }
     .selection-maintenance-card { width: min(1120px, 100%); padding: 0; color: #535368; text-align: center; }
-    .selection-maintenance-artwork { width: min(1120px, 80vw); max-width: 80vw; max-height: 50vh; height: auto; margin: 0 auto 2rem; }
+    .selection-maintenance-artwork { display: block; width: min(360px, 72vw); max-width: 72vw; max-height: 32vh; height: auto; object-fit: contain; margin: 0 auto 1.25rem; }
     .selection-maintenance-card h2 { margin: 0 0 1rem; color: #2f2e41; font-size: 2.5rem; line-height: 1.2; }
     .selection-maintenance-card p { margin: 0 0 0.35rem; color: #535368; font-size: 1.4rem; line-height: 1.6; white-space: pre-wrap; }
     @media (prefers-color-scheme: dark) {
@@ -114,11 +114,34 @@
       background: #fff;
       color: #315a46;
     }
+    .selection-logout {
+      display: inline-flex;
+      width: auto;
+      min-width: 5.5rem;
+      min-height: 2.5rem;
+      align-items: center;
+      justify-content: center;
+      align-self: flex-end;
+      margin: 0;
+      padding: 0.55rem 0.85rem;
+      box-shadow: 0 2px 6px rgba(34, 57, 48, 0.06);
+      font-size: 0.9rem;
+      font-weight: 650;
+      line-height: 1.25;
+    }
     .selection-logout:hover,
     .selection-my-space button:hover {
       border-color: #c9d9b1;
       background: #f4f8e9;
       color: #294b34;
+    }
+    .selection-logout:hover {
+      box-shadow: 0 3px 8px rgba(34, 57, 48, 0.09);
+      transform: none;
+    }
+    .selection-logout:focus-visible {
+      outline: 3px solid rgba(144, 173, 98, 0.35);
+      outline-offset: 2px;
     }
     .selection-avatar {
       border-color: #dce4da;
@@ -159,6 +182,7 @@
       animation: none !important;
     }
   </style>
+  <link rel="stylesheet" href="mobile-ui.css?v=3">
 </head>
 <body>
   <main class="selection-shell">
@@ -188,8 +212,8 @@
   </main>
   <div id="selectionMaintenanceOverlay" class="selection-maintenance-overlay" role="alertdialog" aria-modal="true" aria-labelledby="selectionMaintenanceTitle">
     <div class="selection-maintenance-card">
-      <svg class="selection-maintenance-artwork" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 700" aria-hidden="true"><circle cx="292.61" cy="213" r="213" fill="#f2f2f2"/><path fill="#2f2e41" d="M0 51.14c0 77.5 48.62 140.21 108.7 140.21"/><path fill="#03c39d" d="M108.7 191.35c0-78.37 54.26-141.78 121.3-141.78M39.38 58.17c0 73.61 31 133.18 69.32 133.18"/><path fill="#2f2e41" d="M108.7 191.35c0-100.14 62.71-181.17 140.2-181.17"/><rect width="513.25" height="357.52" x="578.43" y="212.69" fill="#2f2e41" rx="18.05"/><path fill="#3f3d56" d="M595.7 231.78h478.71v267.84H595.7z"/><path fill="#2f2e41" d="M108.61 159h208v242h-208z"/><path fill="#3f3d56" d="M87.61 135h250v86h-250zM87.61 237h250v86h-250zM87.61 339h250v86h-250z"/><path fill="#03c39d" d="M271.61 150h16v16h-16zM294.61 150h16v16h-16zM317.61 150h16v16h-16zM271.61 251h16v16h-16zM294.61 251h16v16h-16zM317.61 251h16v16h-16zM271.61 352h16v16h-16zM294.61 352h16v16h-16zM317.61 352h16v16h-16z"/></svg>
-      <h2 id="selectionMaintenanceTitle">My Collab is temporarily unavailable.</h2>
+      <img class="selection-maintenance-artwork" src="maintenance-illustration.png" alt="Engineers working together on server maintenance">
+      <h2 id="selectionMaintenanceTitle">MyCollab is temporarily unavailable.</h2>
       <p>Scheduled maintenance is currently in progress.</p>
       <p>We'll be back shortly.</p>
       <p id="selectionMaintenanceMessage" style="margin-top: 1rem; font-size: 1rem;"></p>
