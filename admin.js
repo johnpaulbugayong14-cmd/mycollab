@@ -162,6 +162,7 @@ let chart;
 let chartUpdateTimeout;
 let lastMemberProgress = {};
 let lastAnalyticsTasks = [];
+let selectedAnalyticsMember = null;
 let archivedPollsCollapsed = localStorage.getItem('archivedPollsCollapsed') !== 'false';
 let archivedAnnouncementsCollapsed = localStorage.getItem('archivedAnnouncementsCollapsed') !== 'false';
 let managedOrganizations = [];
@@ -1079,7 +1080,7 @@ function renderWalletBalances() {
       const balance = Number(member.walletBalance) || 0;
       return `<div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:0.75rem 0; border-bottom:1px solid #374151;">
         <span style="color:#f8fafc; overflow-wrap:anywhere;">${escapeHtml(member.name)}<small style="display:block; color:#94a3b8; margin-top:0.2rem;">${escapeHtml(member.uid)}</small></span>
-        <span style="text-align:right;"><strong style="color:${balance < 0 ? '#f87171' : '#4ade80'}; white-space:nowrap;">${balance.toFixed(2)}</strong><span style="display:flex; gap:0.35rem; margin-top:0.35rem;"><button type="button" data-email="${escapeHtml(member.uid)}" onclick="deleteWalletHistory(this.dataset.email)" style="background:transparent; color:#fca5a5; border:1px solid #7f1d1d; padding:0.25rem 0.45rem; border-radius:0.35rem; cursor:pointer; font-size:0.75rem;">Delete history</button><button type="button" data-email="${escapeHtml(member.uid)}" onclick="resetMemberWallet(this.dataset.email)" style="background:#7f1d1d; color:#fff; border:1px solid #991b1b; padding:0.25rem 0.45rem; border-radius:0.35rem; cursor:pointer; font-size:0.75rem;">Reset wallet</button></span></span>
+        <span style="display:flex; flex-direction:column; align-items:flex-end; gap:0.3rem; text-align:right;"><strong style="color:${balance < 0 ? '#f87171' : '#4ade80'}; white-space:nowrap;">${balance.toFixed(2)}</strong><details class="wallet-actions-menu"><summary aria-label="Wallet actions for ${escapeHtml(member.name)}" title="Wallet actions"><i class="fas fa-ellipsis-vertical" aria-hidden="true"></i></summary><div class="wallet-actions-menu__items"><button type="button" data-email="${escapeHtml(member.uid)}" onclick="this.closest('details').open=false; deleteWalletHistory(this.dataset.email)">Delete history</button><button type="button" data-email="${escapeHtml(member.uid)}" onclick="this.closest('details').open=false; resetMemberWallet(this.dataset.email)">Reset wallet</button></div></details></span>
       </div>`;
     }).join('')
     : '<p style="color: #94a3b8; text-align: center;">No members available.</p>';
@@ -2715,6 +2716,49 @@ window.needAction = async function (id) {
   }
 };
 
+function renderAdminTaskCard(task, inAnalyticsModal = false) {
+  const taskId = task.id;
+  const normalizedStatus = String(task.status || 'pending').toLowerCase().trim().replace(/_/g, ' ');
+  const feedbackHtml = Array.isArray(task.feedbacks) && task.feedbacks.length > 0 ? task.feedbacks.map((feedback, index) => {
+    const time = feedback.createdAt && feedback.createdAt.toDate
+      ? feedback.createdAt.toDate().toLocaleString()
+      : (feedback.createdAt ? new Date(feedback.createdAt).toLocaleString() : '');
+    const authorName = getUserName(feedback.author) || 'Admin';
+    const showDelete = normalizeEmail(feedback.author) === normalizeEmail(adminEmail || '');
+    const deleteButton = showDelete
+      ? `<button onclick="removeTaskFeedback('${taskId}', ${index})" style="background:#ef4444; color:white; border:none; padding:0.25rem 0.5rem; border-radius:6px; margin-left:0.5rem;">Delete</button>`
+      : '';
+    return `<div style="padding:0.5rem; border:1px solid #e5e9e3; border-radius:6px; margin-bottom:0.5rem; background:#f7f9f5;"><div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem;"><div style="font-weight:600; color:#20342f;">${escapeHtml(authorName)} <span style="font-weight:400; color:#788780; font-size:0.85rem; margin-left:0.5rem;">${escapeHtml(time)}</span></div><div>${deleteButton}</div></div><div style="color:#40564b; margin-top:0.25rem; white-space: pre-wrap; word-break: break-word;">${escapeHtml(feedback.message)}</div></div>`;
+  }).join('') : '<p style="color:#475569;">No feedback yet.</p>';
+  const hasTaskSubmission = Boolean(task.submissionText || task.submissionHtml || task.submissionFiles?.length);
+  const closeModal = inAnalyticsModal ? 'hideMemberTaskDetails(); ' : '';
+
+  return `
+    <div class="card admin-task-card" data-task-id="${escapeHtml(taskId)}" style="${normalizedStatus === 'pending validation' ? 'border: 2px solid #f59e0b; background: rgba(245, 158, 11, 0.1);' : ''}">
+      <h3>${escapeHtml(task.title || 'Untitled Task')}</h3>
+      <p>Assigned To: ${escapeHtml(task.assignedToName || task.assignedTo || 'Unassigned')}</p>
+      <p>Deadline: ${escapeHtml(task.deadline || 'Not set')}</p>
+      ${task.description ? `<p><strong>Description:</strong> <span style="white-space: pre-wrap; word-break: break-word;">${escapeHtml(task.description)}</span></p>` : ''}
+      ${task.linkURL ? `<a href="${escapeHtml(task.linkURL)}" target="_blank" rel="noopener noreferrer">🔗 Open Link</a>` : ''}
+      ${hasTaskSubmission ? `<div class="task-submission-summary"><strong>Member response${task.submittedBy ? ` from ${escapeHtml(getUserName(task.submittedBy) || task.submittedBy)}` : ''}</strong><button type="button" onclick="viewTaskSubmission('${taskId}')"><i class="fas fa-eye" aria-hidden="true"></i> View attachment</button></div>` : ''}
+      <p>Status: <span style="${normalizedStatus === 'pending validation' ? 'color: #f59e0b; font-weight: bold;' : ''}">${escapeHtml(task.status || 'pending')}</span></p>
+      ${normalizedStatus === 'pending validation' ? '<p style="color: #f59e0b; font-weight: bold;">⚠️ Member has submitted this task for validation!</p>' : ''}
+      <button onclick="${closeModal}markDone('${taskId}')">Mark Done</button>
+      ${(normalizedStatus === 'pending' || normalizedStatus === 'overdue' || normalizedStatus === 'pending validation') ? `<button onclick="${closeModal}needAction('${taskId}')" class="btn-warning" style="margin-top: 0.5rem;">Need an Action</button>` : ''}
+      <button onclick="${closeModal}deleteTask('${taskId}')" class="btn-danger" style="margin-top: 0.5rem;">Delete</button>
+
+      <div style="margin-top:1rem;">
+        <h4 style="margin:0 0 0.5rem 0; color:#1f2937;">Feedback</h4>
+        <div>${feedbackHtml}</div>
+        <textarea id="feedback-input-${escapeHtml(taskId)}" placeholder="Add feedback for this task..." style="width:100%; margin-top:0.5rem; min-height:70px; background:#fff; color:#20342f; border:1px solid #cbd5e1; padding:0.5rem;"></textarea>
+        <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+          <button onclick="addTaskFeedback('${taskId}', this.closest('.admin-task-card').querySelector('textarea'))" style="background:#3b82f6; color:white; border:none; padding:0.5rem 0.75rem; border-radius:6px;">Add Feedback</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 /* REALTIME + GRAPH */
 onSnapshot(getActiveOrganizationId() ? query(collection(db, "tasks"), where("organizationId", "==", getActiveOrganizationId())) : collection(db, "tasks"), (snap) => {
   const now = Date.now();
@@ -2766,7 +2810,8 @@ onSnapshot(getActiveOrganizationId() ? query(collection(db, "tasks"), where("org
       ? 'John Paul Bugayong'
       : matchedMember?.name || assignedMember;
 
-    let status = String(t.status || "pending").toLowerCase().trim().replace(/_/g, " ");
+    const originalStatus = String(t.status || "pending").toLowerCase().trim().replace(/_/g, " ");
+    let status = originalStatus;
     const deadline = parseDeadline(t.deadline);
     if (deadline && deadline.getTime() < now && (status === "pending" || status === "pending validation")) {
       status = "overdue";
@@ -2776,10 +2821,11 @@ onSnapshot(getActiveOrganizationId() ? query(collection(db, "tasks"), where("org
       memberProgress[memberName] = { done: 0, pending: 0, overdue: 0, needsAction: 0, pendingValidation: 0 };
     }
 
-    if (status === "done") memberProgress[memberName].done++;
+    if (originalStatus === "pending validation") memberProgress[memberName].pendingValidation++;
+    if (originalStatus === "done") memberProgress[memberName].done++;
     else if (status === "overdue") memberProgress[memberName].overdue++;
     else if (status === "needs action") memberProgress[memberName].needsAction++;
-    else if (status === "pending validation") memberProgress[memberName].pendingValidation++;
+    else if (status === "pending validation") return;
     else memberProgress[memberName].pending++;
   });
 
@@ -2809,45 +2855,9 @@ onSnapshot(getActiveOrganizationId() ? query(collection(db, "tasks"), where("org
 
   // Only rebuild task list if we're not on analytics page (to avoid lag)
   if (!document.getElementById('task-analytics')?.classList.contains('active')) {
-    let html = "";
-    docs.forEach(docSnap => {
-      const t = docSnap.data();
-      // Render existing feedbacks
-      const feedbackHtml = Array.isArray(t.feedbacks) && t.feedbacks.length > 0 ? t.feedbacks.map((f, idx) => {
-        const time = f.createdAt && f.createdAt.toDate ? f.createdAt.toDate().toLocaleString() : (f.createdAt ? new Date(f.createdAt).toLocaleString() : '');
-        const authorName = getUserName(f.author) || 'Admin';
-        const showDelete = normalizeEmail(f.author) === normalizeEmail(adminEmail || '');
-        const deleteButton = showDelete ? `<button onclick="removeTaskFeedback('${docSnap.id}', ${idx})" style=\"background:#ef4444; color:white; border:none; padding:0.25rem 0.5rem; border-radius:6px; margin-left:0.5rem;\">Delete</button>` : '';
-        return `<div style="padding:0.5rem; border:1px solid #334155; border-radius:6px; margin-bottom:0.5rem; background:#041024;"><div style=\"display:flex; align-items:center; justify-content:space-between; gap:0.5rem;\"><div style=\\"font-weight:600; color:#f3f4f6;\\">${authorName} <span style=\\"font-weight:400; color:#94a3b8; font-size:0.85rem; margin-left:0.5rem;\\">${time}</span></div><div>${deleteButton}</div></div><div style=\"color:#cbd5e1; margin-top:0.25rem; white-space: pre-wrap; word-break: break-word;\">${f.message}</div></div>`;
-      }).join('') : '<p style="color:#94a3b8;">No feedback yet.</p>';
-      const hasTaskSubmission = Boolean(t.submissionText || t.submissionHtml || t.submissionFiles?.length);
-
-      html += `
-        <div class="card" style="${t.status === 'pending validation' ? 'border: 2px solid #f59e0b; background: rgba(245, 158, 11, 0.1);' : ''}">
-          <h3>${t.title}</h3>
-          <p>Assigned To: ${t.assignedToName}</p>
-          <p>Deadline: ${t.deadline}</p>
-          ${t.description ? `<p><strong>Description:</strong> <span style="white-space: pre-wrap; word-break: break-word;">${t.description}</span></p>` : ""}  
-          ${t.linkURL ? `<a href="${t.linkURL}" target="_blank">🔗 Open Link</a>` : ""}
-          ${hasTaskSubmission ? `<div class="task-submission-summary"><strong>Member response${t.submittedBy ? ` from ${escapeHtml(getUserName(t.submittedBy) || t.submittedBy)}` : ''}</strong><button type="button" onclick="viewTaskSubmission('${docSnap.id}')"><i class="fas fa-eye" aria-hidden="true"></i> View attachment</button></div>` : ''}
-          <p>Status: <span style="${t.status === 'pending validation' ? 'color: #f59e0b; font-weight: bold;' : ''}">${t.status}</span></p>
-          ${t.status === 'pending validation' ? '<p style="color: #f59e0b; font-weight: bold;">⚠️ Member has submitted this task for validation!</p>' : ''}
-          <button onclick="markDone('${docSnap.id}')">Mark Done</button>
-          ${(t.status === "pending" || t.status === "overdue" || t.status === "pending validation") ? `<button onclick="needAction('${docSnap.id}')" class="btn-warning" style="margin-top: 0.5rem;">Need an Action</button>` : ""}
-          <button onclick="deleteTask('${docSnap.id}')" class="btn-danger" style="margin-top: 0.5rem;">Delete</button>
-
-          <div style="margin-top:1rem;">
-            <h4 style=\"margin:0 0 0.5rem 0; color:#f3f4f6;\">Feedback</h4>
-            <div id=\"feedback-list-${docSnap.id}\">${feedbackHtml}</div>
-            <textarea id=\"feedback-input-${docSnap.id}\" placeholder=\"Add feedback for this task...\" style=\"width:100%; margin-top:0.5rem; min-height:70px; background:#020617; color:#f3f4f6; border:1px solid #334155; padding:0.5rem;\"></textarea>
-            <div style=\"display:flex; gap:0.5rem; margin-top:0.5rem;\">
-              <button onclick=\"addTaskFeedback('${docSnap.id}')\" style=\"background:#3b82f6; color:white; border:none; padding:0.5rem 0.75rem; border-radius:6px;\">Add Feedback</button>
-            </div>
-          </div>
-        </div>
-      `;
-    });
-    container.innerHTML = html;
+    container.innerHTML = docs.map(docSnap =>
+      renderAdminTaskCard({ id: docSnap.id, ...docSnap.data() })
+    ).join('');
   }
 });
 
@@ -3171,11 +3181,11 @@ window.downloadTaskSubmissionFile = async function(taskId, fileId) {
 };
 
 // Add feedback to a task (admin)
-window.addTaskFeedback = async function(taskId) {
+window.addTaskFeedback = async function(taskId, inputElement) {
   if (window.submittingTaskFeedback) return;
   window.submittingTaskFeedback = true;
   try {
-    const input = document.getElementById(`feedback-input-${taskId}`);
+    const input = inputElement || document.getElementById(`feedback-input-${taskId}`);
     if (!input) return;
     const msg = input.value;
     if (!msg.trim()) {
@@ -3302,7 +3312,7 @@ function updateChart(memberProgress) {
       ['Pending', progress.pending || 0],
       ['Needs action', progress.needsAction || 0],
       ['Overdue', progress.overdue || 0],
-      ['Pending review', progress.pendingValidation || 0],
+      ['Pending validation', progress.pendingValidation || 0],
     ].filter(([, value]) => value > 0);
     if (counts.length > 0) {
       const summary = document.createElement('p');
@@ -3314,13 +3324,13 @@ function updateChart(memberProgress) {
     if (tasks.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'analytics-member-empty';
-      empty.textContent = 'No pending tasks.';
+      empty.textContent = 'No open tasks to review.';
       content.appendChild(empty);
     } else {
       const taskList = document.createElement('ul');
       taskList.className = 'analytics-member-task-list';
       tasks.slice(0, 3).forEach(task => {
-        taskList.appendChild(createAnalyticsTaskRow(task));
+        taskList.appendChild(createAnalyticsTaskRow(task, member));
       });
       content.appendChild(taskList);
 
@@ -3390,9 +3400,14 @@ function getMemberAnalyticsTasks(memberName) {
   );
 }
 
-function createAnalyticsTaskRow(task) {
+function createAnalyticsTaskRow(task, memberName = selectedAnalyticsMember) {
   const item = document.createElement('li');
-  item.className = 'analytics-member-task';
+  item.className = 'analytics-member-task-row';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'analytics-member-task-button';
+  button.setAttribute('aria-label', `Open task: ${task.title || 'Untitled Task'}`);
+  button.addEventListener('click', () => showAnalyticsTaskDetails(task.id, memberName));
 
   const title = document.createElement('span');
   title.className = 'analytics-member-task-title';
@@ -3405,10 +3420,11 @@ function createAnalyticsTaskRow(task) {
   status.textContent = task.displayStatus === 'needs action'
     ? 'Needs action'
     : task.displayStatus === 'pending validation'
-      ? 'Pending review'
+      ? 'Pending validation'
       : task.displayStatus.charAt(0).toUpperCase() + task.displayStatus.slice(1);
 
-  item.append(title, status);
+  button.append(title, status);
+  item.appendChild(button);
   return item;
 }
 
@@ -3417,6 +3433,7 @@ function showMemberTaskDetails(memberName) {
   const modalTitle = document.getElementById('taskAnalyticsModalTitle');
   const detailMessage = document.getElementById('taskAnalyticsDetailsMessage');
   const detailList = document.getElementById('taskAnalyticsDetailsList');
+  const backButton = document.getElementById('taskAnalyticsBackButton');
 
   if (!modalOverlay || !modalTitle || !detailMessage || !detailList) {
     console.error('Analytics detail modal elements not found');
@@ -3425,37 +3442,48 @@ function showMemberTaskDetails(memberName) {
 
   const displayName = getAnalyticsMemberDisplayName(memberName);
   const filtered = getMemberAnalyticsTasks(memberName);
+  selectedAnalyticsMember = memberName;
 
   detailList.innerHTML = '';
+  if (backButton) backButton.hidden = true;
   modalOverlay.style.display = 'flex';
   modalOverlay.classList.add('show');
   modalOverlay.style.visibility = 'visible';
   modalOverlay.style.opacity = '1';
   modalTitle.textContent = `Tasks for ${displayName}`;
-  detailMessage.textContent = `Showing all pending, needs action, overdue, and pending review tasks for ${displayName}.`;
+  detailMessage.textContent = `Showing pending, needs action, overdue, and pending validation tasks for ${displayName}.`;
   document.body.style.overflow = 'hidden';
 
   if (filtered.length === 0) {
-    detailList.innerHTML = `<p style="margin:0; color:#94a3b8;">No pending tasks found for this member.</p>`;
+    detailList.innerHTML = `<p style="margin:0; color:#64746b;">No pending tasks found for this member.</p>`;
     return;
   }
 
   const fragment = document.createDocumentFragment();
 
   filtered.forEach(task => {
-    const item = document.createElement('div');
-    item.className = 'analytics-member-task';
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'analytics-member-task analytics-member-task-detail';
     item.style.display = 'block';
     item.style.padding = '0.85rem';
+    item.style.textAlign = 'left';
+    item.style.cursor = 'pointer';
+    item.setAttribute('aria-label', `Open task: ${task.title || 'Untitled Task'}`);
+    item.addEventListener('click', () => showAnalyticsTaskDetails(task.id));
 
     const title = document.createElement('p');
     title.textContent = task.title || 'Untitled Task';
     title.style.margin = '0 0 0.5rem 0';
     title.style.fontWeight = '700';
-    title.style.color = '#f8fafc';
+    title.style.color = '#20342f';
 
     const status = document.createElement('span');
-    status.textContent = task.displayStatus === 'needs action' ? 'Needs Action' : task.displayStatus.charAt(0).toUpperCase() + task.displayStatus.slice(1);
+    status.textContent = task.displayStatus === 'needs action'
+      ? 'Needs Action'
+      : task.displayStatus === 'pending validation'
+        ? 'Pending validation'
+        : task.displayStatus.charAt(0).toUpperCase() + task.displayStatus.slice(1);
     status.style.display = 'inline-block';
     status.style.padding = '0.25rem 0.65rem';
     status.style.borderRadius = '999px';
@@ -3475,13 +3503,13 @@ function showMemberTaskDetails(memberName) {
     const deadlineDate = parseDeadline(task.deadline);
     deadline.textContent = `Deadline: ${deadlineDate ? deadlineDate.toLocaleDateString() : 'Not set'}`;
     deadline.style.margin = '0 0 0.35rem 0';
-    deadline.style.color = '#cbd5e1';
+    deadline.style.color = '#52645a';
     deadline.style.fontSize = '0.92rem';
 
     const description = document.createElement('p');
     description.textContent = task.description || (task.title ? '' : 'No additional details available.');
     description.style.margin = '0';
-    description.style.color = '#94a3b8';
+    description.style.color = '#64746b';
     description.style.fontSize = '0.92rem';
     description.style.whiteSpace = 'pre-wrap';
     description.style.wordBreak = 'break-word';
@@ -3496,6 +3524,35 @@ function showMemberTaskDetails(memberName) {
   detailList.appendChild(fragment);
 }
 
+function showAnalyticsTaskDetails(taskId, memberName = selectedAnalyticsMember) {
+  const task = (window.lastAnalyticsTasks || []).find(item => item.id === taskId);
+  const modalTitle = document.getElementById('taskAnalyticsModalTitle');
+  const detailMessage = document.getElementById('taskAnalyticsDetailsMessage');
+  const detailList = document.getElementById('taskAnalyticsDetailsList');
+  const backButton = document.getElementById('taskAnalyticsBackButton');
+  const modalOverlay = document.getElementById('taskAnalyticsModalOverlay');
+
+  if (!task || !modalTitle || !detailMessage || !detailList || !modalOverlay) {
+    console.error('Unable to open the selected analytics task');
+    return;
+  }
+
+  if (memberName) selectedAnalyticsMember = memberName;
+  modalTitle.textContent = task.title || 'Untitled Task';
+  detailMessage.textContent = `Assigned to ${task.assignedToName || task.assignedTo || 'Unassigned'} · Status: ${String(task.status || 'pending').replace(/_/g, ' ')}`;
+  detailList.innerHTML = renderAdminTaskCard(task, true);
+  if (backButton) backButton.hidden = false;
+  modalOverlay.style.display = 'flex';
+  modalOverlay.classList.add('show');
+  modalOverlay.style.visibility = 'visible';
+  modalOverlay.style.opacity = '1';
+  document.body.style.overflow = 'hidden';
+}
+
+function returnToAnalyticsMemberTasks() {
+  if (selectedAnalyticsMember) showMemberTaskDetails(selectedAnalyticsMember);
+}
+
 function hideMemberTaskDetails() {
   const modalOverlay = document.getElementById('taskAnalyticsModalOverlay');
   if (!modalOverlay) {
@@ -3506,8 +3563,13 @@ function hideMemberTaskDetails() {
   modalOverlay.style.opacity = '0';
   modalOverlay.style.display = 'none';
   document.body.style.overflow = '';
+  selectedAnalyticsMember = null;
+  const backButton = document.getElementById('taskAnalyticsBackButton');
+  if (backButton) backButton.hidden = true;
 }
 
+window.showAnalyticsTaskDetails = showAnalyticsTaskDetails;
+window.returnToAnalyticsMemberTasks = returnToAnalyticsMemberTasks;
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && document.getElementById('taskAnalyticsModalOverlay')?.classList.contains('show')) {
     hideMemberTaskDetails();
