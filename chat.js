@@ -383,19 +383,6 @@ function setReplyTarget(message) {
   if (input) input.focus();
 }
 
-function renderReplyQuote(replyTo) {
-  if (!replyTo || replyTo.deleted) return '';
-  const originalMessage = allChatMessages.find(message => message.id === replyTo.id);
-  if (originalMessage?.deleted) return '';
-
-  return `
-    <div class="chat-reply-quote">
-      <div class="chat-reply-quote-label">Replying to ${escapeHtml(replyTo.senderName || 'Unknown')}</div>
-      <div class="chat-reply-quote-text">${escapeHtml(replyTo.text || (replyTo.imageData ? '[image]' : ''))}</div>
-    </div>
-  `;
-}
-
 function highlightSearchTerms(text, query) {
   if (!query) return escapeHtml(text);
   
@@ -623,7 +610,12 @@ function renderChatMessages(messages) {
     const safeText = escapeHtml(messageText);
     const renderedText = msg.deleted ? safeText : formatMessageWithLinks(formatMessageWithMentions(safeText));
     const imageMarkup = !msg.deleted && msg.imageData ? `<div style="margin: 0.35rem 0;"><img class="chat-image" src="${escapeHtml(msg.imageData)}" alt="Chat image" loading="lazy" /></div>` : '';
-    const replyQuote = msg.deleted ? '' : renderReplyQuote(msg.replyTo);
+    const replyQuote = msg.replyTo ? `
+      <div class="chat-reply-quote">
+        <div class="chat-reply-quote-label">Replying to ${escapeHtml(msg.replyTo.senderName || 'Unknown')}</div>
+        <div class="chat-reply-quote-text">${escapeHtml(msg.replyTo.text || (msg.replyTo.imageData ? '[image]' : ''))}</div>
+      </div>
+    ` : '';
     const normalizedCurrentUserEmail = normalizeEmail(currentUserEmail || '');
     const isOwnMessage = normalizedCurrentUserEmail && normalizeEmail(msg.senderEmail) === normalizedCurrentUserEmail;
     const unsendButton = isOwnMessage && !msg.deleted ? `<button type="button" class="chat-unsend-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(248, 113, 113, 0.12); color: #f97316; border: 1px solid rgba(248, 113, 113, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">Unsend</button>` : '';
@@ -757,7 +749,12 @@ function renderChatMessagesWithSearch(messages, searchQuery) {
     const highlightedText = msg.deleted ? messageText : highlightSearchTerms(messageText, searchQuery);
     const renderedText = msg.deleted ? messageText : formatMessageWithLinks(formatMessageWithMentions(highlightedText));
     const imageMarkup = !msg.deleted && msg.imageData ? `<div style="margin: 0.35rem 0;"><img class="chat-image" src="${escapeHtml(msg.imageData)}" alt="Chat image" loading="lazy" /></div>` : '';
-    const replyQuote = msg.deleted ? '' : renderReplyQuote(msg.replyTo);
+    const replyQuote = msg.replyTo ? `
+      <div class="chat-reply-quote">
+        <div class="chat-reply-quote-label">Replying to ${escapeHtml(msg.replyTo.senderName || 'Unknown')}</div>
+        <div class="chat-reply-quote-text">${escapeHtml(msg.replyTo.text || (msg.replyTo.imageData ? '[image]' : ''))}</div>
+      </div>
+    ` : '';
     const normalizedCurrentUserEmail = normalizeEmail(currentUserEmail || '');
     const isOwnMessage = normalizedCurrentUserEmail && normalizeEmail(msg.senderEmail) === normalizedCurrentUserEmail;
     const unsendButton = isOwnMessage && !msg.deleted ? `<button type="button" class="chat-unsend-btn" data-message-id="${msg.id}" style="display: inline-flex; align-items: center; justify-content: center; width: auto; background: rgba(248, 113, 113, 0.12); color: #f97316; border: 1px solid rgba(248, 113, 113, 0.35); border-radius: 9999px; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; line-height: 1; white-space: nowrap;">Unsend</button>` : '';
@@ -1054,10 +1051,10 @@ function updateChatImagePreview() {
     return;
   }
 
-  preview.style.display = 'block';
+  preview.style.display = 'grid';
   preview.innerHTML = `
     <img src="${escapeHtml(selectedChatImageData)}" alt="Selected image preview" />
-    <button id="clearImageSelection" type="button" style="background: rgba(248, 113, 113, 0.15); color: #f97316; border: 1px solid rgba(248, 113, 113, 0.35); border-radius: 9999px; padding: 0.6rem 1rem; cursor: pointer;">Remove</button>
+    <button id="clearImageSelection" class="chat-image-preview-remove" type="button">Remove</button>
   `;
 
   const clearButton = document.getElementById('clearImageSelection');

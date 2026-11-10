@@ -756,9 +756,12 @@
 
     #chatImagePreview {
       display: none;
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
       gap: 0.75rem;
       flex: 0 0 auto;
+      width: 100%;
+      min-width: 0;
       min-height: 0;
       padding: 0.5rem 0.75rem;
       border-radius: 0.75rem;
@@ -768,14 +771,16 @@
     }
 
     #chatImagePreview img {
-      flex: 1 1 0;
+      grid-column: 1;
+      grid-row: 1;
+      justify-self: stretch;
       min-width: 0;
       width: 100%;
-      max-width: none;
+      max-width: 100%;
       height: min(20vh, 160px);
       max-height: 160px;
       object-fit: contain;
-      object-position: left center;
+      object-position: center;
       border-radius: 0.75rem;
       display: block;
       margin: 0;
@@ -783,13 +788,16 @@
     }
 
     .chat-image-preview-remove {
-      flex: 0 0 auto;
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+      align-self: center;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       width: auto !important;
-      min-width: 0;
-      max-width: 100%;
+      min-width: 5rem;
+      max-width: none;
       padding: 0.45rem 0.75rem;
       border: 1px solid rgba(248, 113, 113, 0.35);
       border-radius: 9999px;
@@ -2036,7 +2044,7 @@
       document.getElementById('chatWorkspace')?.classList.add('is-panel-collapsed');
     }
   </script>
-  <script type="module" src="chat.js?v=5"></script>
+  <script type="module" src="chat.js?v=6"></script>
   <script type="module" src="update-manager.js"></script>
 </body>
 </html>
