@@ -1,7 +1,8 @@
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'task-manager-v45';
+const CACHE_NAME = 'task-manager-v51';
+const BUNDLED_VERSION = '2.0.94';
 const UPDATE_META_CACHE = 'mycollab-update-meta-v1';
 const IS_GITHUB_PAGES = self.location.hostname.endsWith('.github.io');
 const IS_LOCAL_PREVIEW = ['localhost', '127.0.0.1', '::1'].includes(self.location.hostname);
@@ -23,6 +24,7 @@ const urlsToCache = [
   'survey.html',
   'style.css',
   'ui-refresh.css',
+  'mobile-ui.css',
   'manifest.json',
   'firebase.js',
   'auth.js',
@@ -48,6 +50,20 @@ async function writeMeta(key, value) {
   await cache.put(key, new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } }));
 }
 
+function isVersionAtLeast(candidate, minimum) {
+  const parse = value => {
+    const match = String(value || '').match(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+    return match ? match.slice(1).map(Number) : null;
+  };
+  const candidateParts = parse(candidate);
+  const minimumParts = parse(minimum);
+  if (!candidateParts || !minimumParts) return false;
+  for (let index = 0; index < candidateParts.length; index += 1) {
+    if (candidateParts[index] !== minimumParts[index]) return candidateParts[index] > minimumParts[index];
+  }
+  return true;
+}
+
 async function activeReleaseCache() {
   const pending = await readMeta(PENDING_KEY);
   if (pending && Date.now() - pending.activatedAt > 30000) {
@@ -62,7 +78,8 @@ async function activeReleaseCache() {
     }
   }
   const active = await readMeta(ACTIVE_KEY);
-  return active?.cacheName || null;
+  if (!active?.cacheName || !isVersionAtLeast(active.version, BUNDLED_VERSION)) return null;
+  return active.cacheName;
 }
 
 const firebaseConfig = {
@@ -123,6 +140,13 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith((async () => {
+    const releaseCacheName = await activeReleaseCache();
+    if (releaseCacheName && !IS_GITHUB_PAGES) {
+      const releaseCache = await caches.open(releaseCacheName);
+      const releaseResponse = await releaseCache.match(event.request, { ignoreSearch: true });
+      if (releaseResponse) return releaseResponse;
+    }
+
     if (IS_LOCAL_PREVIEW) {
       try {
         const response = await fetch(event.request, { cache: 'no-store' });
@@ -140,13 +164,6 @@ self.addEventListener('fetch', event => {
       }
     }
 
-    const releaseCacheName = await activeReleaseCache();
-    if (releaseCacheName && !IS_GITHUB_PAGES) {
-      const releaseCache = await caches.open(releaseCacheName);
-      const releaseResponse = await releaseCache.match(event.request, { ignoreSearch: true });
-      if (releaseResponse) return releaseResponse;
-    }
-
     if (IS_GITHUB_PAGES) {
       try {
         const response = await fetch(event.request, { cache: 'no-store' });
@@ -156,13 +173,15 @@ self.addEventListener('fetch', event => {
         }
         return response;
       } catch {
-        const cachedResponse = await caches.match(event.request, { ignoreSearch: true });
+        const cache = await caches.open(CACHE_NAME);
+        const cachedResponse = await cache.match(event.request, { ignoreSearch: true });
         if (cachedResponse) return cachedResponse;
         return Response.error();
       }
     }
 
-    const bundledResponse = await caches.match(event.request, { ignoreSearch: true });
+    const bundledCache = await caches.open(CACHE_NAME);
+    const bundledResponse = await bundledCache.match(event.request, { ignoreSearch: true });
     if (bundledResponse) return bundledResponse;
 
     try {
@@ -182,17 +201,23 @@ self.addEventListener('message', event => {
   const data = event.data || {};
   event.waitUntil((async () => {
     if (data.type === 'ACTIVATE_RELEASE' && data.version && data.cacheName) {
-      const cache = await caches.open(data.cacheName);
-      const hasEntryPoint = await cache.match(new Request('/index.html'), { ignoreSearch: true });
-      if (!hasEntryPoint) throw new Error('Release entry point is missing');
-      const current = await readMeta(ACTIVE_KEY);
-      await writeMeta(PREVIOUS_KEY, current?.cacheName ? current : { version: 'bundled', cacheName: CACHE_NAME });
-      await writeMeta(ACTIVE_KEY, { version: data.version, cacheName: data.cacheName });
-      await writeMeta(PENDING_KEY, { version: data.version, cacheName: data.cacheName, activatedAt: Date.now() });
-      const previous = current?.cacheName || CACHE_NAME;
-      const cacheNames = await caches.keys();
-      await Promise.all(cacheNames.filter(cacheName => cacheName.startsWith('mycollab-release-') && cacheName !== data.cacheName && cacheName !== previous).map(cacheName => caches.delete(cacheName)));
-      console.log('[Updater] Activated trial release', data.version);
+      try {
+        const cache = await caches.open(data.cacheName);
+        const hasEntryPoint = await cache.match(new Request('/index.html'), { ignoreSearch: true });
+        if (!hasEntryPoint) throw new Error('Release entry point is missing');
+        const current = await readMeta(ACTIVE_KEY);
+        await writeMeta(PREVIOUS_KEY, current?.cacheName ? current : { version: 'bundled', cacheName: CACHE_NAME });
+        await writeMeta(ACTIVE_KEY, { version: data.version, cacheName: data.cacheName });
+        await writeMeta(PENDING_KEY, { version: data.version, cacheName: data.cacheName, activatedAt: Date.now() });
+        const previous = current?.cacheName || CACHE_NAME;
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.filter(cacheName => cacheName.startsWith('mycollab-release-') && cacheName !== data.cacheName && cacheName !== previous).map(cacheName => caches.delete(cacheName)));
+        event.ports[0]?.postMessage({ type: 'RELEASE_ACTIVATED', version: data.version });
+        console.log('[Updater] Activated trial release', data.version);
+      } catch (error) {
+        event.ports[0]?.postMessage({ type: 'RELEASE_ACTIVATION_FAILED', message: error.message });
+        throw error;
+      }
     }
 
     if (data.type === 'MARK_HEALTHY' && data.version) {
